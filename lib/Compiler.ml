@@ -16,6 +16,11 @@ let show_functor_table (functors : functor_map) : string =
       ^ "\n")
     "" (to_seq functors)
 
+let show_query_variables (variables : Machine.query_map) : string =
+  BatSeq.fold_left
+    (fun acc (name, cell) -> acc ^ name ^ " = " ^ Machine.Cell.show cell ^ "\n")
+    "" (BatMap.to_seq variables)
+
 type t = {
   entry_point : entry_point option;
   p_register : int;

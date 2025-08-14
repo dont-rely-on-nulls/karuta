@@ -21,6 +21,7 @@ module Cell = struct
     | RetryMeElse of int
     | TrustMe
     | Halt
+    | QueryVariable of (register * string)
     | Debug
   [@@deriving show]
 
@@ -43,6 +44,8 @@ module Mode = struct
 end
 
 module IM = BatIMap
+
+type query_map = (string, Cell.t) BatMap.t
 
 module Store = Store.Make (struct
   let code_size = 1000
@@ -71,6 +74,8 @@ type t = {
   fail : bool;
   debug : bool;
   trace : bool;
+  args : int option;
+  query_variables : query_map;
 }
 
 let show_store (store : Cell.t Store.t) (start_index : int) (end_index : int) :
@@ -131,5 +136,7 @@ let initialize () : t =
     mode = Mode.Read;
     fail = false;
     debug = false;
-    trace = true;
+    trace = false;
+    args = None;
+    query_variables = BatMap.empty;
   }

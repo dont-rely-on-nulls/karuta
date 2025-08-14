@@ -1,0 +1,10 @@
+nat[nil].
+nat[succ[N]] :- nat[N].
+
+plus[Out, nil, Out] :- nat[Out].
+plus[nil, Out, Out] :- nat[Out].
+plus[succ[Prev], X, Out] :- plus[Prev, succ[X], Out].
+
+plus[succ[succ[succ[succ[nil]]]], succ[succ[nil]], Out]?
+
+

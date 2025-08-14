@@ -11,7 +11,7 @@ let update_store (computer : Lib.Machine.t)
 let _ =
   let open Option in
   let+ content =
-    In_channel.with_open_text "examples/triangular.krt" (fun fc ->
+    In_channel.with_open_text "examples/factorial.krt" (fun fc ->
         try Some (In_channel.input_all fc) with End_of_file -> None)
   in
   match Lib.Parse.parse content with
@@ -30,6 +30,9 @@ let _ =
       match compiler.entry_point with
       | None -> None
       | Some entry_point ->
-          Some
-            (Lib.Evaluator.eval compiler.functor_table
-               { computer with p_register = entry_point.p_register }))
+          let computer =
+            Lib.Evaluator.eval compiler.functor_table
+              { computer with p_register = entry_point.p_register }
+          in
+          print_endline @@ Lib.Print.query_args computer;
+          Some computer)

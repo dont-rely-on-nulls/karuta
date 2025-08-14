@@ -65,6 +65,7 @@ let rec deref (a : address) store : address =
   let cell = Store.get store a in
   match cell with
   | Reference value when value <> a -> deref value store
+  | Structure a -> a
   | _ -> a
 
 let is_reference (cell : Machine.Cell.t) : bool =
@@ -89,34 +90,35 @@ let bind (a1 : address) (a2 : address) ({ store; _ } as computer : Machine.t) :
     { computer with store = store |> Store.put t2 a1 } |> trail a1
   else { computer with store = store |> Store.put t1 a2 } |> trail a2
 
+let deref_cell (cell : Cell.t) store : Cell.t =
+  match cell with
+  | Reference address -> (
+      let derefed_address = deref address store in
+      let candidate = Store.get store derefed_address in
+      match candidate with
+      | Functor _ -> Structure derefed_address
+      | _ -> candidate)
+  | Structure _ -> cell
+  | _ -> failwith "unreachable deref_cell"
+
 let get_structure ((functor_label, functor_arity) : string * int)
     (register : Cell.register) ({ store; h_register; _ } as computer) :
     Machine.t =
-  match get_register register computer with
-  | Reference address -> (
-      let addr = deref address store in
-      match Store.get store addr with
-      | Reference _ ->
-          let structure = Structure (h_register + 1) in
-          let func = Functor (functor_label, functor_arity) in
-          let computer =
-            {
-              computer with
-              store =
-                store
-                |> Store.heap_put structure h_register
-                |> Store.heap_put func (h_register + 1);
-            }
-            |> bind addr h_register
-          in
-          { computer with h_register = h_register + 2; mode = Write }
-      | Structure a -> (
-          match Store.heap_get store a with
-          | Functor (label, arity)
-            when label = functor_label && arity = functor_arity ->
-              { computer with s_register = a + 1; mode = Read }
-          | _ -> { computer with fail = true })
-      | _ -> { computer with fail = true })
+  match deref_cell (get_register register computer) store with
+  | Reference addr ->
+      let structure = Structure (h_register + 1) in
+      let func = Functor (functor_label, functor_arity) in
+      let computer =
+        {
+          computer with
+          store =
+            store
+            |> Store.heap_put structure h_register
+            |> Store.heap_put func (h_register + 1);
+        }
+        |> bind addr h_register
+      in
+      { computer with h_register = h_register + 2; mode = Write }
   | Structure a -> (
       match Store.heap_get store a with
       | Functor (label, arity)
@@ -217,12 +219,6 @@ let put_variable (register : Cell.register) (a_register : Cell.register)
       store |> Store.stack_put reference addr |> fun store ->
       set_register a_register reference { computer with store }
 
-let deref_cell (cell : Cell.t) store : Cell.t =
-  match cell with
-  | Reference address -> Store.get store (deref address store)
-  | Structure _ -> cell
-  | _ -> failwith "unreachable deref_cell"
-
 let put_value (register : Cell.register) (a_register : Cell.register) computer :
     Machine.t =
   let value = get_register register computer in
@@ -241,6 +237,7 @@ let put_value (register : Cell.register) (a_register : Cell.register) computer :
                bind address h_register
                  { computer with store; h_register = h_register + 1 })
           |> set_register a_register reference
+      | Functor _ -> failwith "we should never put a functor in a register"
       | _ -> set_register a_register value computer)
   | X _ -> set_register a_register value computer
 
@@ -468,15 +465,33 @@ let execute (functor' : Ast.tag * int) (functor_table : Compiler.functor_map)
 let proceed ({ cp_register; _ } as computer) : Machine.t =
   { computer with p_register = cp_register }
 
+let query_variable register name ({ query_variables; _ } as computer) :
+    Machine.t =
+  let query_variables =
+    BatMap.add name (get_register register computer) query_variables
+  in
+  { computer with query_variables }
+
 let eval_step (functor_table : Compiler.functor_map)
-    ({ store; p_register; fail; _ } as computer : Machine.t) : Machine.t * bool
-    =
+    ({ store; p_register; fail; trace; _ } as computer : Machine.t) :
+    Machine.t * bool =
   let open Machine.Cell in
   if fail then (backtrack computer, false)
   else
     match Store.code_get store p_register with
     | Instruction instruction -> (
+        if trace then
+          print_endline
+          @@ string_of_int computer.p_register
+          ^ ": "
+          ^ Machine.Cell.show_instruction instruction;
         match instruction with
+        | QueryVariable (register, variable_name) ->
+            ( {
+                (query_variable register variable_name computer) with
+                p_register = p_register + 1;
+              },
+              false )
         | GetStructure ((name, arity), register) ->
             ( {
                 (get_structure (name, arity) register computer) with

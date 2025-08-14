@@ -1,4 +1,5 @@
 type action =
+  | ShowQueryVariables
   | ShowInternalRegisters
   | ShowXRegisters
   | ShowHeap
@@ -23,6 +24,7 @@ let action_info : action -> shortcut * description = function
   | ShowStack -> ("s", "Display stack memory region")
   | ShowCode -> ("c", "Display code memory region")
   | ShowFunctorTable -> ("f", "Display functor table")
+  | ShowQueryVariables -> ("query", "Display query variables")
   | DisableDebug -> ("q", "Disable debug mode")
   | ToggleTrace -> ("t", "Toggle trace")
   | Halt -> ("halt", "Halt execution")
@@ -56,6 +58,9 @@ let rec run (functor_table : Compiler.functor_map)
   if computer.debug then (
     let action = read_line () in
     match parse_action action with
+    | Some ShowQueryVariables ->
+        print_string @@ Compiler.show_query_variables computer.query_variables;
+        run functor_table stepper eval computer
     | Some ShowInternalRegisters ->
         print_endline @@ Machine.show_internal_registers computer;
         run functor_table stepper eval computer

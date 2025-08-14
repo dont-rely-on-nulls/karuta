@@ -11,6 +11,7 @@
 (library
  (name lib)
  (modules
+  Print
   Ast
   CodeGenerator
   Store

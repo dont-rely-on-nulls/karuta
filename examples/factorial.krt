@@ -1,0 +1,27 @@
+nat[nil].
+nat[succ[N]] :- nat[N].
+
+plus[Out, nil, Out] :- nat[Out].
+plus[nil, Out, Out] :- nat[Out].
+plus[succ[Prev], X, Out] :- plus[Prev, succ[X], Out].
+
+multiply[N, nil, nil].
+multiply[nil, N, nil].
+multiply[X, Y, Out] :- multiply[X, Y, nil, Out].
+
+multiply[succ[nil], Y, Acc, Out] :- plus[Acc, Y, Out].
+multiply[succ[Prev], Y, Acc, Out] :-
+  plus[Acc, Y, NewAcc],
+  multiply[Prev, Y, NewAcc, Out].
+
+factorial[X, Out] :- factorial[X, succ[nil], Out].
+
+factorial[nil, Out, Out] :- nat[Out].
+factorial[succ[Prev], Acc, Out] :-
+  multiply[succ[Prev], Acc, NewAcc],
+  factorial[Prev, NewAcc, Out].
+
+factorial[succ[succ[succ[succ[nil]]]], Out]?
+
+
+

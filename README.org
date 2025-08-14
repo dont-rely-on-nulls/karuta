@@ -5,14 +5,21 @@ This is a toy general purpose relational programming language. We are not held a
 might happen if you are crazy enough to use it.
 
 * Requirements
-- [ ] Parsing
+
+** Prolog
+- [X] Parsing
+- [X] Register Allocation  
+- [X] Compilation
+- [X] Evaluation
+
+** Database Integration  
 - [ ] Type Checking 
 - [ ] Error Messages
 - [ ] Database Support
-- [ ] Compilation
 
 * References
 
+- https://users.dimi.uniud.it/~marco.comini/Students/Documentation/wam-book.pdf (main reference)
 - https://users.cs.duke.edu/~junyang/ra2/
 - https://tinman.cs.gsu.edu/~raj/8710/f05/RA.pdf
 - https://reldb.org/c/wp-content/uploads/2017/12/Rel-and-Tutorial-D-Quickstart.pdf
