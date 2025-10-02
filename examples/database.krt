@@ -22,7 +22,7 @@
 @square[[10..20], Out]?
 @square[[10..2..20], Out]?
 
-#import "factorial.krt"
+:- import[factorial].
 
 main[Input, Output] :-
    @inc[Input, Output],

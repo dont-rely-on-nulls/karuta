@@ -1,20 +1,12 @@
-nat[nil].
-nat[succ[N]] :- nat[N].
+multyply[N, 0, 0] :- int[N].
+multyply[0, N, 0] :- debug, int[N].
+multyply[X, Y, Out] :- int[X], int[Y], multyply[X, Y, 0, Out].
 
-plus[Out, nil, Out] :- nat[Out].
-plus[nil, Out, Out] :- nat[Out].
-plus[succ[Prev], X, Out] :- plus[Prev, succ[X], Out].
+multyply[1, Y, Acc, Out] :- plus[Acc, Y, Out].
+multyply[N, Y, Acc, Out] :-
+    plus[Acc, Y, NewAcc],
+    plus[N, -1, Prev],
+    multyply[Prev, Y, NewAcc, Out].
 
-multiply[N, nil, nil].
-multiply[nil, N, nil].
-multiply[X, Y, Out] :- multiply[X, Y, nil, Out].
-
-multiply[succ[nil], Y, Acc, Out] :- plus[Acc, Y, Out].
-multiply[succ[Prev], Y, Acc, Out] :-
-  plus[Acc, Y, NewAcc],
-  multiply[Prev, Y, NewAcc, Out].
-
-multiply[succ[succ[succ[succ[nil]]]], succ[succ[succ[nil]]], Out]?
-
-
+multyply[4, 3, Out]?
 

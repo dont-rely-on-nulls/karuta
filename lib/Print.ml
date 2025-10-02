@@ -2,6 +2,7 @@ open Machine
 
 let rec inspect (store : Cell.t Store.t) (register : Cell.t) : string =
   match register with
+  | Constant const -> ( match const with Integer i -> string_of_int i)
   | Structure address -> (
       match Store.get store address with
       | Functor (name, arity) ->

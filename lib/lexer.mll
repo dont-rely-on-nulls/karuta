@@ -15,13 +15,14 @@ let letter = lower_letter | upper_letter
 let ident = lower_letter (letter | '_' | '-')*
 let upper_ident = upper_letter (letter | '_')*
 let int = '-'? ['0'-'9'] ['0'-'9']*
-              
+
 rule read =
   parse
   | white { read lexbuf }
   | newline { new_line lexbuf; read lexbuf }
   | ident { IDENT (Lexing.lexeme lexbuf) }
   | upper_ident { UPPER_IDENT (Lexing.lexeme lexbuf) }
+  | int { INTEGER (Lexing.lexeme lexbuf) }
   | '?' { QUERY }
   | '"'      { read_string (Buffer.create 17) lexbuf }
   | ":-" { HOLDS }

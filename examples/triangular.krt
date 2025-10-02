@@ -1,16 +1,10 @@
-nat[nil].
-nat[succ[N]] :- nat[N].
+triangle[N, Out] :- leq[0, N], triangle[N, 0, Out].
 
-plus[Out, nil, Out] :- nat[Out].
-plus[nil, Out, Out] :- nat[Out].
-plus[succ[Prev], X, Out] :- plus[Prev, succ[X], Out].
+triangle[0, Out, Out] :- int[Out].
+triangle[N, Acc, Out] :-
+    plus[N, Acc, NewAcc],
+    plus[N, -1, Prev],
+    triangle[Prev, NewAcc, Out].
 
-triangle[N, Out] :- triangle[N, nil, Out].
-
-triangle[nil, Out, Out] :- nat[Out].
-triangle[succ[Prev], Acc, Out] :-
-  plus[succ[Prev], Acc, NewAcc],
-  triangle[Prev, NewAcc, Out].
-
-triangle[succ[succ[succ[succ[nil]]]], Out]?
+triangle[5, Out]?
 

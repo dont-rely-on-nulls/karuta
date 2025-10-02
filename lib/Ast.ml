@@ -1,6 +1,7 @@
 type tag = string [@@deriving show, ord]
 
-type expr = Variable of var | Functor of func [@@deriving show, ord]
+type expr = Variable of var | Functor of func | Integer of int
+[@@deriving show, ord]
 
 and clause =
   | MultiDeclaration of (decl * decl list)

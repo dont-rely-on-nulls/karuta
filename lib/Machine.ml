@@ -7,11 +7,15 @@ module Cell = struct
     | PutVariable of (register * register)
     | GetVariable of (register * register)
     | SetVariable of register
-    | SetValue of register
     | UnifyVariable of register
+    | SetValue of register
     | GetValue of (register * register)
     | PutValue of (register * register)
     | UnifyValue of register
+    | SetConstant of constant
+    | GetConstant of (constant * register)
+    | PutConstant of (constant * register)
+    | UnifyConstant of constant
     | Call of (Ast.tag * int)
     | Execute of (Ast.tag * int)
     | Proceed
@@ -22,10 +26,23 @@ module Cell = struct
     | TrustMe
     | Halt
     | QueryVariable of (register * string)
+    | Builtin of builtin
+  [@@deriving show]
+
+  and builtin =
+    | IsInteger
+    | PlusInteger
+    | NegateInteger
+    | MultiplyInteger
+    | DivModInteger
+    | LessThanOrEqualInteger
     | Debug
   [@@deriving show]
 
+  and constant = Integer of int
+
   and t =
+    | Constant of constant
     | Structure of int
     | Reference of int
     | Functor of string * int

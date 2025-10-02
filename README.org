@@ -11,10 +11,11 @@ might happen if you are crazy enough to use it.
 - [X] PL Register Allocation  
 - [X] PL Compilation
 - [X] PL Evaluation
-- [ ] PL Integer Literals  
+- [X] PL Integer Literals  
 - [ ] PL List Literals  
 - [ ] PL Query Conjuction  
 - [ ] Comments
+- [ ] Namespacing
 - [ ] Special syntax for database support using ~@~
 - [ ] Dedicated bytecode for database interaction
 - [ ] Serialization for relational engine protocol

@@ -82,13 +82,16 @@ let trail (a : address)
     }
   else computer
 
-let bind (a1 : address) (a2 : address) ({ store; _ } as computer : Machine.t) :
+let bind (t1 : Cell.t) (t2 : Cell.t) ({ store; _ } as computer : Machine.t) :
     Machine.t =
-  let t1 = match Store.get store a1 with Functor _ -> Structure a1 | v -> v in
-  let t2 = match Store.get store a2 with Functor _ -> Structure a2 | v -> v in
-  if is_reference t1 && ((not (is_reference t2)) || a2 < a1) then
-    { computer with store = store |> Store.put t2 a1 } |> trail a1
-  else { computer with store = store |> Store.put t1 a2 } |> trail a2
+  match (t1, t2) with
+  (* TODO: figure out how to deduplicate the first two clauses *)
+  | Reference a1, Reference a2 when a2 < a1 ->
+      { computer with store = store |> Store.put t2 a1 } |> trail a1
+  | Reference a1, _ ->
+      { computer with store = store |> Store.put t2 a1 } |> trail a1
+  | _, Reference a2 ->
+      { computer with store = store |> Store.put t1 a2 } |> trail a2
 
 let deref_cell (cell : Cell.t) store : Cell.t =
   match cell with
@@ -98,14 +101,14 @@ let deref_cell (cell : Cell.t) store : Cell.t =
       match candidate with
       | Functor _ -> Structure derefed_address
       | _ -> candidate)
-  | Structure _ -> cell
+  | Structure _ | Constant _ -> cell
   | _ -> failwith "unreachable deref_cell"
 
 let get_structure ((functor_label, functor_arity) : string * int)
     (register : Cell.register) ({ store; h_register; _ } as computer) :
     Machine.t =
   match deref_cell (get_register register computer) store with
-  | Reference addr ->
+  | Reference _ as reference ->
       let structure = Structure (h_register + 1) in
       let func = Functor (functor_label, functor_arity) in
       let computer =
@@ -116,7 +119,7 @@ let get_structure ((functor_label, functor_arity) : string * int)
             |> Store.heap_put structure h_register
             |> Store.heap_put func (h_register + 1);
         }
-        |> bind addr h_register
+        |> bind reference (Reference h_register)
       in
       { computer with h_register = h_register + 2; mode = Write }
   | Structure a -> (
@@ -124,7 +127,13 @@ let get_structure ((functor_label, functor_arity) : string * int)
       | Functor (label, arity)
         when label = functor_label && arity = functor_arity ->
           { computer with s_register = a + 1; mode = Read }
-      | _ -> { computer with fail = true })
+      | Functor _ -> { computer with fail = true }
+      | value ->
+          failwith
+            ("corrupt memory: pointer is a structure pointer, but data isn't a \
+              functor\n\
+              data: " ^ Cell.show value))
+  | Constant _ -> { computer with fail = true }
   | _ -> failwith "unreachable get_structure"
 
 let unify_variable (register : Cell.register)
@@ -146,38 +155,43 @@ let unify_variable (register : Cell.register)
            })
       |> set_register register reference
 
-let unify (a1 : address) (a2 : address) ({ store; _ } as computer) : Machine.t =
+let unify (a1 : Cell.t) (a2 : Cell.t) ({ store; _ } as computer) : Machine.t =
   let preparedComputer =
-    store |> Store.pdl_push (Address a1) |> Store.pdl_push (Address a2)
-    |> fun store -> { computer with store; fail = false }
+    store |> Store.pdl_push a1 |> Store.pdl_push a2 |> fun store ->
+    { computer with store; fail = false }
   in
   let rec loop ({ store; fail; _ } as computer) : Machine.t =
     if Store.pdl_empty store || fail then computer
     else
-      let Address p1, store = Store.pdl_pop store in
-      let Address p2, store = Store.pdl_pop store in
-      let d1 = deref p1 store in
-      let d2 = deref p2 store in
+      let p1, store = Store.pdl_pop store in
+      let p2, store = Store.pdl_pop store in
+      let d1 = deref_cell p1 store in
+      let d2 = deref_cell p2 store in
       if d1 != d2 then
-        match (Store.get store d1, Store.get store d2) with
+        match (d1, d2) with
         | Reference _, _ | _, Reference _ ->
             loop @@ bind d1 d2 { computer with store }
-        | Functor (s1, n1), Functor (s2, n2) ->
-            let open Batteries in
-            if s1 = s2 && n1 = n2 then
-              loop
-                {
-                  computer with
-                  store =
-                    List.fold_left
-                      (fun store i ->
-                        store
-                        |> Store.pdl_push (Address (d1 + i))
-                        |> Store.pdl_push (Address (d2 + i)))
-                      store
-                      (List.of_enum (1 -- n1));
-                }
-            else { computer with fail = true }
+        | Constant l, Constant r -> { computer with fail = l <> r }
+        | Structure a1, Structure a2 -> (
+            match (Store.get store a1, Store.get store a2) with
+            | Functor (s1, n1), Functor (s2, n2) ->
+                let open Batteries in
+                if s1 = s2 && n1 = n2 then
+                  loop
+                    {
+                      computer with
+                      store =
+                        List.fold_left
+                          (fun store i ->
+                            store
+                            |> Store.pdl_push (Reference (a1 + i))
+                            |> Store.pdl_push (Reference (a2 + i)))
+                          store
+                          (List.of_enum (1 -- n1));
+                    }
+                else { computer with fail = true }
+            | _ -> failwith "unreachable unify: Structure points at non-Functor"
+            )
         | _, _ -> { computer with fail = true }
       else loop computer
   in
@@ -186,11 +200,11 @@ let unify (a1 : address) (a2 : address) ({ store; _ } as computer) : Machine.t =
 let unify_value (register : Cell.register)
     ({ store; h_register; s_register; mode; _ } as computer) : Machine.t =
   match mode with
-  | Read -> (
-      match get_register register computer with
-      | Reference addr ->
-          { (unify addr s_register computer) with s_register = s_register + 1 }
-      | _ -> failwith "unreachable unify_value")
+  | Read ->
+      {
+        (unify (get_register register computer) (Reference s_register) computer) with
+        s_register = s_register + 1;
+      }
   | Write ->
       let value_of_register = get_register register computer in
       store |> Store.heap_put value_of_register h_register |> fun store ->
@@ -224,17 +238,17 @@ let put_value (register : Cell.register) (a_register : Cell.register) computer :
   let value = get_register register computer in
   match register with
   | Y _ -> (
-      let derefed_cell = deref_cell value computer.store in
-      match derefed_cell with
+      let dereferenced_cell = deref_cell value computer.store in
+      match dereferenced_cell with
       | Reference address when address < computer.e_register ->
           set_register a_register (Store.get computer.store address) computer
-      | Reference address ->
+      | Reference _ ->
           let { h_register; store; _ } = computer in
           let reference = Reference h_register in
           store
           |> Store.heap_put reference h_register
           |> (fun store ->
-               bind address h_register
+               bind dereferenced_cell reference
                  { computer with store; h_register = h_register + 1 })
           |> set_register a_register reference
       | Functor _ -> failwith "we should never put a functor in a register"
@@ -472,6 +486,179 @@ let query_variable register name ({ query_variables; _ } as computer) :
   in
   { computer with query_variables }
 
+let put_constant (c : Cell.constant) (reg : Cell.register)
+    (computer : Machine.t) : Machine.t =
+  set_register reg (Cell.Constant c) computer
+
+let get_constant_from_dereferenced_cell (c : Cell.constant) (cell : Cell.t)
+    (computer : Machine.t) : Machine.t =
+  match cell with
+  | Constant c' -> { computer with fail = c <> c' }
+  | Reference addr ->
+      { computer with store = Store.put (Cell.Constant c) addr computer.store }
+      |> trail addr
+  | _ -> { computer with fail = true }
+
+let get_constant (c : Cell.constant) (reg : Cell.register)
+    (computer : Machine.t) : Machine.t =
+  get_constant_from_dereferenced_cell c
+    (deref_cell (get_register reg computer) computer.store)
+    computer
+
+let set_constant (c : Cell.constant)
+    ({ h_register; store; _ } as computer : Machine.t) : Machine.t =
+  {
+    computer with
+    store = Store.heap_put (Cell.Constant c) h_register store;
+    h_register = h_register + 1;
+  }
+
+let unify_constant (c : Cell.constant)
+    ({ mode; store; s_register; _ } as computer : Machine.t) : Machine.t =
+  match mode with
+  | Read ->
+      get_constant_from_dereferenced_cell c
+        (deref_cell (Store.get store s_register) store)
+        computer
+  | Write -> set_constant c computer
+
+let is_integer (register : Cell.register) (computer : Machine.t) : Machine.t =
+  let int = deref_cell (get_register register computer) computer.store in
+  {
+    computer with
+    fail =
+      (match int with Cell.Constant (Cell.Integer _) -> false | _ -> true);
+  }
+
+let plus_integer
+    ((register0, register1, register2) :
+      Cell.register * Cell.register * Cell.register) (computer : Machine.t) :
+    Machine.t =
+  let addend0 = deref_cell (get_register register0 computer) computer.store in
+  let addend1 = deref_cell (get_register register1 computer) computer.store in
+  let sum = deref_cell (get_register register2 computer) computer.store in
+  match (addend0, addend1, sum) with
+  | ( Cell.Constant (Cell.Integer x0),
+      Cell.Constant (Cell.Integer x1),
+      Cell.Constant (Cell.Integer x2) )
+    when x0 + x1 = x2 ->
+      computer
+  | ( Cell.Constant (Cell.Integer x0),
+      Cell.Constant (Cell.Integer x1),
+      Cell.Reference _ ) ->
+      bind sum (Cell.Constant (Cell.Integer (x0 + x1))) computer
+  | ( Cell.Constant (Cell.Integer x0),
+      (Cell.Reference _ as cell),
+      Cell.Constant (Cell.Integer x1) )
+  | ( (Cell.Reference _ as cell),
+      Cell.Constant (Cell.Integer x0),
+      Cell.Constant (Cell.Integer x1) ) ->
+      bind cell (Cell.Constant (Cell.Integer (x1 - x0))) computer
+  | _ -> { computer with fail = true }
+
+let negate_integer ((register0, register1) : Cell.register * Cell.register)
+    (computer : Machine.t) : Machine.t =
+  let argument = deref_cell (get_register register0 computer) computer.store in
+  let inverse = deref_cell (get_register register1 computer) computer.store in
+  match (argument, inverse) with
+  | Cell.Constant (Cell.Integer x0), Cell.Constant (Cell.Integer x1)
+    when x0 = -x1 ->
+      computer
+  | Cell.Constant (Cell.Integer x0), (Cell.Reference _ as cell)
+  | (Cell.Reference _ as cell), Cell.Constant (Cell.Integer x0) ->
+      bind cell (Cell.Constant (Cell.Integer (-x0))) computer
+  | _ -> { computer with fail = true }
+
+let multiply_integer
+    ((register0, register1, register2) :
+      Cell.register * Cell.register * Cell.register) (computer : Machine.t) :
+    Machine.t =
+  let multiplicand =
+    deref_cell (get_register register0 computer) computer.store
+  in
+  let multiplier =
+    deref_cell (get_register register1 computer) computer.store
+  in
+  let product = deref_cell (get_register register2 computer) computer.store in
+  match (multiplicand, multiplier, product) with
+  | ( Cell.Constant (Cell.Integer x0),
+      Cell.Constant (Cell.Integer x1),
+      Cell.Constant (Cell.Integer x2) )
+    when x0 * x1 = x2 ->
+      computer
+  | ( Cell.Constant (Cell.Integer x0),
+      Cell.Constant (Cell.Integer x1),
+      Cell.Reference _ ) ->
+      bind product (Cell.Constant (Cell.Integer (x0 * x1))) computer
+  | ( Cell.Constant (Cell.Integer x0),
+      (Cell.Reference _ as cell),
+      Cell.Constant (Cell.Integer x1) )
+  | ( (Cell.Reference _ as cell),
+      Cell.Constant (Cell.Integer x0),
+      Cell.Constant (Cell.Integer x1) ) ->
+      if x0 = 0 && x1 <> 0 then { computer with fail = true }
+      else if Int.rem x1 x0 <> 0 then { computer with fail = true }
+      else bind cell (Cell.Constant (Cell.Integer (x1 / x0))) computer
+  | _ -> { computer with fail = true }
+
+let div_mod_integer
+    ((register0, register1, register2, register3) :
+      Cell.register * Cell.register * Cell.register * Cell.register)
+    (computer : Machine.t) : Machine.t =
+  let dividend = deref_cell (get_register register0 computer) computer.store in
+  let divisor = deref_cell (get_register register1 computer) computer.store in
+  let quotient = deref_cell (get_register register2 computer) computer.store in
+  let remainder = deref_cell (get_register register3 computer) computer.store in
+  match (dividend, divisor, quotient, remainder) with
+  | ( Cell.Constant (Cell.Integer x0),
+      Cell.Constant (Cell.Integer x1),
+      Cell.Constant (Cell.Integer x2),
+      Cell.Constant (Cell.Integer x3) )
+    when x0 / x1 = x2 && Int.rem x0 x1 = x3 ->
+      computer
+  | ( Cell.Constant (Cell.Integer x0),
+      Cell.Constant (Cell.Integer x1),
+      Cell.Reference _,
+      Cell.Reference _ ) ->
+      bind quotient (Cell.Constant (Cell.Integer (Int.div x0 x1))) computer
+      |> bind remainder (Cell.Constant (Cell.Integer (Int.rem x0 x1)))
+  | ( Cell.Constant (Cell.Integer x0),
+      Cell.Constant (Cell.Integer x1),
+      Cell.Constant (Cell.Integer x2),
+      Cell.Reference _ )
+    when Int.div x0 x1 = x2 ->
+      bind remainder (Cell.Constant (Cell.Integer (Int.rem x0 x1))) computer
+  | ( Cell.Constant (Cell.Integer x0),
+      Cell.Constant (Cell.Integer x1),
+      Cell.Reference _,
+      Cell.Constant (Cell.Integer x2) )
+    when Int.rem x0 x1 = x2 ->
+      bind remainder (Cell.Constant (Cell.Integer (Int.div x0 x1))) computer
+  | ( Cell.Constant (Cell.Integer x0),
+      Cell.Reference _,
+      Cell.Constant (Cell.Integer x1),
+      Cell.Constant (Cell.Integer x2) ) ->
+      bind remainder
+        (Cell.Constant (Cell.Integer (Int.div (x0 - x2) x1)))
+        computer
+  | ( Cell.Reference _,
+      Cell.Constant (Cell.Integer x0),
+      Cell.Constant (Cell.Integer x1),
+      Cell.Constant (Cell.Integer x2) ) ->
+      bind remainder (Cell.Constant (Cell.Integer ((x0 * x1) + x2))) computer
+  | _ -> { computer with fail = true }
+
+let less_than_or_equal_integer
+    ((register0, register1) : Cell.register * Cell.register)
+    (computer : Machine.t) : Machine.t =
+  let operand0 = deref_cell (get_register register0 computer) computer.store in
+  let operand1 = deref_cell (get_register register1 computer) computer.store in
+  match (operand0, operand1) with
+  | Cell.Constant (Cell.Integer x0), Cell.Constant (Cell.Integer x1)
+    when x0 <= x1 ->
+      computer
+  | _ -> { computer with fail = true }
+
 let eval_step (functor_table : Compiler.functor_map)
     ({ store; p_register; fail; trace; _ } as computer : Machine.t) :
     Machine.t * bool =
@@ -537,22 +724,43 @@ let eval_step (functor_table : Compiler.functor_map)
                 p_register = p_register + 1;
               },
               false )
-        | GetValue (x_register, a_register) -> (
-            match
-              ( get_register x_register computer,
-                get_register a_register computer )
-            with
-            | ( (Reference x_addr | Structure x_addr),
-                (Reference a_addr | Structure a_addr) ) ->
-                ( {
-                    (get_value x_addr a_addr computer) with
-                    p_register = p_register + 1;
-                  },
-                  false )
-            | _ -> failwith "unreachable GetValue")
+        | GetValue (x_register, a_register) ->
+            ( {
+                (get_value
+                   (get_register x_register computer)
+                   (get_register a_register computer)
+                   computer)
+                with
+                p_register = p_register + 1;
+              },
+              false )
         | UnifyValue register ->
             ( {
                 (unify_value register computer) with
+                p_register = p_register + 1;
+              },
+              false )
+        | SetConstant constant ->
+            ( {
+                (set_constant constant computer) with
+                p_register = p_register + 1;
+              },
+              false )
+        | GetConstant (constant, register) ->
+            ( {
+                (get_constant constant register computer) with
+                p_register = p_register + 1;
+              },
+              false )
+        | PutConstant (constant, register) ->
+            ( {
+                (put_constant constant register computer) with
+                p_register = p_register + 1;
+              },
+              false )
+        | UnifyConstant constant ->
+            ( {
+                (unify_constant constant computer) with
                 p_register = p_register + 1;
               },
               false )
@@ -566,9 +774,50 @@ let eval_step (functor_table : Compiler.functor_map)
         | TryMeElse l -> (try_me_else l computer, false)
         | RetryMeElse l -> (retry_me_else l computer, false)
         | TrustMe -> (trust_me computer, false)
-        | Debug ->
-            ({ computer with debug = true; p_register = p_register + 1 }, false)
-        )
+        | Builtin builtin -> (
+            match builtin with
+            | IsInteger ->
+                ( {
+                    (is_integer (Cell.X 0) computer) with
+                    p_register = p_register + 1;
+                  },
+                  false )
+            | PlusInteger ->
+                ( {
+                    (plus_integer (Cell.X 0, Cell.X 1, Cell.X 2) computer) with
+                    p_register = p_register + 1;
+                  },
+                  false )
+            | NegateInteger ->
+                ( {
+                    (negate_integer (Cell.X 0, Cell.X 1) computer) with
+                    p_register = p_register + 1;
+                  },
+                  false )
+            | MultiplyInteger ->
+                ( {
+                    (multiply_integer (Cell.X 0, Cell.X 1, Cell.X 2) computer) with
+                    p_register = p_register + 1;
+                  },
+                  false )
+            | DivModInteger ->
+                ( {
+                    (div_mod_integer
+                       (Cell.X 0, Cell.X 1, Cell.X 2, Cell.X 3)
+                       computer)
+                    with
+                    p_register = p_register + 1;
+                  },
+                  false )
+            | LessThanOrEqualInteger ->
+                ( {
+                    (less_than_or_equal_integer (Cell.X 0, Cell.X 1) computer) with
+                    p_register = p_register + 1;
+                  },
+                  false )
+            | Debug ->
+                ( { computer with debug = true; p_register = p_register + 1 },
+                  false )))
     | _ -> failwith "unreachable eval_step"
 
 let rec eval (functor_table : Compiler.functor_map) (computer : Machine.t) :

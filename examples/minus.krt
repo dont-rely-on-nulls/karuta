@@ -1,9 +1,7 @@
-nat[nil].
-nat[succ[N]] :- nat[N].
+minus[InL, InR, Out] :-
+    neg[InR, MinusInR],
+    plus[InL, MinusInR, Out].
 
-minus[Out, nil, Out] :- nat[Out].
-minus[succ[X], succ[Y], Out] :- minus[X, Y, Out].
-
-minus[succ[succ[succ[succ[nil]]]], succ[succ[nil]], Out]?
+minus[4, -2, Out]?
 
 
