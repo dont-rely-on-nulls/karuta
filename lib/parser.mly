@@ -1,6 +1,7 @@
 %{
 %}
 
+%token <string> LITERAL_ATOM
 %token <string> IDENT
 %token <string> INTEGER
 %token <string> UPPER_IDENT
@@ -27,8 +28,13 @@ program:
 functorr:
   | functor_name = IDENT; LEFT_DELIM; identifiers = list_identifiers
   { ({ namef = functor_name; elements = identifiers; arity = List.length identifiers } : Ast.func) }
+  | functor_name = LITERAL_ATOM; LEFT_DELIM; identifiers = list_identifiers
+  { ({ namef = functor_name; elements = identifiers; arity = List.length identifiers } : Ast.func) }
   | functor_name = IDENT;
   { ({ namef = functor_name; elements = []; arity = 0 } : Ast.func) }
+  | functor_name = LITERAL_ATOM
+  { ({ namef = functor_name; elements = []; arity = 0 } : Ast.func) }
+  ;
 
 declaration:
   | functor_elem = functorr; DOT

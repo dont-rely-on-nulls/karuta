@@ -1,13 +1,10 @@
-factorial[X, Out] :- int[X], factorial[X, 1, Out].
+factorial[X, Out] :- int[X], 'factorial loop'[X, 1, Out].
 
-factorial[0, Out, Out] :- int[Out].
-factorial[N, Acc, Out] :-
-    multiply[N, Acc, NewAcc],    
+'factorial loop'[0, Out, Out] :- int[Out].
+'factorial loop'[N, Acc, Out] :-
+    multiply[N, Acc, NewAcc],
     neg[1, Minus],
     plus[N, Minus, Prev],
-    factorial[Prev, NewAcc, Out].
+    'factorial loop'[Prev, NewAcc, Out].
 
 factorial[5, Out]?
-
-
-
