@@ -1,20 +1,20 @@
-// @g[1].
-// @g['this will work', x, 3].
+% @g[1].
+% @g['this will work', x, 3].
 
-// 1: No mixing of runtimes. Prolog is prolog, DB is DB.
-// 2: You are either a database builtin or another DB relation.
-// 3: Inputs are required to inform their domain.
-// 4: Outputs may inform their domain.
-// 5: Do domain inference if the inputs are not informed.
+% 1: No mixing of runtimes. Prolog is prolog, DB is DB.
+% 2: You are either a database builtin or another DB relation.
+% 3: Inputs are required to inform their domain.
+% 4: Outputs may inform their domain.
+% 5: Do domain inference if the inputs are not informed.
 
-// Candidate Keys: In, Out, [In, Out]
+% Candidate Keys: In, Out, [In, Out]
 @inc[In, Out] :- nat[In], nat[Out], plus[In, 1, Out].
 
-// Candidate Keys: In, [In, Out]
+% Candidate Keys: In, [In, Out]
 @square[In, Out] :- int[In], int[Out], multiply[In, In, Out].
 @square[In, Out] :- list-int[In], list-int[Out], multiply[In, In, Out].
 
-// Candidate Keys: In, Out, [In, Out]
+% Candidate Keys: In, Out, [In, Out]
 @square[In, Out] :- nat[In], nat[Out], multiply[In, In, Out].
 
 @inc[5, Out]?

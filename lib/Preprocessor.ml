@@ -3,6 +3,18 @@ let from_declaration (clause : Ast.parser_clause) : Ast.decl =
   | Declaration decl -> decl
   | _ -> failwith "unreachable from_declaration"
 
+let remove_comments (clause : Ast.parser_clause) : Ast.parser_clause option =
+  let open Ast in
+  let non_comment func =
+    match func with { namef = "comment"; _ } -> false | _ -> true
+  in
+  match clause with
+  | Declaration { head = { namef = "comment"; _ }; _ } -> None
+  | Declaration { head; body } ->
+      Some (Declaration { head; body = body |> List.filter non_comment })
+  | Query { namef = "comment"; _ } -> None
+  | Query _ as query -> Some query
+
 let show_clauses (clauses : Ast.clause list) : string =
   List.fold_left (fun acc term -> acc ^ "\n" ^ Ast.show_clause term) "" clauses
 [@@warning "-32"]
@@ -30,4 +42,6 @@ let group_clauses (clauses : Ast.parser_clause list) : Ast.clause list =
     | _ -> failwith "unreachable group"
   in
   let open Batteries in
-  clauses |> List.group compare_clauses |> List.map multi_mapper
+  clauses
+  |> List.filter_map remove_comments
+  |> List.group compare_clauses |> List.map multi_mapper

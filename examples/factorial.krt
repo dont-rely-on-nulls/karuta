@@ -1,10 +1,19 @@
 factorial[X, Out] :- int[X], 'factorial loop'[X, 1, Out].
 
-'factorial loop'[0, Out, Out] :- int[Out].
+% A nice tail-recursive definition.
+'factorial loop'[0, Out, Out] :- int[Out]. % Base case, ensure we have an integer.
 'factorial loop'[N, Acc, Out] :-
+    #% this_will_be_ignored,
     multiply[N, Acc, NewAcc],
-    neg[1, Minus],
+    neg[1, #%0, #%Whatever, Minus], % Minus is bound to -1, this tests the neg primitive.
     plus[N, Minus, Prev],
-    'factorial loop'[Prev, NewAcc, Out].
+    % Tail call.
+    'factorial loop'[Prev, NewAcc, Out],
+    comment[this, is, not, a, tail, call].
+
+comment[whatever].
+comment[A] :- ignoring[A].
 
 factorial[5, Out]?
+#%factorial[6, Out]?
+comment[a, b, C]?
