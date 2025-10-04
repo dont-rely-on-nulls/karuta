@@ -14,7 +14,7 @@ might happen if you are crazy enough to use it.
 - [X] PL Integer Literals  
 - [ ] PL List Literals  
 - [ ] PL Query Conjuction  
-- [ ] Comments
+- [X] Comments
 - [ ] Namespacing
 - [ ] Special syntax for database support using ~@~
 - [ ] Dedicated bytecode for database interaction
