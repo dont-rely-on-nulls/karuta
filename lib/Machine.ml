@@ -4,6 +4,8 @@ module Cell = struct
   and instruction =
     | GetStructure of ((string * int) * register)
     | PutStructure of ((string * int) * register)
+    | PutList of register
+    | GetList of register
     | PutVariable of (register * register)
     | GetVariable of (register * register)
     | SetVariable of register
@@ -39,16 +41,18 @@ module Cell = struct
     | Debug
   [@@deriving show]
 
-  and constant = Integer of int
+  and constant = Integer of int | Atom of string
+  and address = int
 
   and t =
     | Constant of constant
-    | Structure of int
-    | Reference of int
+    | Structure of address
+    | Reference of address
     | Functor of string * int
-    | Address of int
+    | Address of address
     | ArgCount of int
     | Instruction of instruction
+    | List of address
     | Empty
   [@@deriving show]
 
@@ -65,11 +69,11 @@ module IM = BatIMap
 type query_map = (string, Cell.t) BatMap.t
 
 module Store = Store.Make (struct
-  let code_size = 1000
-  let heap_size = 1000
-  let stack_size = 1000
-  let pdl_size = 1000
-  let trail_size = 1000
+  let code_size = 10000
+  let heap_size = 100000
+  let stack_size = 100000
+  let pdl_size = 10000
+  let trail_size = 10000
 end)
 
 module IntMap = Map.Make (Int)

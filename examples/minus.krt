@@ -3,5 +3,3 @@ minus[InL, InR, Out] :-
     plus[InL, MinusInR, Out].
 
 minus[4, -2, Out]?
-
-

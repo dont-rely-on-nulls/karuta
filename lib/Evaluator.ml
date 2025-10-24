@@ -88,10 +88,11 @@ let bind (t1 : Cell.t) (t2 : Cell.t) ({ store; _ } as computer : Machine.t) :
   (* TODO: figure out how to deduplicate the first two clauses *)
   | Reference a1, Reference a2 when a2 < a1 ->
       { computer with store = store |> Store.put t2 a1 } |> trail a1
-  | Reference a1, _ ->
+  | Reference a1, r when not (is_reference r) ->
       { computer with store = store |> Store.put t2 a1 } |> trail a1
   | _, Reference a2 ->
       { computer with store = store |> Store.put t1 a2 } |> trail a2
+  | _, _ -> failwith "bind should receive at least one reference"
 
 let deref_cell (cell : Cell.t) store : Cell.t =
   match cell with
@@ -101,7 +102,7 @@ let deref_cell (cell : Cell.t) store : Cell.t =
       match candidate with
       | Functor _ -> Structure derefed_address
       | _ -> candidate)
-  | Structure _ | Constant _ -> cell
+  | Structure _ | Constant _ | Cell.List _ -> cell
   | _ -> failwith "unreachable deref_cell"
 
 let get_structure ((functor_label, functor_arity) : string * int)
@@ -167,33 +168,43 @@ let unify (a1 : Cell.t) (a2 : Cell.t) ({ store; _ } as computer) : Machine.t =
       let p2, store = Store.pdl_pop store in
       let d1 = deref_cell p1 store in
       let d2 = deref_cell p2 store in
+      loop
+      @@
       if d1 != d2 then
         match (d1, d2) with
-        | Reference _, _ | _, Reference _ ->
-            loop @@ bind d1 d2 { computer with store }
+        | Reference _, _ | _, Reference _ -> bind d1 d2 { computer with store }
         | Constant l, Constant r -> { computer with fail = l <> r }
         | Structure a1, Structure a2 -> (
             match (Store.get store a1, Store.get store a2) with
             | Functor (s1, n1), Functor (s2, n2) ->
                 let open Batteries in
                 if s1 = s2 && n1 = n2 then
-                  loop
-                    {
-                      computer with
-                      store =
-                        List.fold_left
-                          (fun store i ->
-                            store
-                            |> Store.pdl_push (Reference (a1 + i))
-                            |> Store.pdl_push (Reference (a2 + i)))
+                  {
+                    computer with
+                    store =
+                      List.fold_left
+                        (fun store i ->
                           store
-                          (List.of_enum (1 -- n1));
-                    }
+                          |> Store.pdl_push (Reference (a1 + i))
+                          |> Store.pdl_push (Reference (a2 + i)))
+                        store
+                        (List.of_enum (1 -- n1));
+                  }
                 else { computer with fail = true }
             | _ -> failwith "unreachable unify: Structure points at non-Functor"
             )
+        | Cell.List v1, Cell.List v2 ->
+            {
+              computer with
+              store =
+                store
+                |> Store.pdl_push (Reference v1)
+                |> Store.pdl_push (Reference v2)
+                |> Store.pdl_push (Reference (v1 + 1))
+                |> Store.pdl_push (Reference (v2 + 1));
+            }
         | _, _ -> { computer with fail = true }
-      else loop computer
+      else computer
   in
   loop preparedComputer
 
@@ -522,6 +533,21 @@ let unify_constant (c : Cell.constant)
         computer
   | Write -> set_constant c computer
 
+let put_list (register : Cell.register)
+    ({ h_register; _ } as computer : Machine.t) : Machine.t =
+  set_register register (Cell.List h_register) computer
+
+let get_list (register : Cell.register)
+    ({ h_register; store; _ } as computer : Machine.t) : Machine.t =
+  match deref_cell (get_register register computer) store with
+  | Cell.Reference _ as reference ->
+      let list = Cell.List (h_register + 1) in
+      store |> Store.heap_put list h_register |> fun store ->
+      bind reference list
+        { computer with store; h_register = h_register + 1; mode = Write }
+  | Cell.List a -> { computer with s_register = a; mode = Read }
+  | _ -> { computer with fail = true }
+
 let is_integer (register : Cell.register) (computer : Machine.t) : Machine.t =
   let int = deref_cell (get_register register computer) computer.store in
   {
@@ -633,19 +659,19 @@ let div_mod_integer
       Cell.Reference _,
       Cell.Constant (Cell.Integer x2) )
     when Int.rem x0 x1 = x2 ->
-      bind remainder (Cell.Constant (Cell.Integer (Int.div x0 x1))) computer
+      bind quotient (Cell.Constant (Cell.Integer (Int.div x0 x1))) computer
   | ( Cell.Constant (Cell.Integer x0),
       Cell.Reference _,
       Cell.Constant (Cell.Integer x1),
       Cell.Constant (Cell.Integer x2) ) ->
-      bind remainder
+      bind divisor
         (Cell.Constant (Cell.Integer (Int.div (x0 - x2) x1)))
         computer
   | ( Cell.Reference _,
       Cell.Constant (Cell.Integer x0),
       Cell.Constant (Cell.Integer x1),
       Cell.Constant (Cell.Integer x2) ) ->
-      bind remainder (Cell.Constant (Cell.Integer ((x0 * x1) + x2))) computer
+      bind dividend (Cell.Constant (Cell.Integer ((x0 * x1) + x2))) computer
   | _ -> { computer with fail = true }
 
 let less_than_or_equal_integer
@@ -690,6 +716,12 @@ let eval_step (functor_table : Compiler.functor_map)
                 (put_structure register (name, arity) computer) with
                 p_register = p_register + 1;
               },
+              false )
+        | GetList register ->
+            ( { (get_list register computer) with p_register = p_register + 1 },
+              false )
+        | PutList register ->
+            ( { (put_list register computer) with p_register = p_register + 1 },
               false )
         | PutVariable (x_register, a_register) ->
             ( {

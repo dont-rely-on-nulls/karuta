@@ -1,8 +1,20 @@
 open Machine
 
-let rec inspect (store : Cell.t Store.t) (register : Cell.t) : string =
+let rec inspect_list (store : Cell.t Store.t) (address : int) : string =
+  let head = inspect store (Reference address) in
+  let tail =
+    match Evaluator.deref_cell (Reference (address + 1)) store with
+    | Cell.Constant (Cell.Atom "") -> "]"
+    | Cell.List next_address -> ", " ^ inspect_list store next_address
+    | others -> " | " ^ inspect store others ^ "]"
+  in
+  head ^ tail
+
+and inspect (store : Cell.t Store.t) (register : Cell.t) : string =
   match register with
-  | Constant const -> ( match const with Integer i -> string_of_int i)
+  | Constant const -> (
+      match const with Integer i -> string_of_int i | Atom atom -> atom)
+  | Cell.List address -> "[" ^ inspect_list store address
   | Structure address -> (
       match Store.get store address with
       | Functor (name, arity) ->

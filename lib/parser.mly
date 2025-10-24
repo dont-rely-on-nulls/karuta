@@ -7,6 +7,7 @@
 %token <string> UPPER_IDENT
 %token LEFT_DELIM
 %token RIGHT_DELIM
+%token PIPE
 %token COMMA
 %token DOT
 %token HOLDS
@@ -71,3 +72,11 @@ expression:
   | INTEGER { Ast.Integer (int_of_string $1) }
   | UPPER_IDENT { Ast.Variable {namev = $1} }
   | functor_elem = functorr { Ast.Functor functor_elem }
+  | LEFT_DELIM; expressions = separated_nonempty_list(COMMA, expression); PIPE; tail = expression; RIGHT_DELIM
+    { List.fold_right (fun element acc -> (Ast.Functor { namef = ""; elements = [element;acc]; arity = 2 }))
+                      expressions
+                      tail}
+  | LEFT_DELIM; expressions = list_identifiers
+    { List.fold_right (fun element acc -> (Ast.Functor { namef = ""; elements = [element;acc]; arity = 2 }))
+                      expressions
+                      (Ast.Functor { namef = ""; elements = []; arity = 0 })}

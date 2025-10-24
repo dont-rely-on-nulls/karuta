@@ -11,7 +11,7 @@ let update_store (computer : Lib.Machine.t)
 let _ =
   let open Option in
   let+ content =
-    In_channel.with_open_text "examples/factorial.krt" (fun fc ->
+    In_channel.with_open_text "examples/lists.krt" (fun fc ->
         try Some (In_channel.input_all fc) with End_of_file -> None)
   in
   match Lib.Parse.parse content with

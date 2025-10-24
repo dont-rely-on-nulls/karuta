@@ -1,0 +1,48 @@
+append[[], [], []].
+append[[], Out, Out].
+append[Out, [], Out].
+append[[H|Tail], Second, [H|Mid]] :- append[Tail, Second, Mid].
+
+add[[], [], []].
+add[[H1|Tail1], [H2|Tail2], [HR|TailOut]] :-
+    plus[H1, H2, HR],
+    add[Tail1, Tail2, TailOut].
+
+reverse[In, Out] :- 'reverse loop'[In, [], Out].
+
+'reverse loop'[[], Out, Out].
+'reverse loop'[[A | Tail], Acc, Out] :- 'reverse loop'[Tail, [A | Acc], Out].
+
+partition[Length, List, Out] :-
+  leq[1, Length],
+  'partition loop'[Length, 0, [], List, Out].
+
+'partition loop'[Length, Length, Group, List, Out] :-
+  reverse[Group, OutGroup],
+  eq[Out, [OutGroup | NewOut]],
+  'partition loop'[Length, 0, [], List, NewOut].
+
+'partition loop'[Length, GroupLength, Group, [], []].
+
+'partition loop'[Length, GroupLength, Group, [Elem | Tail], Out] :-
+  plus[GroupLength, 1, NewGroupLength],
+  'partition loop'[Length, NewGroupLength, [Elem | Group], Tail, Out].
+
+eq[A, A].
+
+'rev iota'[0, []].
+'rev iota'[N, [N | Out]] :-
+  leq[0, N],
+  plus[N, -1, N1],
+  'rev iota'[N1, Out].
+
+main[Out] :- 'rev iota'[1000, List], partition[2, List, Out].
+
+main[Out]?
+
+%% eq[[], []].
+%% eq[[H1|Tail1], [H1|Tail2]] :- eq[Tail1, Tail2].
+%% add[[1,2], [3,4], Out]?
+%% append[[1,2], [3,4], Out]?
+% eq[''[1, ''[2, []]], ''[1, ''[X, []]]]?
+%% eq[1, X]?
