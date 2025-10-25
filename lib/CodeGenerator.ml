@@ -441,7 +441,7 @@ and generate
       t * RegisterAllocator.t list * Cell.t Store.t) (value : Ast.clause) :
     t * RegisterAllocator.t list * Cell.t Store.t =
   match value with
-  | QueryConjunction { namef; elements; arity } ->
+  | Query { namef; elements; arity } ->
       let (allocator :: allocators) = allocators in
       let generator = { generator with in_query = true } in
       let generator, allocator, store =

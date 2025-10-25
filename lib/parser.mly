@@ -57,8 +57,8 @@ declaration:
   ;
 
 query:
-  | functor_elem = functorr; QUERY
-    { Ast.Query functor_elem }
+  | queries = separated_nonempty_list(COMMA, functorr); QUERY
+    { Ast.QueryConjunction queries }
   ;
 
 list_identifiers:

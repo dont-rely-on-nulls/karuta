@@ -146,4 +146,4 @@ and allocate_query : Ast.func -> t =
 let allocate_toplevel : Ast.clause -> t list = function
   | MultiDeclaration (first, decls) ->
       allocate_declaration first :: List.map allocate_declaration decls
-  | QueryConjunction func -> [ allocate_query func ]
+  | Query func -> [ allocate_query func ]

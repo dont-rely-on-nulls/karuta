@@ -32,7 +32,7 @@ let initialize () : t =
 
 let rec allocate_registers (elem : Ast.clause) : RegisterAllocator.t list =
   match elem with
-  | (MultiDeclaration _ | QueryConjunction _) as form ->
+  | (MultiDeclaration _ | Query _) as form ->
       RegisterAllocator.allocate_toplevel form
 
 and compile :
@@ -58,11 +58,13 @@ and compile :
                   add (head.namef, head.arity) p_register functor_table;
               },
               store )
-      | QueryConjunction _ as form ->
+      | Query _ as form ->
           let entry_point =
             match entry_point with
             | None -> Some { p_register }
-            | Some _ -> failwith "multiple queries are not supported yet"
+            | Some _ ->
+                failwith
+                  "Multiple queries are only supported using the comma syntax"
           in
           ( allocate_registers form |> fun allocator ->
             CodeGenerator.generate

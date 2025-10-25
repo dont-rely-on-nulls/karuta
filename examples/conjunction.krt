@@ -1,0 +1,5 @@
+minus[InL, InR, Out] :-
+    neg[InR, MinusInR],
+    plus[InL, MinusInR, Out].
+
+minus[4, -2, Out], plus[First, 2, Out], minus[First, Out, -2]?

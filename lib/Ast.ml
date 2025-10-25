@@ -3,12 +3,12 @@ type tag = string [@@deriving show, ord]
 type expr = Variable of var | Functor of func | Integer of int
 [@@deriving show, ord]
 
-and clause =
-  | MultiDeclaration of (decl * decl list)
-  | QueryConjunction of func (* TODO: actually make a multi-query *)
+and clause = MultiDeclaration of (decl * decl list) | Query of func
 [@@deriving show, ord]
 
-and parser_clause = Declaration of decl | Query of func [@@deriving show, ord]
+and parser_clause = Declaration of decl | QueryConjunction of func list
+[@@deriving show, ord]
+
 and var = { namev : tag } [@@deriving show, ord]
 
 and func = { namef : tag; elements : expr list; arity : int }

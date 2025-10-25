@@ -13,7 +13,7 @@ might happen if you are crazy enough to use it.
 - [X] PL Evaluation
 - [X] PL Integer Literals
 - [X] PL List Literals
-- [ ] PL Query Conjuction
+- [X] PL Query Conjunction
 - [X] Comments
 - [ ] Namespacing
 - [ ] Special syntax for database support using ~@~
@@ -24,6 +24,7 @@ might happen if you are crazy enough to use it.
      - If not, you can pass a flag to skip the check
      - If another flag is provided, you impure the compiler to ask the relational engine
      - If nothing above, fuck you. I will fail.
+- [ ] Compiler generates literals for queries with numbers       
 
 ** Database Integration
 - [ ] Introduce relational builtins (~nat~, ~int~, ~plus~, ~multiply~).
