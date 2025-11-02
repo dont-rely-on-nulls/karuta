@@ -38,11 +38,7 @@ eq[A, A].
 
 main[Out] :- 'rev iota'[1000, List], partition[2, List, Out].
 
-main[Out]?
-
-%% eq[[], []].
-%% eq[[H1|Tail1], [H1|Tail2]] :- eq[Tail1, Tail2].
-%% add[[1,2], [3,4], Out]?
-%% append[[1,2], [3,4], Out]?
-% eq[''[1, ''[2, []]], ''[1, ''[X, []]]]?
-%% eq[1, X]?
+main[MainOut],
+add[[1, 2], [3, 4], AddOut],
+reverse[[1, 2, 3, 4], RevOut],
+append[[1, 2], [3, 4], AppendOut]?

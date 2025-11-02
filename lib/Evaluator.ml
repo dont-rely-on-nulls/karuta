@@ -110,19 +110,13 @@ let get_structure ((functor_label, functor_arity) : string * int)
     Machine.t =
   match deref_cell (get_register register computer) store with
   | Reference _ as reference ->
-      let structure = Structure (h_register + 1) in
+      let structure = Structure h_register in
       let func = Functor (functor_label, functor_arity) in
       let computer =
-        {
-          computer with
-          store =
-            store
-            |> Store.heap_put structure h_register
-            |> Store.heap_put func (h_register + 1);
-        }
-        |> bind reference (Reference h_register)
+        { computer with store = Store.heap_put func h_register store }
+        |> bind reference structure
       in
-      { computer with h_register = h_register + 2; mode = Write }
+      { computer with h_register = h_register + 1; mode = Write }
   | Structure a -> (
       match Store.heap_get store a with
       | Functor (label, arity)
@@ -528,9 +522,13 @@ let unify_constant (c : Cell.constant)
     ({ mode; store; s_register; _ } as computer : Machine.t) : Machine.t =
   match mode with
   | Read ->
-      get_constant_from_dereferenced_cell c
-        (deref_cell (Store.get store s_register) store)
-        computer
+      {
+        (get_constant_from_dereferenced_cell c
+           (deref_cell (Store.get store s_register) store)
+           computer)
+        with
+        s_register = s_register + 1;
+      }
   | Write -> set_constant c computer
 
 let put_list (register : Cell.register)
@@ -541,10 +539,8 @@ let get_list (register : Cell.register)
     ({ h_register; store; _ } as computer : Machine.t) : Machine.t =
   match deref_cell (get_register register computer) store with
   | Cell.Reference _ as reference ->
-      let list = Cell.List (h_register + 1) in
-      store |> Store.heap_put list h_register |> fun store ->
-      bind reference list
-        { computer with store; h_register = h_register + 1; mode = Write }
+      let list = Cell.List h_register in
+      bind reference list { computer with mode = Write }
   | Cell.List a -> { computer with s_register = a; mode = Read }
   | _ -> { computer with fail = true }
 

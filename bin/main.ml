@@ -8,10 +8,10 @@ let update_store (computer : Lib.Machine.t)
     (store : Lib.Machine.Cell.t Lib.Machine.Store.t) : Lib.Machine.t =
   { computer with store }
 
-let _ =
+let run file =
   let open Option in
   let+ content =
-    In_channel.with_open_text "examples/conjunction.krt" (fun fc ->
+    In_channel.with_open_text ("examples/" ^ file) (fun fc ->
         try Some (In_channel.input_all fc) with End_of_file -> None)
   in
   match Lib.Parse.parse content with
@@ -36,3 +36,15 @@ let _ =
           in
           print_endline @@ Lib.Print.query_args computer;
           Some computer)
+
+let _ =
+  List.map run
+    [
+      "conjunction.krt";
+      "factorial.krt";
+      "lists.krt";
+      "minus.krt";
+      "multiply.krt";
+      "plus.krt";
+      "triangular.krt";
+    ]
