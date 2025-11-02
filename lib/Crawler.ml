@@ -34,8 +34,11 @@ and inspect (store : Cell.t Store.t) (register : Cell.t) : string =
   | Empty | Functor _ | ArgCount _ | Instruction _ | Address _ ->
       failwith "unreachable inspect"
 
-let query_args ({ store; query_variables; _ } : Machine.t) : string =
-  let folder acc (variable, cell) =
-    acc ^ variable ^ " = " ^ inspect store cell ^ "\n"
-  in
-  BatSeq.fold_left folder "" (BatMap.to_seq query_variables)
+let query_args ({ store; query_variables; _ } : Machine.t) : Query.variable_map
+    =
+  let mapper cell = inspect store cell in
+  BatMap.map mapper query_variables
+
+let query_string (computer : Machine.t) : string =
+  let folder variable cell acc = acc ^ variable ^ " = " ^ cell ^ "\n" in
+  BatMap.foldi folder (query_args computer) ""

@@ -7,8 +7,6 @@
 ; https://dune.readthedocs.io/en/stable/opam.html#generating-opam-files
 (generate_opam_files true)
 
-(cram enable)
-
 (authors "Lemos" "Magueta" "Marinho")
 
 (maintainers "Lemos" "Magueta" "Marinho")

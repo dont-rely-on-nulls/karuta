@@ -39,6 +39,7 @@
               (nix-filter.lib.inDirectory "bin")
               (nix-filter.lib.inDirectory "lib")
               (nix-filter.lib.inDirectory "test")
+              (nix-filter.lib.inDirectory "examples")
             ];
           };
 
@@ -81,6 +82,7 @@
               ocamlPackages.ppxlib
               ocamlPackages.batteries
               ocamlPackages.earlybird
+              ocamlPackages.alcotest
               # Ocaml package dependencies needed to build go here.
             ];
 
@@ -193,6 +195,7 @@
               ocamlPackages.ppx_deriving
               ocamlPackages.ppxlib
               ocamlPackages.earlybird
+              ocamlPackages.alcotest
             ];
 
             # Tools from packages
