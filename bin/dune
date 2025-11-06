@@ -3,10 +3,11 @@
 ; - https://dune.readthedocs.io/en/stable/concepts.html#executables
 ; - https://dune.readthedocs.io/en/stable/dune-files.html#executable
 
+(include_subdirs qualified)
+
 (executable
  (name main)
  (public_name karuta)
- (modules main)
- (libraries lib)
+ (libraries lib cmdliner)
  (modes byte exe)
  (package karuta))

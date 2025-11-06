@@ -7,4 +7,3 @@ triangle[N, Acc, Out] :-
     triangle[Prev, NewAcc, Out].
 
 triangle[5, Out]?
-

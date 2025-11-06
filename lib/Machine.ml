@@ -141,6 +141,9 @@ let show_internal_registers (computer : t) : string =
   ^ "\n" ^ "TR: "
   ^ string_of_int computer.tr_register
 
+let update_store (computer : t) (store : Cell.t Store.t) : t =
+  { computer with store }
+
 let initialize () : t =
   {
     store = Store.initialize Store.empty Store.mem_size Cell.Empty;

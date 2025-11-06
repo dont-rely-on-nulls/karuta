@@ -10,26 +10,22 @@
 
 (library
  (name lib)
- (modules
-  Query
-  Crawler
-  Ast
-  CodeGenerator
-  Store
-  Machine
-  RegisterAllocator
-  Compiler
-  Debugger
-  Evaluator
-  Parse
-  Parser
-  Preprocessor
-  Executor
-  Lexer)
- (libraries batteries)
+ (libraries
+  batteries
+  sexplib
+  lwt
+  lwt.unix
+  lwt-exit
+  lambda-term
+  textutils.ascii_table)
  (package karuta)
  (preprocess
-  (pps ppx_deriving.show ppx_deriving.std ppx_deriving.ord ppx_enumerate)))
+  (pps
+   ppx_deriving.show
+   ppx_deriving.std
+   ppx_deriving.ord
+   ppx_enumerate
+   ppx_sexp_conv)))
 
 (ocamllex lexer)
 

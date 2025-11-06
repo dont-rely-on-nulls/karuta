@@ -82,6 +82,13 @@
               ocamlPackages.ppxlib
               ocamlPackages.batteries
               ocamlPackages.earlybird
+              ocamlPackages.ppx_sexp_conv
+              ocamlPackages.sexplib
+              ocamlPackages.lwt
+              ocamlPackages.lwt-exit
+              ocamlPackages.lambda-term
+              ocamlPackages.textutils
+              ocamlPackages.cmdliner
               ocamlPackages.alcotest
               # Ocaml package dependencies needed to build go here.
             ];
@@ -195,6 +202,13 @@
               ocamlPackages.ppx_deriving
               ocamlPackages.ppxlib
               ocamlPackages.earlybird
+              ocamlPackages.ppx_sexp_conv
+              ocamlPackages.sexplib
+              ocamlPackages.lwt
+              ocamlPackages.lwt-exit
+              ocamlPackages.lambda-term
+              ocamlPackages.textutils
+              ocamlPackages.cmdliner
               ocamlPackages.alcotest
             ];
 

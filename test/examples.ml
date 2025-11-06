@@ -140,7 +140,7 @@ let make_test { example; expected } =
   | None -> (example, Alcotest.fail ("Could not run example: " ^ example))
   | Some computer ->
       let expected_results = expected |> List.to_seq |> BatMap.of_seq in
-      computer |> Crawler.query_args
+      computer |> Crawler.StandardOut.query_args
       |> BatMap.mapi (make_test_case example expected_results)
       |> BatMap.values |> BatList.of_enum
       |> fun tests -> (example, tests)
