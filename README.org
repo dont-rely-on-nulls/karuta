@@ -1,24 +1,22 @@
 #+TITLE: Karuta 🎴
 
 * About
-This is a toy general purpose relational programming language. We are not held accountable for anything that
+This is a toy, general-purpose relational programming language. We are not held accountable for anything that
 might happen if you are crazy enough to use it.
 
 * Requirements
 
 ** Prolog
 - [X] PL Parsing
-- [X] PL Register Allocation
-- [X] PL Compilation
-- [X] PL Evaluation
-- [X] PL Integer Literals
-- [X] PL List Literals
 - [X] PL Query Conjunction
 - [X] Comments
-- [ ] Namespacing
+- [X] PL Register Allocation
+- [ ] PL Compilation
+- [ ] PL Integer Literals
+- [ ] PL List Literals
+- [ ] Modules
 - [ ] Special syntax for database support using ~@~
 - [ ] Dedicated bytecode for database interaction
-- [ ] Serialization for relational engine protocol
 - [ ] Some sort of type checking (if provided a .krt file with the types)
      - If you provide a file with the types, use that
      - If not, you can pass a flag to skip the check
@@ -33,9 +31,6 @@ might happen if you are crazy enough to use it.
 
 * References
 
-- https://users.dimi.uniud.it/~marco.comini/Students/Documentation/wam-book.pdf (main reference)
-- https://users.cs.duke.edu/~junyang/ra2/
-- https://tinman.cs.gsu.edu/~raj/8710/f05/RA.pdf
-- https://reldb.org/c/wp-content/uploads/2017/12/Rel-and-Tutorial-D-Quickstart.pdf
-- https://en.wikipedia.org/wiki/Relational_algebra
-- https://github.com/brendanzab/ocaml-flake-example
+- [[https://blog.stenmans.org/theBeamBook/][BEAM's book]]
+- [[https://webperso.info.ucl.ac.be/~pvr/VanRoyHaridi2003-book.pdf][Computer, Techniques, and Models of Computer Programming]]
+- [[https://users.dimi.uniud.it/~marco.comini/Students/Documentation/wam-book.pdf][Warren's Abtract Machine]]
