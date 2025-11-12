@@ -1,10 +1,6 @@
 open Cmdliner
 
-type cmd = Repl of Cmds.Repl.t | Compile of Cmds.Compile.t
-
-let repl run =
-  let combine files = Repl { files } |> run in
-  Cmds.Repl.cmd combine
+type cmd = Compile of Cmds.Compile.t
 
 let compile run =
   let combine file = Compile { file } |> run in
@@ -25,7 +21,7 @@ let help =
   let info = Cmd.info "help" in
   Cmd.v info root_term
 
-let subcommands run = [ repl run; compile run; help ]
+let subcommands run = [ compile run; help ]
 
 let parse_command_line_and_run (run : cmd -> unit) =
   run |> subcommands |> Cmd.group root_info |> Cmd.eval

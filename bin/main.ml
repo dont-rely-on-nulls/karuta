@@ -2,7 +2,6 @@ open Cmd
 open Lib
 
 let run : cmd -> unit = function
-  | Repl { files } -> Lwt_main.run (REPL.main files)
   | Compile { file } -> (
       match Executor.run file with
       | None -> failwith @@ "Could not execute file: " ^ file

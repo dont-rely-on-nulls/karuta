@@ -8,12 +8,14 @@ might happen if you are crazy enough to use it.
 
 ** Prolog
 - [X] PL Parsing
+- [X] PL Register Allocation
 - [X] PL Query Conjunction
 - [X] Comments
-- [X] PL Register Allocation
+- [ ] BEAM runtime library (logic variables, backtracking)
 - [ ] PL Compilation
 - [ ] PL Integer Literals
 - [ ] PL List Literals
+- [ ] Implement toolchain (i.e. compile to BEAM assembly, call ~erlc~ on that)
 - [ ] Modules
 - [ ] Special syntax for database support using ~@~
 - [ ] Dedicated bytecode for database interaction
@@ -22,9 +24,9 @@ might happen if you are crazy enough to use it.
      - If not, you can pass a flag to skip the check
      - If another flag is provided, you impure the compiler to ask the relational engine
      - If nothing above, fuck you. I will fail.
-- [ ] Compiler generates literals for queries with numbers       
+- [ ] Compiler generates literals for queries with numbers
 
-** Database Integration
+** Domino
 - [ ] Introduce relational builtins (~nat~, ~int~, ~plus~, ~multiply~).
 - [ ] Define a protocol for the language runtime to interact with.
 - [ ] Introduce support for querying multiple values (~[10..20]~ example).
