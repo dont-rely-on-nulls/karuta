@@ -1,38 +1,81 @@
 -module(karuta).
 
--export([environment_behavior/1, test/0]).
+-export([environment_behavior/2, test/0]).
+
+test_pop() ->
+  receive V ->
+    io:format("Received: ~p\n", [V]),
+    V
+  end.
 
 test() ->
-  Env = spawn(karuta, environment_behavior, [#{}]),
+  Env = spawn(karuta, environment_behavior, [#{}, []]),
   Env ! {fresh, self()},
-  {fresh_variable, A} = fun () -> receive V -> V end end(),
-  Env ! {unify, A, [1, 2, 3], self()},
-  fun () -> receive V -> V end end(),
+  {fresh_variable, A} = test_pop(),
+  Env ! {new_choice, self()},
+  test_pop(),
+  Env ! {discard, self()},
+  {discard, Wildcard} = test_pop(),
+  Env ! {unify, [A|Wildcard], [1, 2, 3], self()},
+  test_pop(),
   Env ! {deref, A, self()},
-  fun () -> receive V -> V end end().
+  test_pop(),
+  Env ! {deref, Wildcard, self()},
+  test_pop(),
+  Env ! {backtrack, self()},
+  test_pop(),
+  Env ! {deref, A, self()},
+  test_pop().
 
-environment_behavior(State) ->
-  environment_behavior(
-    receive
-      {unify, LHS, RHS, Pid} ->
-        maybe
-          {ok, NewState} ?= unify(State, LHS, RHS),
-          Pid ! {ok, variable_bound},
-          NewState
-        else
-          Error ->
-            Pid ! {error, Error},
-            State
-        end;
-      {fresh, Pid} ->
-        Var = make_ref(),
-        Pid ! {fresh_variable, Var},
-        State#{Var => unbound};
-      {deref, Var, Pid} ->
-        Pid ! {dereferenced, deref(State, Var)},
-        State;
-      M -> io:format("Unknown message: ~p\n", [M]), State
-    end).
+environment_behavior(Bindings, ChoicePoints) ->
+  receive
+    {unify, LHS, RHS, Pid} ->
+      maybe
+        {ok, NewBindings} ?= unify(Bindings, LHS, RHS),
+        Pid ! {ok, variable_bound},
+        environment_behavior(NewBindings, ChoicePoints)
+      else
+        Error ->
+          Pid ! {error, Error},
+           environment_behavior(Bindings, ChoicePoints)
+      end;
+    {fresh, Pid} ->
+      Var = make_ref(),
+      Pid ! {fresh_variable, Var},
+      environment_behavior(Bindings#{Var => unbound}, ChoicePoints);
+    {discard, Pid} ->
+      case Bindings of
+       #{discard := Discard} ->
+          Pid ! {discard, Discard},
+          environment_behavior(Bindings, ChoicePoints);
+       _ ->
+          Discard = make_ref(),
+          Pid ! {discard, Discard},
+          environment_behavior(
+            Bindings#{discard => Discard, Discard => discard},
+            ChoicePoints
+          )
+      end;
+    {deref, Var, Pid} ->
+      Pid ! {dereferenced, deref(Bindings, Var)},
+      environment_behavior(Bindings, ChoicePoints);
+    {new_choice, Pid} ->
+      Pid ! {ok, choice_point_created},
+      environment_behavior(Bindings, [Bindings | ChoicePoints]);
+    {backtrack, Pid} ->
+      maybe
+        [PreviousBindings|PreviousChoicePoints] ?= ChoicePoints,
+        Pid ! {ok, backtracked},
+        environment_behavior(PreviousBindings, PreviousChoicePoints)
+      else
+        _ ->
+          Pid ! {error, no_choice_points},
+          environment_behavior(Bindings, ChoicePoints)
+      end;
+    M ->
+      io:format("Unknown message: ~p\n", [M]),
+      environment_behavior(Bindings, ChoicePoints)
+  end.
 
 deref(State, Var) when is_reference(Var) ->
   case State of
@@ -46,7 +89,11 @@ unify(State, A, B) ->
   unify_dereferenced(State, deref(State, A), deref(State, B)).
 
 unify_variable(State, Var, Value) ->
-  {ok, State#{Var => {bound, Value}}}.
+  case State of
+    #{Var := discard} -> {ok, State};
+    #{Value := discard} -> {ok, State};
+    _ -> {ok, State#{Var => {bound, Value}}}
+  end.
 
 unify_tuple(State, Size, Position, Left, Right) when Position =< Size ->
   maybe
@@ -56,7 +103,7 @@ unify_tuple(State, Size, Position, Left, Right) when Position =< Size ->
 unify_tuple(State, _, _, _, _) ->
   {ok, State}.
 
-unify_kv(Key, Value, {ok, State}, Map) when map_get(Key, Map) ->
+unify_kv(Key, Value, {ok, State}, Map) when is_map_key(Key, Map) ->
   unify(State, Value, map_get(Key, Map));
 unify_kv(_, _, _, _) ->
   {error, unification_failed}.
@@ -77,9 +124,9 @@ unify_dereferenced(State, A, B) when
    (is_port(A) andalso is_port(B)) orelse
    (is_reference(A) andalso is_reference(B))) andalso A == B ->
   {ok, State};
-unify_dereferenced(State, A, B) when is_reference(A) andalso map_get(A, State) ->
+unify_dereferenced(State, A, B) when is_reference(A) andalso is_map_key(A, State) ->
   unify_variable(State, A, B);
-unify_dereferenced(State, A, B) when is_reference(B) andalso map_get(B, State) ->
+unify_dereferenced(State, A, B) when is_reference(B) andalso is_map_key(B, State) ->
   unify_variable(State, B, A);
 unify_dereferenced(State, [HA|TA], [HB|TB]) ->
   maybe
