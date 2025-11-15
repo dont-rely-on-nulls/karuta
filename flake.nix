@@ -186,6 +186,7 @@
           default = legacyPackages.mkShell {
             # Development tools
             packages = [
+              legacyPackages.erlang_27
               # Source file formatting
               legacyPackages.nixpkgs-fmt
               legacyPackages.ocamlformat
