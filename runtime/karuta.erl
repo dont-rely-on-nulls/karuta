@@ -1,6 +1,6 @@
 -module(karuta).
 
--export([environment_behavior/2, test/0]).
+-export([make_environment/0, environment_behavior/2, test/0]).
 
 test_pop() ->
   receive V ->
@@ -9,7 +9,7 @@ test_pop() ->
   end.
 
 test() ->
-  Env = spawn(karuta, environment_behavior, [#{}, []]),
+  Env = make_environment(),
   Env ! {fresh, self()},
   {fresh_variable, A} = test_pop(),
   Env ! {new_choice, self()},
@@ -26,6 +26,8 @@ test() ->
   test_pop(),
   Env ! {deref, A, self()},
   test_pop().
+
+make_environment() -> spawn(?MODULE, environment_behavior, [#{}, []]).
 
 environment_behavior(Bindings, ChoicePoints) ->
   receive
