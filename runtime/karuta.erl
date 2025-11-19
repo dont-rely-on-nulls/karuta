@@ -1,83 +1,46 @@
 -module(karuta).
 
--export([make_environment/0, environment_behavior/2, test/0]).
+-export([fresh/1, unify/3, discard/1, deref/2, is_variable/2]).
 
-test_pop() ->
-  receive V ->
-    io:format("Received: ~p\n", [V]),
-    V
-  end.
+%% TODO: Swap these with a series of unit tests
+%% test_pop() ->
+%%   receive V ->
+%%     io:format("Received: ~p\n", [V]),
+%%     V
+%%   end.
 
-test() ->
-  Env = make_environment(),
-  Env ! {fresh, self()},
-  {fresh_variable, A} = test_pop(),
-  Env ! {new_choice, self()},
-  test_pop(),
-  Env ! {discard, self()},
-  {discard, Wildcard} = test_pop(),
-  Env ! {unify, [A|Wildcard], [1, 2, 3], self()},
-  test_pop(),
-  Env ! {deref, A, self()},
-  test_pop(),
-  Env ! {deref, Wildcard, self()},
-  test_pop(),
-  Env ! {backtrack, self()},
-  test_pop(),
-  Env ! {deref, A, self()},
-  test_pop().
+%% test() ->
+%%   Env = make_environment(),
+%%   Env ! {fresh, self()},
+%%   {fresh_variable, A} = test_pop(),
+%%   Env ! {new_choice, self()},
+%%   test_pop(),
+%%   Env ! {discard, self()},
+%%   {discard, Wildcard} = test_pop(),
+%%   Env ! {unify, [A|Wildcard], [1, 2, 3], self()},
+%%   test_pop(),
+%%   Env ! {deref, A, self()},
+%%   test_pop(),
+%%   Env ! {deref, Wildcard, self()},
+%%   test_pop(),
+%%   Env ! {backtrack, self()},
+%%   test_pop(),
+%%   Env ! {deref, A, self()},
+%%   test_pop().
 
-make_environment() -> spawn(?MODULE, environment_behavior, [#{}, []]).
+is_variable(Var, Bindings) when (is_reference(Var) andalso is_map_key(Var, Bindings)) -> true;
+is_variable(_, _) -> false.
 
-environment_behavior(Bindings, ChoicePoints) ->
-  receive
-    {unify, LHS, RHS, Pid} ->
-      maybe
-        {ok, NewBindings} ?= unify(Bindings, LHS, RHS),
-        Pid ! {ok, variable_bound},
-        environment_behavior(NewBindings, ChoicePoints)
-      else
-        Error ->
-          Pid ! {error, Error},
-           environment_behavior(Bindings, ChoicePoints)
-      end;
-    {fresh, Pid} ->
-      Var = make_ref(),
-      Pid ! {fresh_variable, Var},
-      environment_behavior(Bindings#{Var => unbound}, ChoicePoints);
-    {discard, Pid} ->
-      case Bindings of
-       #{discard := Discard} ->
-          Pid ! {discard, Discard},
-          environment_behavior(Bindings, ChoicePoints);
-       _ ->
-          Discard = make_ref(),
-          Pid ! {discard, Discard},
-          environment_behavior(
-            Bindings#{discard => Discard, Discard => discard},
-            ChoicePoints
-          )
-      end;
-    {deref, Var, Pid} ->
-      Pid ! {dereferenced, deref(Bindings, Var)},
-      environment_behavior(Bindings, ChoicePoints);
-    {new_choice, Pid} ->
-      Pid ! {ok, choice_point_created},
-      environment_behavior(Bindings, [Bindings | ChoicePoints]);
-    {backtrack, Pid} ->
-      maybe
-        [PreviousBindings|PreviousChoicePoints] ?= ChoicePoints,
-        Pid ! {ok, backtracked},
-        environment_behavior(PreviousBindings, PreviousChoicePoints)
-      else
-        _ ->
-          Pid ! {error, no_choice_points},
-          environment_behavior(Bindings, ChoicePoints)
-      end;
-    M ->
-      io:format("Unknown message: ~p\n", [M]),
-      environment_behavior(Bindings, ChoicePoints)
-  end.
+fresh(Bindings) ->
+    Var = make_ref(),
+    {Var, Bindings#{Var => unbound}}.
+
+discard(Bindings) ->
+    case Bindings of
+        #{discard := Discard} -> {Discard, Bindings};
+        _ -> Discard = make_ref(),
+             {Discard, Bindings#{discard => Discard, Discard => discard}}
+    end.
 
 deref(State, Var) when is_reference(Var) ->
   case State of
@@ -87,8 +50,8 @@ deref(State, Var) when is_reference(Var) ->
 deref(_, Value) ->
   Value.
 
-unify(State, A, B) ->
-  unify_dereferenced(State, deref(State, A), deref(State, B)).
+unify(State, LHS, RHS) ->
+  unify_dereferenced(State, deref(State, LHS), deref(State, RHS)).
 
 unify_variable(State, Var, Value) ->
   case State of
