@@ -5,3 +5,4 @@ result
 *.cmi
 *.cmo
 .direnv
+*.beam
