@@ -31,6 +31,11 @@ program:
     { [] }
   ;
 
+located(X):
+  | x=X
+    {Ast.Location.add $startpos $endpos x}
+  ; 
+
 functorr:
   | functor_name = IDENT; LEFT_DELIM; identifiers = list_identifiers
   { ({ namef = functor_name; elements = identifiers; arity = List.length identifiers } : Ast.func) }
@@ -45,21 +50,25 @@ functorr:
 maybe_functorr:
   | EXPRESSION_COMMENT; functorr;
   { None }
-  | functorr
+  | located(functorr)
   { Some $1 }
   ;
 
-declaration:
+declaration_:
   | functor_elem = functorr; DOT
     { Ast.Declaration {head = functor_elem; body = []}}
   | functor_elem = functorr; HOLDS; statements = separated_nonempty_list(COMMA, maybe_functorr); DOT
     { Ast.Declaration { head = functor_elem; body = statements |> List.concat_map Option.to_list } }
   ;
 
-query:
-  | queries = separated_nonempty_list(COMMA, functorr); QUERY
+declaration: located(declaration_) {$1}
+
+query_:
+  | queries = separated_nonempty_list(COMMA, located(functorr)); QUERY
     { Ast.QueryConjunction queries }
   ;
+
+query: located(query_) {$1}
 
 list_identifiers:
   | RIGHT_DELIM { [] }
@@ -67,16 +76,30 @@ list_identifiers:
   | EXPRESSION_COMMENT expression COMMA list_identifiers { $4 }
   | expression RIGHT_DELIM { [$1] }
   | EXPRESSION_COMMENT expression RIGHT_DELIM { [] }
+  ;
 
-expression:
+expression_:
   | INTEGER { Ast.Integer (int_of_string $1) }
   | UPPER_IDENT { Ast.Variable {namev = $1} }
   | functor_elem = functorr { Ast.Functor functor_elem }
   | LEFT_DELIM; expressions = separated_nonempty_list(COMMA, expression); PIPE; tail = expression; RIGHT_DELIM
-    { List.fold_right (fun element acc -> (Ast.Functor { namef = ""; elements = [element;acc]; arity = 2 }))
-                      expressions
-                      tail}
+    { let open Ast.Location in
+      (tail.content, tail.loc)
+      |> List.fold_right (fun element (acc, location) ->
+                           ((Ast.Functor { namef = ""; elements = [element;{content = acc; loc = location}]; arity = 2 }),
+                            {startl = element.loc.startl; endl = tail.loc.endl}))
+                         expressions
+      |> (fun (x, _) -> x)
+    }
   | LEFT_DELIM; expressions = list_identifiers
-    { List.fold_right (fun element acc -> (Ast.Functor { namef = ""; elements = [element;acc]; arity = 2 }))
-                      expressions
-                      (Ast.Functor { namef = ""; elements = []; arity = 0 })}
+    { let open Ast.Location in
+      ((Ast.Functor { namef = ""; elements = []; arity = 0 }),
+       {startl = Ast.Location.to_t $endpos; endl = Ast.Location.to_t $endpos})
+      |> List.fold_right (fun element (acc, loc) ->
+                        ((Ast.Functor { namef = ""; elements = [element;{content = acc; loc}]; arity = 2 }),
+                         {startl = element.loc.startl; endl = loc.endl}))
+                         expressions
+      |> (fun (x, _) -> x)}
+
+expression: located(expression_) {$1}
+
