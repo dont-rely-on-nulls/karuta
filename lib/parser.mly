@@ -31,6 +31,11 @@ program:
     { [] }
   ;
 
+located(X):
+  | x=X
+    {Ast.Location.add $startpos $endpos x}
+  ; 
+
 functorr:
   | functor_name = IDENT; LEFT_DELIM; identifiers = list_identifiers
   { ({ namef = functor_name; elements = identifiers; arity = List.length identifiers } : Ast.func) }
@@ -49,26 +54,33 @@ maybe_functorr:
   { Some $1 }
   ;
 
-declaration:
+declaration_:
   | functor_elem = functorr; DOT
     { Ast.Declaration {head = functor_elem; body = []}}
   | functor_elem = functorr; HOLDS; statements = separated_nonempty_list(COMMA, maybe_functorr); DOT
     { Ast.Declaration { head = functor_elem; body = statements |> List.concat_map Option.to_list } }
   ;
 
-query:
+declaration: located(declaration_) {$1}
+
+query_:
   | queries = separated_nonempty_list(COMMA, functorr); QUERY
     { Ast.QueryConjunction queries }
   ;
 
-list_identifiers:
+query: located(query_) {$1}
+
+list_identifiers_:
   | RIGHT_DELIM { [] }
   | expression COMMA list_identifiers { $1 :: $3 }
   | EXPRESSION_COMMENT expression COMMA list_identifiers { $4 }
   | expression RIGHT_DELIM { [$1] }
   | EXPRESSION_COMMENT expression RIGHT_DELIM { [] }
+  ;
 
-expression:
+list_identifiers: located(list_identifiers_) {$1}
+
+expression_:
   | INTEGER { Ast.Integer (int_of_string $1) }
   | UPPER_IDENT { Ast.Variable {namev = $1} }
   | functor_elem = functorr { Ast.Functor functor_elem }
@@ -80,3 +92,6 @@ expression:
     { List.fold_right (fun element acc -> (Ast.Functor { namef = ""; elements = [element;acc]; arity = 2 }))
                       expressions
                       (Ast.Functor { namef = ""; elements = []; arity = 0 })}
+
+expression: located(expression_) {$1}
+
