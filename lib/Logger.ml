@@ -1,18 +1,20 @@
 open Format
 
-type t = Warning | Info | Error | Unrechable
-type color = Red | Yellow | White
+type t = Warning | Info | Error | Unrechable | Debug
+type color = Red | Yellow | White | Blue
 
 let get_color : t -> color = function
   | Warning -> Yellow
   | Info -> White
   | Error -> Red
   | Unrechable -> Red
+  | Debug -> Blue
 
 let color_code : color -> string = function
   | Red -> "\027[31m"
   | Yellow -> "\027[33m"
   | White -> "\027[97m"
+  | Blue -> "\027[34m"
 
 let unreachable_suffix =
   "This is a compiler bug. Please report it in \
@@ -22,6 +24,7 @@ let get_prefix : t -> string = function
   | Warning -> "[WARNING] "
   | Info -> "[INFO] "
   | Error -> "[ERROR] "
+  | Debug -> "[DEBUG] "
   | Unrechable -> "[UNREACHABLE] " ^ unreachable_suffix ^ "\n"
 
 let make_bold (str : string) = "\027[1m" ^ str ^ "\027[0m"
@@ -72,3 +75,8 @@ let unreachable (loc : Location.location) (msg : string) : unit =
   report Unrechable loc msg
 
 let info (loc : Location.location) (msg : string) : unit = report Info loc msg
+
+let debug (msg : string) : unit =
+  let color = get_color Debug in
+  let prefix = Debug |> get_prefix |> make_bold |> add_color color in
+  print_endline @@ prefix ^ msg
