@@ -3,6 +3,9 @@ open Parser
 open Lexing
 
 exception SyntaxError of string
+
+let error_start = ref Lexing.dummy_pos
+let error_end   = ref Lexing.dummy_pos
 }
 
 let newline = '\r' | '\n' | "\r\n"
@@ -34,7 +37,7 @@ rule read =
   | "#%" { EXPRESSION_COMMENT }
   | '%' { skip_line lexbuf }
   | eof { EOF }
-  | _ { raise (SyntaxError ("Unexpected char: " ^ Lexing.lexeme lexbuf)) }
+  | _ { error_end := lexeme_end_p lexbuf; raise (SyntaxError ("Unexpected char: " ^ Lexing.lexeme lexbuf)) }
 
 and skip_line =
   parse
@@ -51,20 +54,10 @@ and read_atom buf =
     }
   | eof { raise (SyntaxError ("Quoted atom is not terminated")) }
 
-(*
-and read_string buf =
-  parse
-  | '\\' '/'  { Buffer.add_char buf '/'; read_string buf lexbuf }
-  | '\\' '\\' { Buffer.add_char buf '\\'; read_string buf lexbuf }
-  | '\\' 'b'  { Buffer.add_char buf '\b'; read_string buf lexbuf }
-  | '\\' 'f'  { Buffer.add_char buf '\012'; read_string buf lexbuf }
-  | '\\' 'n'  { Buffer.add_char buf '\n'; read_string buf lexbuf }
-  | '\\' 'r'  { Buffer.add_char buf '\r'; read_string buf lexbuf }
-  | '\\' 't'  { Buffer.add_char buf '\t'; read_string buf lexbuf }
-  | [^ '"' '\\']+
-    { Buffer.add_string buf (Lexing.lexeme lexbuf);
-      read_string buf lexbuf
-    }
-  | _ { raise (SyntaxError ("Illegal string character: " ^ Lexing.lexeme lexbuf)) }
-  | eof { raise (SyntaxError ("String is not terminated")) }
-*)
+{
+let next_token lexbuf =
+  error_start := lexbuf.Lexing.lex_curr_p;
+  let tok = read lexbuf in
+  error_end := lexbuf.Lexing.lex_curr_p;
+  tok
+}
