@@ -33,7 +33,7 @@ program:
 
 located(X):
   | x=X
-    {Ast.Location.add $startpos $endpos x}
+    {Location.add $startpos $endpos x}
   ; 
 
 functorr:
@@ -83,7 +83,7 @@ expression_:
   | UPPER_IDENT { Ast.Variable {namev = $1} }
   | functor_elem = functorr { Ast.Functor functor_elem }
   | LEFT_DELIM; expressions = separated_nonempty_list(COMMA, expression); PIPE; tail = expression; RIGHT_DELIM
-    { let open Ast.Location in
+    { let open Location in
       (tail.content, tail.loc)
       |> List.fold_right (fun element (acc, location) ->
                            ((Ast.Functor { namef = ""; elements = [element;{content = acc; loc = location}]; arity = 2 }),
@@ -92,9 +92,9 @@ expression_:
       |> (fun (x, _) -> x)
     }
   | LEFT_DELIM; expressions = list_identifiers
-    { let open Ast.Location in
+    { let open Location in
       ((Ast.Functor { namef = ""; elements = []; arity = 0 }),
-       {startl = Ast.Location.to_t $endpos; endl = Ast.Location.to_t $endpos})
+       {startl = Location.to_t $endpos; endl = Location.to_t $endpos})
       |> List.fold_right (fun element (acc, loc) ->
                         ((Ast.Functor { namef = ""; elements = [element;{content = acc; loc}]; arity = 2 }),
                          {startl = element.loc.startl; endl = loc.endl}))
