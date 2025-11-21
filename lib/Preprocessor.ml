@@ -48,7 +48,6 @@ let show_clauses (clauses : Ast.clause list) : string =
 let check_empty_heads (clause : Ast.parser_clause) : Ast.parser_clause =
   match clause with
   | { content = Declaration { head = { namef = ""; _ }; _ }; loc } ->
-      (* TODO: report this properly. Use the god damn location *)
       Logger.error loc
         "You cannot have a query or declaration with an empty name";
       exit 1
