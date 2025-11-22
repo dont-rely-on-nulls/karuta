@@ -2,10 +2,14 @@
 open Parser
 open Lexing
 
-exception SyntaxError of string
+exception SyntaxError of (Location.location * string)
 
-let error_start = ref Lexing.dummy_pos
-let error_end   = ref Lexing.dummy_pos
+let lexeme_position (lexbuf): Location.location =
+  let open Location in
+  { startl = to_t @@ lexeme_start_p lexbuf; endl = to_t @@ lexeme_end_p lexbuf }
+
+let syntax_error lexbuf message = raise (SyntaxError (lexeme_position lexbuf, message))
+
 }
 
 let newline = '\r' | '\n' | "\r\n"
@@ -37,7 +41,7 @@ rule read =
   | "#%" { EXPRESSION_COMMENT }
   | '%' { skip_line lexbuf }
   | eof { EOF }
-  | _ { error_end := lexeme_end_p lexbuf; raise (SyntaxError ("Unexpected char: " ^ Lexing.lexeme lexbuf)) }
+  | _ { syntax_error lexbuf ("Unexpected char: " ^ Lexing.lexeme lexbuf) }
 
 and skip_line =
   parse
@@ -52,12 +56,4 @@ and read_atom buf =
     { Buffer.add_string buf (Lexing.lexeme lexbuf);
       read_atom buf lexbuf
     }
-  | eof { raise (SyntaxError ("Quoted atom is not terminated")) }
-
-{
-let next_token lexbuf =
-  error_start := lexbuf.Lexing.lex_curr_p;
-  let tok = read lexbuf in
-  error_end := lexbuf.Lexing.lex_curr_p;
-  tok
-}
+  | eof { syntax_error lexbuf "Quoted atom is not terminated" }
