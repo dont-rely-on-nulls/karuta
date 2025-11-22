@@ -1,6 +1,3 @@
-%{
-%}
-
 %token <string> LITERAL_ATOM
 %token <string> IDENT
 %token <string> INTEGER
@@ -34,7 +31,7 @@ program:
 located(X):
   | x=X
     {Location.add $startpos $endpos x}
-  ; 
+  ;
 
 functorr:
   | functor_name = IDENT; LEFT_DELIM; identifiers = list_identifiers
