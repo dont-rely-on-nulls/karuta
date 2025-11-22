@@ -7,19 +7,8 @@ let parse filepath input =
       exit 1
   | Parser.Error ->
       Logger.error
-        {
-          startl =
-            {
-              (Location.to_t Lexing.dummy_pos) with
-              Location.pos_fname = filepath;
-            };
-          endl =
-            {
-              (Location.to_t Lexing.dummy_pos) with
-              Location.pos_fname = filepath;
-            };
-        }
-        "FIXME: unhandled parser error";
+        (Lexer.lexeme_position lexbuf)
+        "FIXME: add proper error messages";
       exit 1
 
 let verify filepath : Ast.parser_clause list -> Ast.parser_clause list =
