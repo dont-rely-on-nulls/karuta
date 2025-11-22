@@ -6,9 +6,8 @@ let parse filepath input =
       Logger.error loc message;
       exit 1
   | Parser.Error ->
-      Logger.error
-        (Lexer.lexeme_position lexbuf)
-        "FIXME: add proper error messages";
+      (* TODO: nicer error messages *)
+      Logger.error (Lexer.lexeme_position lexbuf) "Syntax Error";
       exit 1
 
 let verify filepath : Ast.parser_clause list -> Ast.parser_clause list =
