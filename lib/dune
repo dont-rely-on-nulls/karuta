@@ -30,6 +30,16 @@
 
 (ocamllex lexer)
 
+(rule
+ (action
+  (with-stdout-to
+   unitActionsParser.mly
+   (run menhir %{dep:parser.mly} --only-preprocess-u))))
+
+(menhir
+ (modules unitActionsParser)
+ (flags --table --external-tokens Parser))
+
 (menhir
  (modules parser)
  (flags --table))

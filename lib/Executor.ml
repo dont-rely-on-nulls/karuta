@@ -1,14 +1,6 @@
 let bimap f g (a1, a2) = (f a1, g a2)
 let flip f x y = f y x
-
-let parse (filepath : string) : Ast.parser_clause list =
-  let get_input fc =
-    try Some (In_channel.input_all fc) with End_of_file -> None
-  in
-  filepath
-  |> flip In_channel.with_open_text get_input
-  |> Option.map (Parse.parse filepath)
-  |> Option.to_list |> List.flatten |> Parse.verify filepath
+let parse : string -> Ast.parser_clause list = Parse.parse
 
 let preprocess : Ast.parser_clause list -> Ast.clause list = function
   | [] -> failwith "Preprocessor warning: empty clauses."

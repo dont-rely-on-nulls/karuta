@@ -50,31 +50,50 @@ let report (level : t) (loc : Location.location) (msg : string) : unit =
   let filepath = loc.startl.pos_fname in
   let begin_characters = get_column loc.startl in
   let end_characters = get_column loc.endl in
+  let how_many_characters = end_characters - (begin_characters + 1) in
   let line_number = loc.startl.pos_lnum in
   let line_digits : int = line_number |> string_of_int |> String.length in
   let color = get_color level in
   let spaces = String.make (3 + line_digits + begin_characters) ' ' in
   let markers =
-    make_bold @@ add_color color
-    @@ String.make (end_characters - begin_characters) '^'
+    make_bold @@ add_color color @@ String.make (max how_many_characters 1) '^'
   in
-  printf
-    "@[<1>%sFile \"%s\", line %d, characters %d-%d@]@.@[<1>%d | \
-     %s@]@.@[<1>%s%s@]@."
-    (add_color color prefix) filepath line_number (begin_characters + 1)
-    end_characters line_number
-    (get_line filepath (loc.startl.pos_cnum - begin_characters))
-    spaces
-    (markers ^ " " ^ msg)
+  if how_many_characters = 0 then
+    printf
+      "@[<1>%sFile \"%s\", line %d, character %d:@]@.@[<1>%d | \
+       %s@]@.@[<1>%s%s@]@."
+      (add_color color prefix) filepath line_number end_characters line_number
+      (get_line filepath (loc.startl.pos_cnum - begin_characters))
+      spaces
+      (markers ^ " " ^ msg)
+  else
+    printf
+      "@[<1>%sFile \"%s\", line %d, characters %d-%d:@]@.@[<1>%d | \
+       %s@]@.@[<1>%s%s@]@."
+      (add_color color prefix) filepath line_number (begin_characters + 1)
+      end_characters line_number
+      (get_line filepath (loc.startl.pos_cnum - begin_characters))
+      spaces
+      (markers ^ " " ^ msg)
 
 let error (loc : Location.location) (msg : string) : unit = report Error loc msg
 
 let warning (loc : Location.location) (msg : string) : unit =
   report Warning loc msg
 
-let unreachable (loc : Location.location) (msg : string) : unit =
-  report Unreachable loc msg
+let internal_unreachable (locMay : Location.location option) (msg : string) :
+    unit =
+  match locMay with
+  | None ->
+      let color = get_color Unreachable in
+      let prefix = Unreachable |> get_prefix |> make_bold |> add_color color in
+      print_endline @@ prefix ^ msg
+  | Some loc -> report Unreachable loc msg
 
+let unreachable (loc : Location.location) (msg : string) : unit =
+  internal_unreachable (Some loc) msg
+
+let simply_unreachable (msg : string) : unit = internal_unreachable None msg
 let info (loc : Location.location) (msg : string) : unit = report Info loc msg
 
 let debug (msg : string) : unit =

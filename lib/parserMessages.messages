@@ -37,11 +37,11 @@ Expected an expression between '$4' and '$5'.
 program: IDENT COMMA UPPER_IDENT
 program: IDENT HOLDS UPPER_IDENT
 
-Cannot call variable: '$2'.
+Cannot call variable: '$1'.
 
 program: IDENT UPPER_IDENT
 
-Expected either a comma or a close bracket after '$0', got '$1' instead.
+Expected either a comma or a close bracket after '$0', got '$2' instead.
 
 program: IDENT HOLDS EXPRESSION_COMMENT UPPER_IDENT
 

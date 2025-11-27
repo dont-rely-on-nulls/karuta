@@ -1,4 +1,5 @@
-eq[A, A].
+something, A.
+eq[A, c       A]
 eq[1, 1]?
 
 
