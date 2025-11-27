@@ -1,0 +1,56 @@
+program: UPPER_IDENT
+program: EXPRESSION_COMMENT UPPER_IDENT
+program: EXPRESSION_COMMENT IDENT QUERY UPPER_IDENT
+program: IDENT QUERY UPPER_IDENT
+program: IDENT DOT UPPER_IDENT
+program: EXPRESSION_COMMENT IDENT DOT UPPER_IDENT
+
+Variables are not allowed as declarations.
+
+program: LITERAL_ATOM LEFT_DELIM QUERY
+program: IDENT LEFT_DELIM IDENT QUERY
+program: IDENT LEFT_DELIM LEFT_DELIM QUERY
+program: IDENT LEFT_DELIM QUERY
+program: IDENT LEFT_DELIM EXPRESSION_COMMENT IDENT COMMA QUERY
+program: IDENT LEFT_DELIM IDENT COMMA QUERY
+program: IDENT LEFT_DELIM LEFT_DELIM IDENT COMMA QUERY
+program: IDENT LEFT_DELIM EXPRESSION_COMMENT IDENT QUERY
+program: IDENT LEFT_DELIM LEFT_DELIM IDENT PIPE IDENT QUERY
+program: IDENT LEFT_DELIM LEFT_DELIM IDENT QUERY
+
+Question marks cannot appear in expressions.
+
+program: IDENT COMMA IDENT RIGHT_DELIM
+program: IDENT RIGHT_DELIM
+program: IDENT HOLDS IDENT RIGHT_DELIM
+
+Unexpected close bracket.
+
+program: IDENT LEFT_DELIM EXPRESSION_COMMENT RIGHT_DELIM
+
+Expression comments must be followed by an expression.
+
+program: IDENT LEFT_DELIM LEFT_DELIM IDENT PIPE RIGHT_DELIM
+
+Expected an expression between '$4' and '$5'.
+
+program: IDENT COMMA UPPER_IDENT
+program: IDENT HOLDS UPPER_IDENT
+
+Cannot call variable: '$2'.
+
+program: IDENT UPPER_IDENT
+
+Expected either a comma or a close bracket after '$0', got '$1' instead.
+
+program: IDENT HOLDS EXPRESSION_COMMENT UPPER_IDENT
+
+Cannot call variable: '$3'.
+
+program: LITERAL_ATOM UPPER_IDENT
+
+Expected a comma after '$0', got '$1' instead.
+
+program: IDENT HOLDS IDENT COMMA UPPER_IDENT
+
+Cannot call variable: '$4'.

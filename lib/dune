@@ -11,6 +11,7 @@
 (library
  (name lib)
  (libraries
+  menhirLib
   batteries
   sexplib
   lwt
@@ -31,8 +32,34 @@
 
 (menhir
  (modules parser)
- ; (flags --trace)
- )
+ (flags --table))
+
+(rule
+ (deps parserMessages.check)
+ (action
+  (with-stdout-to
+   parserMessages.ml
+   (run
+    menhir
+    %{dep:parser.mly}
+    --compile-errors
+    %{dep:parserMessages.messages}))))
+
+(rule
+ (with-stdout-to
+  parserMessages.auto.messages
+  (run menhir %{dep:parser.mly} --list-errors)))
+
+(rule
+ (with-stdout-to
+  parserMessages.check
+  (run
+   menhir
+   %{dep:parser.mly}
+   --compare-errors
+   %{dep:parserMessages.auto.messages}
+   --compare-errors
+   %{dep:parserMessages.messages})))
 
 (documentation
  (package karuta))
