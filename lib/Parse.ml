@@ -36,9 +36,7 @@ let parse_loop (input : string) (lexbuf : lexbuf) =
   I.loop_handle Fun.id (fail input buffer) supplier checkpoint
 
 let parse (filepath : string) : Ast.parser_clause list =
-  let input = In_channel.with_open_text filepath In_channel.input_all in
-  let lexbuf = L.init filepath (Lexing.from_string input) in
-  Lexing.set_filename lexbuf filepath;
+  let input, lexbuf = L.read filepath in
   try parse_loop input lexbuf
   with Lexer.SyntaxError (loc, message) ->
     Logger.error loc message;
