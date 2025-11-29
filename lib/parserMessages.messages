@@ -32,25 +32,16 @@ Expression comments must be followed by an expression.
 
 program: IDENT LEFT_DELIM LEFT_DELIM IDENT PIPE RIGHT_DELIM
 
-Expected an expression between '$4' and '$5'.
+Expected an expression after $0.
 
 program: IDENT COMMA UPPER_IDENT
 program: IDENT HOLDS UPPER_IDENT
-
-Cannot call variable: '$1'.
-
-program: IDENT UPPER_IDENT
-
-Expected either a comma or a close bracket after '$0', got '$2' instead.
-
 program: IDENT HOLDS EXPRESSION_COMMENT UPPER_IDENT
-
-Cannot call variable: '$3'.
-
-program: LITERAL_ATOM UPPER_IDENT
-
-Expected a comma after '$0', got '$1' instead.
-
 program: IDENT HOLDS IDENT COMMA UPPER_IDENT
 
-Cannot call variable: '$4'.
+Cannot call variable.
+
+program: IDENT UPPER_IDENT
+program: LITERAL_ATOM UPPER_IDENT
+
+Expected a comma after $0.

@@ -10,6 +10,10 @@ let lexeme_position (lexbuf): Location.location =
 
 let syntax_error lexbuf message = raise (SyntaxError (lexeme_position lexbuf, message))
 
+let read_atom lexbuf =
+  let quoted_atom = (Lexing.lexeme lexbuf) in
+  let atom = (String.sub quoted_atom 1 (String.length quoted_atom - 1)) in
+  LITERAL_ATOM atom
 }
 
 let newline = '\r' | '\n' | "\r\n"
@@ -22,6 +26,7 @@ let letter = lower_letter | upper_letter
 let ident = lower_letter (letter | '_' | '-' | digit)*
 let upper_ident = upper_letter (letter | '_' | digit)*
 let int = '-'? ['0'-'9'] ['0'-'9']*
+let quoted_atom = '\'' [^ '\'']* '\'' (* maybe we should disallow newlines in here *)
 
 rule read =
   parse
@@ -31,7 +36,7 @@ rule read =
   | upper_ident { UPPER_IDENT (Lexing.lexeme lexbuf) }
   | int { INTEGER (Lexing.lexeme lexbuf) }
   | '?' { QUERY }
-  | '\'' { read_atom (Buffer.create 17) lexbuf }
+  | quoted_atom { read_atom lexbuf }
   | ":-" { HOLDS }
   | ',' { COMMA }
   | '.' { DOT }
@@ -41,6 +46,7 @@ rule read =
   | "#%" { EXPRESSION_COMMENT }
   | '%' { skip_line lexbuf }
   | eof { EOF }
+  | '\'' [^ '\'']* eof { syntax_error lexbuf "Quoted atom is not terminated." }
   | _ { syntax_error lexbuf ("Unexpected char: " ^ Lexing.lexeme lexbuf) }
 
 and skip_line =
@@ -48,12 +54,3 @@ and skip_line =
     | newline { new_line lexbuf; read lexbuf }
     | eof { EOF }
     | _ { skip_line lexbuf }
-
-and read_atom buf =
-  parse
-  | '\'' { LITERAL_ATOM (Buffer.contents buf) }
-  | [^ '\'']+
-    { Buffer.add_string buf (Lexing.lexeme lexbuf);
-      read_atom buf lexbuf
-    }
-  | eof { syntax_error lexbuf "Quoted atom is not terminated" }

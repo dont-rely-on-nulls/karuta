@@ -1,7 +1,7 @@
 open Lexing
 module E = MenhirLib.ErrorReports
 module L = MenhirLib.LexerUtil
-module I = UnitActionsParser.MenhirInterpreter
+module I = Parser.MenhirInterpreter
 
 let env checkpoint =
   match checkpoint with
@@ -23,33 +23,26 @@ let get input checkpoint i =
 let fail input buffer (checkpoint : _ I.checkpoint) =
   let pos1, pos2 = E.last buffer in
   let open Location in
-  let loc = { startl = Location.to_t pos1; endl = Location.to_t pos2 } in
+  let loc = { startl = to_t pos1; endl = to_t pos2 } in
   let msg = ParserMessages.message (state checkpoint) in
   let msg = E.expand (get input checkpoint) msg in
   Logger.error loc msg;
   exit 1
 
-let succeed _ =
-  Logger.simply_unreachable "succeed: parser is broken";
-  assert false
-
-let next_parse filepath input =
-  let lexbuf = L.init filepath (Lexing.from_string input) in
-  lexbuf.lex_curr_p <- { lexbuf.lex_curr_p with Lexing.pos_fname = filepath };
+let parse_loop (input : string) (lexbuf : lexbuf) =
   let supplier = I.lexer_lexbuf_to_supplier Lexer.read lexbuf in
   let buffer, supplier = E.wrap_supplier supplier in
-  let checkpoint = UnitActionsParser.Incremental.program lexbuf.lex_curr_p in
-  I.loop_handle succeed (fail input buffer) supplier checkpoint
+  let checkpoint = Parser.Incremental.program lexbuf.lex_curr_p in
+  I.loop_handle Fun.id (fail input buffer) supplier checkpoint
 
-let parse filepath =
-  let input, lexbuf = L.read filepath in
-  lexbuf.lex_curr_p <- { lexbuf.lex_curr_p with Lexing.pos_fname = filepath };
-  match Parser.program Lexer.read lexbuf with
-  | parser_clauses -> parser_clauses
-  | exception Lexer.SyntaxError (loc, message) ->
-      Logger.error loc message;
-      exit 1
-  | exception Parser.Error -> next_parse filepath input
+let parse (filepath : string) : Ast.parser_clause list =
+  let input = In_channel.with_open_text filepath In_channel.input_all in
+  let lexbuf = L.init filepath (Lexing.from_string input) in
+  Lexing.set_filename lexbuf filepath;
+  try parse_loop input lexbuf
+  with Lexer.SyntaxError (loc, message) ->
+    Logger.error loc message;
+    exit 1
 
 let verify filepath : Ast.parser_clause list -> Ast.parser_clause list =
   function
