@@ -124,8 +124,10 @@ module Terminal = Make ((
           spaces
           (markers ^ " " ^ msg)
 
-    let export = print_string
-    let format_error_message = format_message Red
+    let export = Stdlib.print_string
+
+    let format_error_message prefix loc msg =
+      format_message Red (make_bold prefix) loc msg
 
     let format_unreachable_message (prefix : string)
         (locMay : Location.location option) (msg : string) : string =
@@ -135,12 +137,61 @@ module Terminal = Make ((
           prefix ^ msg
       | Some loc -> format_message Magenta prefix loc msg
 
-    let format_warning_message = format_message Yellow
-    let format_info_message = format_message White
+    let format_warning_message prefix loc msg =
+      format_message Yellow (make_bold prefix) loc msg
+
+    let format_info_message prefix loc msg =
+      format_message Blue (make_bold prefix) loc msg
 
     let format_debug_message prefix msg =
-      let color = Blue in
+      let color = White in
       let prefix = prefix |> make_bold |> add_color color in
       prefix ^ msg
   end :
     OUTPUT))
+
+type kind = Terminal | Server
+
+let current_kind = ref Terminal
+let set kind = current_kind := kind
+
+module type API = sig
+  val error : Location.location -> string -> unit
+  val warning : Location.location -> string -> unit
+  val unreachable : Location.location -> string -> unit
+  val simply_unreachable : string -> unit
+  val info : Location.location -> string -> unit
+  val debug : string -> unit
+end
+
+let kind2Module () =
+  match !current_kind with
+  | Terminal -> (module Terminal : API)
+  | Server ->
+      Terminal.simply_unreachable
+        "Server platform for logging is not implemented yet";
+      exit 1
+
+let simply_unreachable msg =
+  let (module L) = kind2Module () in
+  L.simply_unreachable msg
+
+let error loc msg =
+  let (module L) = kind2Module () in
+  L.error loc msg
+
+let warning loc msg =
+  let (module L) = kind2Module () in
+  L.warning loc msg
+
+let unreachable loc msg =
+  let (module L) = kind2Module () in
+  L.unreachable loc msg
+
+let info loc msg =
+  let (module L) = kind2Module () in
+  L.info loc msg
+
+let debug msg =
+  let (module L) = kind2Module () in
+  L.debug msg
