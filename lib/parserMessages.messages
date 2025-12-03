@@ -5,7 +5,7 @@ program: IDENT QUERY UPPER_IDENT
 program: IDENT DOT UPPER_IDENT
 program: EXPRESSION_COMMENT IDENT DOT UPPER_IDENT
 
-Variables are not allowed as declarations.
+Variables cannot appear as declarations (top level). Declarations must begin with a predicate name, not a variable.
 
 program: LITERAL_ATOM LEFT_DELIM QUERY
 program: IDENT LEFT_DELIM IDENT QUERY
@@ -18,30 +18,30 @@ program: IDENT LEFT_DELIM EXPRESSION_COMMENT IDENT QUERY
 program: IDENT LEFT_DELIM LEFT_DELIM IDENT PIPE IDENT QUERY
 program: IDENT LEFT_DELIM LEFT_DELIM IDENT QUERY
 
-Question marks cannot appear in expressions.
+Unexpected ? in expression. Question marks are allowed only at the end of a query, not inside expressions or terms.
 
 program: IDENT COMMA IDENT RIGHT_DELIM
 program: IDENT RIGHT_DELIM
 program: IDENT HOLDS IDENT RIGHT_DELIM
 
-Unexpected close bracket.
+Unexpected ']'.
 
 program: IDENT LEFT_DELIM EXPRESSION_COMMENT RIGHT_DELIM
 
-Expression comments must be followed by an expression.
+An expression was expected when using expression comment. Expression comments must be immediately followed by a valid term.
 
 program: IDENT LEFT_DELIM LEFT_DELIM IDENT PIPE RIGHT_DELIM
 
-Expected an expression after $0.
+Expected an expression after $0. A valid term, variable, or atom must follow here.
 
 program: IDENT COMMA UPPER_IDENT
 program: IDENT HOLDS UPPER_IDENT
 program: IDENT HOLDS EXPRESSION_COMMENT UPPER_IDENT
 program: IDENT HOLDS IDENT COMMA UPPER_IDENT
 
-Cannot call variable.
+A variable cannot be called as a predicate. Predicate calls must start with a lowercase atom.
 
 program: IDENT UPPER_IDENT
 program: LITERAL_ATOM UPPER_IDENT
 
-Expected a comma after $0.
+Expected a comma after $0. Arguments in a predicate must be separated by commas.
