@@ -1,5 +1,5 @@
 let from_declaration (clause : Ast.parser_clause) :
-    Ast.decl Ast.Location.with_location =
+    Ast.decl Location.with_location =
   match clause with
   | { content = Declaration decl; loc } -> { content = decl; loc }
   | _ -> failwith "unreachable from_declaration"
@@ -7,7 +7,7 @@ let from_declaration (clause : Ast.parser_clause) :
 let rec remove_comments (clause : Ast.parser_clause) : Ast.parser_clause option
     =
   let open Ast in
-  let open Ast.Location in
+  let open Location in
   let non_comment { content = func; _ } =
     match func with { namef = "comment"; _ } -> false | _ -> true
   in
@@ -47,9 +47,10 @@ let show_clauses (clauses : Ast.clause list) : string =
 
 let check_empty_heads (clause : Ast.parser_clause) : Ast.parser_clause =
   match clause with
-  | { content = Declaration { head = { namef = ""; _ }; _ }; _ } ->
-      (* TODO: report this properly. Use the god damn location *)
-      failwith "You cannot have a query or declaration with an empty name"
+  | { content = Declaration { head = { namef = ""; _ }; _ }; loc } ->
+      Logger.error loc
+        "You cannot have a query or declaration with an empty name";
+      exit 1
   | other -> other
 
 module S = BatSet
@@ -57,7 +58,7 @@ module S = BatSet
 type variable_set = Ast.var BatSet.t
 
 let rec find_variables (element : Ast.expr') : variable_set =
-  let open Ast.Location in
+  let open Location in
   match element with
   | Ast.Variable var -> S.add var S.empty
   | Ast.Functor { elements = more_elements; _ } ->
@@ -67,7 +68,7 @@ let rec find_variables (element : Ast.expr') : variable_set =
   | _ -> S.empty
 
 let parser_to_compiler (clause : Ast.parser_clause) : Ast.clause list =
-  let open Ast.Location in
+  let open Location in
   match clause with
   | { content = Declaration decl; loc } ->
       [ { content = MultiDeclaration (decl, []); loc } ]

@@ -74,6 +74,7 @@
 
             nativeBuildInputs = [
               ocamlPackages.menhir
+              ocamlPackages.menhirLib
             ];
 
             buildInputs = [
