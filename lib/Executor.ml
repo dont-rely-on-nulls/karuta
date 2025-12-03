@@ -1,10 +1,13 @@
-let bimap f g (a1, a2) = (f a1, g a2)
-let flip f x y = f y x
-let parse : string -> Ast.parser_clause list = Parse.parse
+open Error
 
-let preprocess : Ast.parser_clause list -> Ast.clause list = function
-  | [] -> failwith "Preprocessor warning: empty clauses."
-  | decls_queries -> Preprocessor.group_clauses decls_queries
+let parse : string -> Ast.parser_clause list attempt = function
+  | "" -> error Error.InvalidFile
+  | str -> ok @@ Parse.parse str
+
+let preprocess (filepath : string) :
+    Ast.parser_clause list -> Ast.clause list attempt = function
+  | [] -> error @@ Error.CouldNotPreprocess filepath
+  | decls_queries -> ok @@ Preprocessor.group_clauses decls_queries
 
 (* let compile' ((compiler, computer) : Compiler.t * Machine.t) : *)
 (*     Ast.parser_clause list -> Compiler.t * Machine.t = function *)
@@ -28,7 +31,8 @@ let preprocess : Ast.parser_clause list -> Ast.clause list = function
 (*       in *)
 (*       Some (compiler, computer) *)
 
-let run (filepath : string) : Ast.clause list = filepath |> parse |> preprocess
+let run (filepath : string) : Ast.clause list attempt =
+  filepath |> parse ||> preprocess filepath
 
 (* let load' filter_fn (filepath : string) : Compiler.t * Machine.t = *)
 (*   filepath |> parse |> List.filter filter_fn |> compile *)
