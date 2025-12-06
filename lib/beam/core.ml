@@ -1,4 +1,4 @@
-open AbstractFormat
+open Abstract_format
 
 module Erlang () = struct
   module rec Expr : sig
@@ -406,8 +406,7 @@ module Form : sig
   end
 
   type t =
-    | Module of Primitives.atom * t list
-    | ExportAttr of (Primitives.atom * int) list
+    | ExportAttr of (Primitives.atom * Primitives.arity) list
     | ImportAttr of Primitives.atom * (Primitives.atom * int) list
     | ModuleAttr of Primitives.atom
     | FileAttr of string * int
@@ -463,7 +462,7 @@ module Form : sig
 
   and type_constraint = { var : Primitives.variable; subtype : type_expr }
 
-  val module_form : Primitives.atom -> t list -> t
+  val module_form : Primitives.atom -> t
   val export_form : (Primitives.atom * int) list -> t
   val function_form : Primitives.atom -> int -> Clause.clause list -> t
 end = struct
@@ -474,8 +473,7 @@ end = struct
   module Clause = Sys.Clause
 
   type t =
-    | Module of Primitives.atom * t list
-    | ExportAttr of (Primitives.atom * int) list
+    | ExportAttr of (Primitives.atom * Primitives.arity) list
     | ImportAttr of Primitives.atom * (Primitives.atom * int) list
     | ModuleAttr of Primitives.atom
     | FileAttr of string * int
@@ -531,7 +529,7 @@ end = struct
 
   and type_constraint = { var : Primitives.variable; subtype : type_expr }
 
-  let module_form name forms = Module (name, forms)
+  let module_form name = ModuleAttr name
   let export_form exports = ExportAttr exports
   let function_form name arity clauses = Function { name; arity; clauses }
 end

@@ -1,7 +1,8 @@
-module Sys = Beam.Core.Erlang ()
+module Sys = Core.Erlang ()
 open Sys
+open Abstract_format
 
-let lit l = Sys.Expr.Literal l
+let lit l = Expr.Literal l
 let var v = Sys.Expr.Variable v
 let atom a = Primitives.Atom a
 let int i = Primitives.Integer i
@@ -17,6 +18,11 @@ let pattern_atom a = Primitives.Atom a
 let pattern_tuple ts = Pattern.Tuple ts
 let pattern_cons h t = Pattern.Cons (h, t)
 let pattern_nil = pattern_literal Primitives.Nil
+
+module Attribute = struct
+  let module_ = Core.Form.module_form
+  let file name line = Core.Form.FileAttr (name, line)
+end
 
 let rec pattern_list = function
   | [] -> pattern_nil

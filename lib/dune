@@ -8,6 +8,8 @@
   (flags
    (:standard -w -8))))
 
+(include_subdirs qualified)
+
 (library
  (name lib)
  (libraries

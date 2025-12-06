@@ -1,6 +1,8 @@
 type entry_point = { p_register : int }
 type functor_name = string * int [@@deriving ord]
 
+module FT = BatFingerTree
+
 module FunctorMap = BatMap.Make (struct
   type t = functor_name [@@deriving ord]
 end)
@@ -16,13 +18,21 @@ let show_functor_table (functors : functor_map) : string =
       ^ "\n")
     "" (to_seq functors)
 
-type t = {
-  entry_point : entry_point option;
-  p_register : int;
-  functor_table : functor_map;
-}
+type forms = Beam.Core.Form.t FT.t
+type t = { current_file : string; output : forms }
 
-let initialize () : t =
-  { entry_point = None; p_register = 0; functor_table = FunctorMap.empty }
+let initialize filename : t =
+  let module_name = Filename.chop_extension filename in
+  {
+    current_file = filename;
+    output =
+      FT.of_list
+        [
+          Beam.Builder.Attribute.file filename 1;
+          (* TODO: this should be a proper atom *)
+          Beam.Builder.Attribute.module_ module_name;
+        ];
+  }
 
-and compile : Ast.clause list * t -> unit = function _, _ -> ()
+and compile : Ast.clause list * t -> Beam.Core.Form.t FT.t = function
+  | _, { output; _ } -> output (* TODO *)
