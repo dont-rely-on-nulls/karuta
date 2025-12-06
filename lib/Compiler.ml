@@ -19,12 +19,18 @@ let show_functor_table (functors : functor_map) : string =
     "" (to_seq functors)
 
 type forms = Beam.Core.Form.t FT.t
-type t = { current_file : string; output : forms }
+
+type t = {
+  current_file : string;
+  output : forms;
+  defined_symbols : (Ast.tag * int) BatSet.t;
+}
 
 let initialize filename : t =
   let module_name = Filename.chop_extension filename in
   {
     current_file = filename;
+    defined_symbols = BatSet.empty;
     output =
       FT.of_list
         [

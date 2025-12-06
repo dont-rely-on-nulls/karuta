@@ -9,16 +9,17 @@ let preprocess (filepath : string) :
   | [] -> error @@ Error.CouldNotPreprocess filepath
   | decls_queries -> ok @@ fst @@ Preprocessor.group_clauses decls_queries
 
-(* let compile' ((compiler, computer) : Compiler.t * Machine.t) : *)
-(*     Ast.parser_clause list -> Compiler.t * Machine.t = function *)
-(*   | [] -> *)
-(*       failwith "Compiler error: unreachable when executing compile function." *)
-(*   | decls_queries -> *)
-(*       (Preprocessor.group_clauses decls_queries, compiler, computer.store) *)
-(*       |> Compiler.compile *)
-(*       |> bimap Fun.id (Machine.update_store computer) *)
+let compile' (compiler : Compiler.t) :
+    Ast.parser_clause list -> Beam.Core.Form.t BatFingerTree.t = function
+  | [] ->
+      failwith "Compiler error: unreachable when executing compile function."
+  | decls_queries ->
+      let grouped_clauses, defined_symbols =
+        Preprocessor.group_clauses decls_queries
+      in
+      Compiler.compile (grouped_clauses, { compiler with defined_symbols })
 
-(* let compile = compile' (Compiler.initialize (), Machine.initialize ()) *)
+let compile filename = compile' (Compiler.initialize filename)
 
 (* let eval ((compiler, computer) : Compiler.t * Machine.t) : *)
 (*     (Compiler.t * Machine.t) option = *)
