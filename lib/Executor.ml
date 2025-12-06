@@ -7,7 +7,7 @@ let parse : string -> Ast.parser_clause list attempt = function
 let preprocess (filepath : string) :
     Ast.parser_clause list -> Ast.clause list attempt = function
   | [] -> error @@ Error.CouldNotPreprocess filepath
-  | decls_queries -> ok @@ Preprocessor.group_clauses decls_queries
+  | decls_queries -> ok @@ fst @@ Preprocessor.group_clauses decls_queries
 
 (* let compile' ((compiler, computer) : Compiler.t * Machine.t) : *)
 (*     Ast.parser_clause list -> Compiler.t * Machine.t = function *)

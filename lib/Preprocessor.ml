@@ -94,7 +94,8 @@ let parser_to_compiler (clause : Ast.parser_clause) : Ast.clause list =
       let query = { content = Ast.Query head; loc } in
       [ declaration; query ]
 
-let group_clauses (clauses : Ast.parser_clause list) : Ast.clause list =
+let group_clauses (clauses : Ast.parser_clause list) :
+    Ast.clause list * (Ast.tag * int) BatSet.t =
   let compare_func (f1 : Ast.func) (f2 : Ast.func) : int =
     if f1.namef = f2.namef && f1.arity = f2.arity then 0 else 1
   in
@@ -118,8 +119,21 @@ let group_clauses (clauses : Ast.parser_clause list) : Ast.clause list =
         ]
     | _ -> failwith "unreachable group"
   in
+  let collect_definitions (clauses : Ast.clause list) : (Ast.tag * int) BatSet.t
+      =
+    List.fold_left
+      (fun set clause ->
+        match Location.strip_loc clause with
+        | Ast.MultiDeclaration ({ head = { namef; arity; _ }; _ }, _) ->
+            BatSet.add (namef, arity) set
+        | _ -> set)
+      BatSet.empty clauses
+  in
   let open Batteries in
-  clauses
-  |> List.filter_map remove_comments
-  |> List.map check_empty_heads |> List.group compare_clauses
-  |> List.concat_map multi_mapper
+  let grouped_clauses =
+    clauses
+    |> List.filter_map remove_comments
+    |> List.map check_empty_heads |> List.group compare_clauses
+    |> List.concat_map multi_mapper
+  in
+  (grouped_clauses, collect_definitions grouped_clauses)
