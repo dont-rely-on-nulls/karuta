@@ -1,0 +1,9 @@
+hello_world[] :- atom.
+
+test[].
+
+eq[X, Y].
+
+minus[InL, InR, Out] :-
+    neg[InR, MinusInR],
+    plus[InL, MinusInR, Out].

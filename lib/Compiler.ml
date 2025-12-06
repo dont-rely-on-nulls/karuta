@@ -41,4 +41,31 @@ let initialize filename : t =
   }
 
 and compile : Ast.clause list * t -> Beam.Core.Form.t FT.t = function
-  | _, { output; _ } -> output (* TODO *)
+  | clauses, { output; _ } ->
+      let convert_ast_clause (clause : Ast.clause) : Beam.Core.Form.t list =
+        match clause.content with
+        | Ast.MultiDeclaration ({ head; _ }, _) ->
+            let func_name = head.namef in
+            let arity = head.arity in
+            let beam_clause = {
+              Beam.Core.Form.Clause.patterns = [];
+              guards = [];
+              body = []
+            } in
+            [Beam.Core.Form.Function { name = func_name; arity; clauses = [beam_clause] }]
+        | Ast.Query _ -> []
+      in
+      let new_forms = List.concat_map convert_ast_clause clauses in
+      let export_forms = 
+        let extract_exports (clause : Ast.clause) = match clause.content with
+          | Ast.MultiDeclaration ({ head; _ }, _) -> Some (head.namef, head.arity)
+          | _ -> None
+        in
+        let exports = List.filter_map extract_exports clauses in
+        if exports <> [] then [Beam.Core.Form.ExportAttr exports] else []
+      in
+      FT.append output (FT.of_list (export_forms @ new_forms))
+
+let serialize_to_erlang_abstract (forms : forms) : string =
+  Beam.Erlang_abstract_serializer.serialize_forms forms
+
