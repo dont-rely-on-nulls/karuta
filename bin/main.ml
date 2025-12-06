@@ -30,6 +30,7 @@ let show_clauses (clauses : Ast.clause list) : string =
   List.fold_left folder "" clauses
 
 let run : cmd -> unit = function
+  (* TODO: Introduce multiple files to compile subcommand *)
   | Compile { file } -> (
       match Executor.run file with
       | Error err -> failwith @@ display err
