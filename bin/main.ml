@@ -9,7 +9,25 @@ let spawn_process program =
   in
   let pid = create_process "erl" args stdin stdout stderr in
   waitpid [] pid |> function
-  | _pid, _a -> print_endline "[INFO] Compilation finished"
+  | _pid, WEXITED 0 -> Ok ()
+  | (_pid, WEXITED status) as err ->
+      Logger.simply_error
+      @@ Printf.sprintf
+           "Compilation process terminated abnormally.\n\
+            Process exited with status code: %d" status;
+      Error err
+  | (_pid, WSIGNALED signum) as err ->
+      Logger.simply_error
+      @@ Printf.sprintf
+           "Compilation process terminated by a signal.\n\
+            Process terminated by signal: %d" signum;
+      Error err
+  | (_pid, WSTOPPED signum) as err ->
+      Logger.simply_error
+      @@ Printf.sprintf
+           "Compilation process core dumped.\n\
+            Process terminated by signal %d and core dumped" signum;
+      Error err
 
 let beamify filepath _forms =
   let open Filename in
@@ -35,8 +53,8 @@ let run : cmd -> unit = function
       match Executor.run file with
       | Error err -> failwith @@ display err
       | Ok clauses ->
-         (* TODO: Remove this when executor's run is finished *)
-         print_endline @@ show_clauses clauses;
-         beamify file []) 
+          (* TODO: Remove this when executor's run is finished *)
+          print_endline @@ show_clauses clauses;
+          Fun.const () @@ beamify file [])
 
 let () = exit @@ parse_command_line_and_run run
