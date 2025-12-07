@@ -1,10 +1,16 @@
 open Cmdliner
 
-type cmd = Compile of Cmds.Compile.t
+type cmd = Compile of Cmds.Compile.t | Run of Cmds.Run.t
 
-let compile run =
-  let combine file = Compile { file } |> run in
+let compile runner =
+  let combine file run = Compile { file; run } |> runner in
   Cmds.Compile.cmd combine
+
+let run runner =
+  let combine file function_name should_repl =
+    Run { file; function_name; should_repl } |> runner
+  in
+  Cmds.Run.cmd combine
 
 let root_doc = "Welcome to Karuta!"
 
@@ -21,7 +27,7 @@ let help =
   let info = Cmd.info "help" in
   Cmd.v info root_term
 
-let subcommands run = [ compile run; help ]
+let subcommands runner = [ compile runner; run runner; help ]
 
-let parse_command_line_and_run (run : cmd -> unit) =
-  run |> subcommands |> Cmd.group root_info |> Cmd.eval
+let parse_command_line_and_run (runner : cmd -> unit) =
+  runner |> subcommands |> Cmd.group root_info |> Cmd.eval
