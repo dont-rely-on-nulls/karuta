@@ -1,8 +1,10 @@
 open Error
 
 let parse : string -> Ast.parser_clause list attempt = function
-  | "" -> error Error.InvalidFile
-  | str -> ok @@ Parse.parse str
+  | "" -> error Error.EmptyFilepath
+  | str ->
+      if in_channel_length (open_in str) = 0 then error @@ Error.EmptyFile str
+      else ok @@ Parse.parse str
 
 let preprocess (filepath : string) :
     Ast.parser_clause list -> Ast.clause list attempt = function
@@ -31,7 +33,7 @@ let preprocess (filepath : string) :
 (*       in *)
 (*       Some (compiler, computer) *)
 
-let run (filepath : string) : Ast.clause list attempt =
+let compile (filepath : string) : Ast.clause list attempt =
   filepath |> parse ||> preprocess filepath
 
 (* let load' filter_fn (filepath : string) : Compiler.t * Machine.t = *)
