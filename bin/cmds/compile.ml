@@ -12,8 +12,8 @@ let run_term =
   let info =
     Arg.info [ "r"; "run" ]
       ~doc:
-        "Optional function name argumento to be called when running the \
-         program after compilation."
+        "Optional function name argument to be called when running the program \
+         after compilation."
   in
   Arg.value (Arg.opt (Arg.some Arg.string) None info)
 

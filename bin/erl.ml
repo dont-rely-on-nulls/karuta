@@ -29,7 +29,7 @@ let compile filepath _forms =
   let name = remove_extension @@ basename filepath in
   (* TODO: Serialize the list of forms *)
   let forms =
-    "[{attribute,1,file,{\"" ^ name ^ ".erl\",1}}, {attribute,1,module," ^ name
+    "[{attribute,1,file,{\"" ^ name ^ ".krt\",1}}, {attribute,1,module," ^ name
     ^ "},\n\
       \     {attribute,3,export,[{hello,0}]},\n\
       \     {function,5,hello,0,\n\

@@ -3,7 +3,8 @@ open Error
 let parse : string -> Ast.parser_clause list attempt = function
   | "" -> error Error.EmptyFilepath
   | str ->
-      if in_channel_length (open_in str) = 0 then error @@ Error.EmptyFile str
+      In_channel.with_open_text str @@ fun inc ->
+      if in_channel_length inc = 0 then error @@ Error.EmptyFile str
       else ok @@ Parse.parse str
 
 let preprocess (filepath : string) :
