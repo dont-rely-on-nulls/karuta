@@ -22,7 +22,7 @@ let compile' (compiler : Compiler.t) :
       in
       Compiler.compile (grouped_clauses, { compiler with defined_symbols })
 
-let compile filename = compile' (Compiler.initialize filename)
+(* let compile filename = compile' (Compiler.initialize filename) *)
 
 (* let eval ((compiler, computer) : Compiler.t * Machine.t) : *)
 (*     (Compiler.t * Machine.t) option = *)
