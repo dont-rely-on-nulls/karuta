@@ -22,7 +22,7 @@ let run : cmd -> unit = function
       let* clauses = Executor.compile file in
       (* TODO: Remove this when executor's compile is finished *)
       print_endline @@ show_clauses clauses;
-      Erl.compile file [];
+      Erl.compile file clauses;
       Option.iter (fun function_name -> Erl.run file function_name false) run
   | Run { file; function_name; should_repl } ->
       check_extension ".beam" [ file ];

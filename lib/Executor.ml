@@ -1,4 +1,5 @@
 open Error
+module Form = Beam.Core.Form (Beam.Core.Erlang)
 
 let parse : string -> Ast.parser_clause list attempt = function
   | "" -> error Error.EmptyFilepath
@@ -13,7 +14,7 @@ let preprocess (filepath : string) :
   | decls_queries -> ok @@ fst @@ Preprocessor.group_clauses decls_queries
 
 let compile' (compiler : Compiler.t) :
-    Ast.parser_clause list -> Beam.Core.Form.t BatFingerTree.t = function
+    Ast.parser_clause list -> Form.t BatFingerTree.t = function
   | [] ->
       failwith "Compiler error: unreachable when executing compile function."
   | decls_queries ->

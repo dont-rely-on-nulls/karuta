@@ -26,19 +26,27 @@ let spawn_compile_process program =
 
 let compile filepath _forms =
   let open Filename in
+  let open Beam.Builder in
   let name = remove_extension @@ basename filepath in
   (* TODO: Serialize the list of forms *)
+  let beam_ast =
+    [
+      Attribute.file name 1;
+      Attribute.module_ name;
+      Attribute.export [ ("hello", 0) ];
+      function_declaration "hello" 0
+        [
+          clause [] []
+            [
+              call_with_module (atom "io") (atom "format")
+                [ string "Hello World!\n" ];
+            ];
+        ];
+      Attribute.eof 8 (* TODO: figure out a nice way to get this line number *);
+    ]
+  in
   let forms =
-    "[{attribute,1,file,{\"" ^ name ^ ".krt\",1}}, {attribute,1,module," ^ name
-    ^ "},\n\
-      \     {attribute,3,export,[{hello,0}]},\n\
-      \     {function,5,hello,0,\n\
-      \               [{clause,5,[],[],\n\
-      \                        [{call,6,\n\
-      \                               {remote,6,{atom,6,io},{atom,6,format}},\n\
-      \                               [{string,6,\"Hello World!\n\
-       \"}]}]}]},\n\
-      \     {eof,8}]"
+    "[" ^ (String.concat "," @@ List.map Attribute.to_string beam_ast) ^ "]"
   in
   let erlangProgram =
     "{ok, _, BeamByte} = compile:forms(" ^ forms ^ "), file:write_file(\""

@@ -1,6 +1,7 @@
 type entry_point = { p_register : int }
 type functor_name = string * int [@@deriving ord]
 
+module Form = Beam.Core.Form (Beam.Core.Erlang)
 module FT = BatFingerTree
 
 module FunctorMap = BatMap.Make (struct
@@ -18,7 +19,7 @@ let show_functor_table (functors : functor_map) : string =
       ^ "\n")
     "" (to_seq functors)
 
-type forms = Beam.Core.Form.t FT.t
+type forms = Form.t FT.t
 
 type t = {
   current_file : string;
@@ -40,5 +41,5 @@ let initialize filename : t =
         ];
   }
 
-and compile : Ast.clause list * t -> Beam.Core.Form.t FT.t = function
+and compile : Ast.clause list * t -> Form.t FT.t = function
   | _, { output; _ } -> output (* TODO *)
