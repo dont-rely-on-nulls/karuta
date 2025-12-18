@@ -5,7 +5,7 @@ module Primitives : sig
 
   type literal =
     | Atom of atom
-    | Character of char
+    (* | Character of char *)
     | Float of float
     | Integer of int
     | String of string
@@ -44,7 +44,7 @@ end = struct
 
   type literal =
     | Atom of atom
-    | Character of char
+    (* | Character of char *)
     | Float of float
     | Integer of int
     | String of string
@@ -98,7 +98,7 @@ end = struct
 
   let string_of_literal = function
     | Atom a -> a
-    | Character c -> "$" ^ String.make 1 c
+    (* | Character c -> "$" ^ String.make 1 c *)
     | Float f -> string_of_float f
     | Integer i -> string_of_int i
     | String s -> s

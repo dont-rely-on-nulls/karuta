@@ -30,17 +30,20 @@ let escape_string (string : string) =
 let comma_separated_list f l = String.concat "," (List.map f l)
 
 module Expression = struct
-  let rec to_string (e : Expr.t) : string =
+  let rec string_of_clause ({ body; _ } : Clause.clause) =
+    (* TODO: patterns and guards *)
+    "{clause,1,[],[],[" ^ comma_separated_list to_string body ^ "]}"
+
+  and to_string (e : Expr.t) : string =
+    (* TODO: line numbers shouldn't all be 1 *)
     match e with
     | Literal lit -> (
         match lit with
         | Atom name -> "{atom,1," ^ escape_atom name ^ "}"
-        | Character _ ->
-            failwith "TODO: Expression.to_string (Literal/Character)"
-        | Float _ -> failwith "TODO: Expression.to_string (Literal/Float)"
-        | Integer _ -> failwith "TODO: Expression.to_string (Literal/Integer)"
+        | Float f -> "{float,1," ^ string_of_float f ^ "}"
+        | Integer i -> "{integer,1," ^ string_of_int i ^ "}"
         | String s -> "{string,1,\"" ^ escape_string s ^ "\"}"
-        | Nil -> failwith "TODO: Expression.to_string (Literal/Nil)")
+        | Nil -> "{nil,1}")
     | Fun func -> (
         match func with
         | CallWithModule (module_name, function_name, args) ->
@@ -48,7 +51,24 @@ module Expression = struct
             ^ to_string function_name ^ "},["
             ^ comma_separated_list to_string args
             ^ "]}"
-        | _ -> failwith "TODO: Expression.to_string (Fun)")
+        | Lambda clauses ->
+            "{'fun',1,{clauses,["
+            ^ comma_separated_list string_of_clause clauses
+            ^ "]}}"
+        | Reference (name, arity) ->
+            "{'fun',1,{function," ^ escape_atom name ^ "," ^ string_of_int arity
+            ^ "}}"
+        | ReferenceWithModule (module_name, name, arity) ->
+            "{'fun',1,{function,{atom,1," ^ escape_atom module_name
+            ^ "},{atom,1" ^ escape_atom name ^ "}," ^ string_of_int arity ^ "}}"
+        | Call (f, args) ->
+            "{call,1," ^ to_string f ^ ",["
+            ^ comma_separated_list to_string args
+            ^ "]}"
+        | Named (name, clauses) ->
+            "{named_fun,1," ^ escape_atom name ^ ",["
+            ^ comma_separated_list string_of_clause clauses
+            ^ "]}")
     | _ -> failwith "TODO: Expression.to_string"
 end
 
@@ -74,13 +94,7 @@ module Attribute = struct
     | Eof line -> "{eof," ^ string_of_int line ^ "}"
     | Function { name; arity; clauses } ->
         "{function,1," ^ escape_atom name ^ "," ^ string_of_int arity ^ ",["
-        ^ comma_separated_list
-            (fun { Clause.body; _ } ->
-              (* TODO: patterns and guards *)
-              "{clause,1,[],[],["
-              ^ comma_separated_list Expression.to_string body
-              ^ "]}")
-            clauses
+        ^ comma_separated_list Expression.string_of_clause clauses
         ^ "]}"
     | _ -> failwith "TODO"
 end

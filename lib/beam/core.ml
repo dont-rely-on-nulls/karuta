@@ -71,8 +71,8 @@ module type ERLANG = sig
       | Reference of (Primitives.atom * Primitives.arity)
       | ReferenceWithModule of
           (Primitives.atom * Primitives.atom * Primitives.arity)
-      | Lambda of Clause.t list
-      | Named of (Primitives.variable * Clause.t list)
+      | Lambda of Clause.clause list
+      | Named of (Primitives.variable * Clause.clause list)
       | Call of (t * t list)
       | CallWithModule of (t * t * t list)
 
@@ -267,8 +267,8 @@ module Erlang : ERLANG = struct
       | Reference of (Primitives.atom * Primitives.arity)
       | ReferenceWithModule of
           (Primitives.atom * Primitives.atom * Primitives.arity)
-      | Lambda of Clause.t list
-      | Named of (Primitives.variable * Clause.t list)
+      | Lambda of Clause.clause list
+      | Named of (Primitives.variable * Clause.clause list)
       | Call of (t * t list)
       | CallWithModule of (t * t * t list)
 
@@ -351,8 +351,8 @@ module Erlang : ERLANG = struct
       | Reference of (Primitives.atom * Primitives.arity)
       | ReferenceWithModule of
           (Primitives.atom * Primitives.atom * Primitives.arity)
-      | Lambda of Clause.t list
-      | Named of (Primitives.variable * Clause.t list)
+      | Lambda of Clause.clause list
+      | Named of (Primitives.variable * Clause.clause list)
       | Call of (t * t list)
       | CallWithModule of (t * t * t list)
 
