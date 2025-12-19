@@ -6,7 +6,7 @@
 (env
  (dev
   (flags
-   (:standard -w -8))))
+   (:standard))))
 
 (include_subdirs qualified)
 

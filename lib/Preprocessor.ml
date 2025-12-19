@@ -36,7 +36,12 @@ let rec remove_comments (clause : Ast.parser_clause) : Ast.parser_clause option
       in
       filtered_queries
       |> List.concat_map Option.to_list
-      |> List.map (fun { content = Ast.QueryConjunction [ func ]; _ } -> func)
+      |> List.map (function
+           | { content = Ast.QueryConjunction [ func ]; _ } -> func
+           | _ ->
+               failwith
+                 "The conjunctions we constructed are guaranteed not to have \
+                  this form.")
       |> fun funcs ->
       if List.is_empty funcs then None
       else Some { content = Ast.QueryConjunction funcs; loc }
