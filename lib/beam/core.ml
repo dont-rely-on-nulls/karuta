@@ -65,7 +65,11 @@ module type ERLANG = sig
       | Alone of t list
       | Else of (t list * (Pattern.t * Guard.t) option list)
 
-    and mapp = Creation of (t * t) list | Update of t * (t * t) list
+    and association_type = Assoc | Exact
+
+    and mapp =
+      | Creation of (t * t) list
+      | Update of t * (association_type * t * t) list
 
     and func =
       | Reference of (Primitives.atom * Primitives.arity)
@@ -141,7 +145,11 @@ module type ERLANG = sig
           args : t list;
         }
 
-    and mapp = Creation of (t * t) list | Update of (t * (t * t) list)
+    and association_type = Assoc | Exact
+
+    and mapp =
+      | Creation of (t * t) list
+      | Update of t * (association_type * t * t) list
 
     and record =
       | Creation of Primitives.atom * (Primitives.atom * t) list
@@ -261,7 +269,11 @@ module Erlang : ERLANG = struct
       | Alone of t list
       | Else of (t list * (Pattern.t * Guard.t) option list)
 
-    and mapp = Creation of (t * t) list | Update of t * (t * t) list
+    and association_type = Assoc | Exact
+
+    and mapp =
+      | Creation of (t * t) list
+      | Update of t * (association_type * t * t) list
 
     and func =
       | Reference of (Primitives.atom * Primitives.arity)
@@ -345,7 +357,11 @@ module Erlang : ERLANG = struct
       | Alone of t list
       | Else of (t list * (Pattern.t * Guard.t) option list)
 
-    and mapp = Creation of (t * t) list | Update of t * (t * t) list
+    and association_type = Assoc | Exact
+
+    and mapp =
+      | Creation of (t * t) list
+      | Update of t * (association_type * t * t) list
 
     and func =
       | Reference of (Primitives.atom * Primitives.arity)
@@ -442,7 +458,11 @@ module Erlang : ERLANG = struct
           args : t list;
         }
 
-    and mapp = Creation of (t * t) list | Update of (t * (t * t) list)
+    and association_type = Assoc | Exact
+
+    and mapp =
+      | Creation of (t * t) list
+      | Update of t * (association_type * t * t) list
 
     and record =
       | Creation of Primitives.atom * (Primitives.atom * t) list
@@ -479,7 +499,11 @@ module Erlang : ERLANG = struct
           args : t list;
         }
 
-    and mapp = Creation of (t * t) list | Update of (t * (t * t) list)
+    and association_type = Assoc | Exact
+
+    and mapp =
+      | Creation of (t * t) list
+      | Update of t * (association_type * t * t) list
 
     and record =
       | Creation of Primitives.atom * (Primitives.atom * t) list

@@ -69,7 +69,37 @@ module Expression = struct
             "{named_fun,1," ^ escape_atom name ^ ",["
             ^ comma_separated_list string_of_clause clauses
             ^ "]}")
-    | _ -> failwith "TODO: Expression.to_string"
+    | Tuple contents ->
+        "{tuple,1,[" ^ comma_separated_list to_string contents ^ "]}"
+    | Map (Creation entries) ->
+        "{map,1,["
+        ^ comma_separated_list
+            (fun (k, v) ->
+              "{map_field_assoc,1," ^ to_string k ^ "," ^ to_string v ^ "}")
+            entries
+        ^ "]}"
+    | Map (Update (base, entries)) ->
+        "{map,1," ^ to_string base ^ ",["
+        ^ comma_separated_list
+            (fun (tag, k, v) ->
+              "{map_field_"
+              ^ (match tag with Expr.Exact -> "exact" | Expr.Assoc -> "assoc")
+              ^ ",1," ^ to_string k ^ "," ^ to_string v ^ "}")
+            entries
+        ^ "]}"
+    | Cons (lhs, rhs) -> "{cons,1," ^ to_string lhs ^ "," ^ to_string rhs ^ "}"
+    | BinaryOp (op, lhs, rhs) ->
+        "{op,1,'"
+        ^ Primitives.string_of_binary_op op
+        ^ "', " ^ to_string lhs ^ "," ^ to_string rhs ^ "}"
+    | UnaryOp (op, rand) ->
+        "{op,1,'"
+        ^ Primitives.string_of_unary_op op
+        ^ "', " ^ to_string rand ^ "}"
+    | Variable name -> "{var,1," ^ escape_atom name ^ "}"
+    | Nil | Comprehension _ | Bitstring _ | Block _ | Case _ | Catch _ | If _
+    | Match _ | Maybe _ | Receive _ | Record _ | Try _ ->
+        failwith "TODO"
 end
 
 module Attribute = struct
@@ -87,6 +117,13 @@ module Attribute = struct
               "{" ^ escape_atom name ^ "," ^ string_of_int arity ^ "}")
             exports
         ^ "]}"
+    | ImportAttr (module_name, imports) ->
+        "{attribute,1,import,{" ^ escape_atom module_name ^ ",["
+        ^ comma_separated_list
+            (fun (name, arity) ->
+              "{" ^ escape_atom name ^ "," ^ string_of_int arity ^ "}")
+            imports
+        ^ "]}}"
     | ModuleAttr name -> "{attribute,1,module," ^ escape_atom name ^ "}"
     | FileAttr (filename, line) ->
         "{attribute,1,file,{\"" ^ escape_string filename ^ ".krt\","

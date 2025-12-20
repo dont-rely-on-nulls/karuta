@@ -29,6 +29,7 @@ module Primitives : sig
     | Greater
     | GEqual
     | Eq
+    | NEq
     | Exact
     | NotExact (* Comparisons *)
     | Concat (* List Operations *)
@@ -68,6 +69,7 @@ end = struct
     | Greater
     | GEqual
     | Eq
+    | NEq
     | Exact
     | NotExact
     | Concat
@@ -92,6 +94,7 @@ end = struct
     | Greater -> ">"
     | GEqual -> ">="
     | Eq -> "=="
+    | NEq -> "/="
     | Exact -> "=:="
     | NotExact -> "=/="
     | Concat -> "++"
