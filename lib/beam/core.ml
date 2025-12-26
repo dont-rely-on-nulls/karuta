@@ -13,9 +13,9 @@ module type ERLANG = sig
       | Fun of func
       | If of (Clause.t * Guard.t option)
       | Map of mapp
-      | Match of Pattern.t
-      | Maybe of maybe
-      | Nil
+      | Match of Pattern.t * t
+      | Maybe of maybe list
+      | MaybeElse of maybe list * Clause.clause list
       | BinaryOp of Primitives.binary_op * t * t
       | UnaryOp of Primitives.unary_op * t
       | Receive of receive
@@ -61,9 +61,8 @@ module type ERLANG = sig
     }
 
     and maybe =
-      | Equals of (Pattern.t * t)
-      | Alone of t list
-      | Else of (t list * (Pattern.t * Guard.t) option list)
+      | Expr of t
+      | MaybeBind of (Pattern.t * t)
 
     and association_type = Assoc | Exact
 
@@ -98,7 +97,6 @@ module type ERLANG = sig
       | Compound of (t * t)
       | Cons of (t * t)
       | Map of (t * t) list
-      | Nil
       | BinaryOp of Primitives.binary_op * t * t
       | UnaryOp of Primitives.unary_op * t
       | Record of (Primitives.atom * (Primitives.atom * t) list)
@@ -121,7 +119,6 @@ module type ERLANG = sig
       | Cons of t * t
       | Function of func
       | Map of mapp
-      | Nil
       | BinaryOp of Primitives.binary_op * t * t
       | UnaryOp of Primitives.unary_op * t
       | Record of record
@@ -217,9 +214,9 @@ module Erlang : ERLANG = struct
       | Fun of func
       | If of (Clause.t * Guard.t option)
       | Map of mapp
-      | Match of Pattern.t
-      | Maybe of maybe
-      | Nil
+      | Match of Pattern.t * t
+      | Maybe of maybe list
+      | MaybeElse of maybe list * Clause.clause list
       | BinaryOp of Primitives.binary_op * t * t
       | UnaryOp of Primitives.unary_op * t
       | Receive of receive
@@ -265,9 +262,8 @@ module Erlang : ERLANG = struct
     }
 
     and maybe =
-      | Equals of (Pattern.t * t)
-      | Alone of t list
-      | Else of (t list * (Pattern.t * Guard.t) option list)
+      | Expr of t
+      | MaybeBind of (Pattern.t * t)
 
     and association_type = Assoc | Exact
 
@@ -305,9 +301,9 @@ module Erlang : ERLANG = struct
       | Fun of func
       | If of (Clause.t * Guard.t option)
       | Map of mapp
-      | Match of Pattern.t
-      | Maybe of maybe
-      | Nil
+      | Match of Pattern.t * t
+      | Maybe of maybe list
+      | MaybeElse of maybe list * Clause.clause list
       | BinaryOp of Primitives.binary_op * t * t
       | UnaryOp of Primitives.unary_op * t
       | Receive of receive
@@ -353,9 +349,8 @@ module Erlang : ERLANG = struct
     }
 
     and maybe =
-      | Equals of (Pattern.t * t)
-      | Alone of t list
-      | Else of (t list * (Pattern.t * Guard.t) option list)
+      | Expr of t
+      | MaybeBind of (Pattern.t * t)
 
     and association_type = Assoc | Exact
 
@@ -390,7 +385,6 @@ module Erlang : ERLANG = struct
       | Compound of (t * t)
       | Cons of (t * t)
       | Map of (t * t) list
-      | Nil
       | BinaryOp of Primitives.binary_op * t * t
       | UnaryOp of Primitives.unary_op * t
       | Record of (Primitives.atom * (Primitives.atom * t) list)
@@ -411,7 +405,6 @@ module Erlang : ERLANG = struct
       | Compound of (t * t)
       | Cons of (t * t)
       | Map of (t * t) list
-      | Nil
       | BinaryOp of Primitives.binary_op * t * t
       | UnaryOp of Primitives.unary_op * t
       | Record of (Primitives.atom * (Primitives.atom * t) list)
@@ -434,7 +427,6 @@ module Erlang : ERLANG = struct
       | Cons of t * t
       | Function of func
       | Map of mapp
-      | Nil
       | BinaryOp of Primitives.binary_op * t * t
       | UnaryOp of Primitives.unary_op * t
       | Record of record
@@ -475,7 +467,6 @@ module Erlang : ERLANG = struct
       | Cons of t * t
       | Function of func
       | Map of mapp
-      | Nil
       | BinaryOp of Primitives.binary_op * t * t
       | UnaryOp of Primitives.unary_op * t
       | Record of record
