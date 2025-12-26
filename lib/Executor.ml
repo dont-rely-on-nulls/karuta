@@ -16,7 +16,9 @@ let preprocess (filepath : string) :
 let compile' (compiler : Compiler.t) :
     Ast.parser_clause list -> Form.t BatFingerTree.t = function
   | [] ->
-      failwith "Compiler error: unreachable when executing compile function."
+      Logger.simply_unreachable
+        "Compiler error: unreachable when executing compile function.";
+      exit 1
   | decls_queries ->
       let grouped_clauses, defined_symbols =
         Preprocessor.group_clauses decls_queries

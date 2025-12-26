@@ -144,7 +144,8 @@ module Expression = struct
         ^ "}}"
     | Comprehension _ | Bitstring _ | Block _ | Case _ | Catch _ | If _
     | Match _ | Receive _ | Record _ | Try _ ->
-        failwith "TODO"
+        Logger.simply_unreachable "TODO";
+        exit 1
 end
 
 module Attribute = struct
@@ -178,7 +179,9 @@ module Attribute = struct
         "{function,1," ^ escape_atom name ^ "," ^ string_of_int arity ^ ","
         ^ comma_separated_list Expression.string_of_clause clauses
         ^ "}"
-    | _ -> failwith "TODO"
+    | _ ->
+        Logger.simply_unreachable "TODO";
+        exit 1
 end
 
 let rec pattern_list = function

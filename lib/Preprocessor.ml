@@ -2,7 +2,9 @@ let from_declaration (clause : Ast.parser_clause) :
     Ast.decl Location.with_location =
   match clause with
   | { content = Declaration decl; loc } -> { content = decl; loc }
-  | _ -> failwith "unreachable from_declaration"
+  | _ ->
+      Logger.simply_unreachable "unreachable from_declaration";
+      exit 1
 
 let rec remove_comments (clause : Ast.parser_clause) : Ast.parser_clause option
     =
@@ -39,9 +41,10 @@ let rec remove_comments (clause : Ast.parser_clause) : Ast.parser_clause option
       |> List.map (function
            | { content = Ast.QueryConjunction [ func ]; _ } -> func
            | _ ->
-               failwith
+               Logger.simply_unreachable
                  "The conjunctions we constructed are guaranteed not to have \
-                  this form.")
+                  this form.";
+               exit 1)
       |> fun funcs ->
       if List.is_empty funcs then None
       else Some { content = Ast.QueryConjunction funcs; loc }
@@ -122,7 +125,9 @@ let group_clauses (clauses : Ast.parser_clause list) :
             loc;
           };
         ]
-    | _ -> failwith "unreachable group"
+    | _ ->
+        Logger.simply_unreachable "unreachable group";
+        exit 1
   in
   let collect_definitions (clauses : Ast.clause list) : (Ast.tag * int) BatSet.t
       =
