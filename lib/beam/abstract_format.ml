@@ -5,7 +5,7 @@ module Primitives : sig
 
   type literal =
     | Atom of atom
-    | Character of char
+    (* | Character of char *)
     | Float of float
     | Integer of int
     | String of string
@@ -29,6 +29,7 @@ module Primitives : sig
     | Greater
     | GEqual
     | Eq
+    | NEq
     | Exact
     | NotExact (* Comparisons *)
     | Concat (* List Operations *)
@@ -44,7 +45,7 @@ end = struct
 
   type literal =
     | Atom of atom
-    | Character of char
+    (* | Character of char *)
     | Float of float
     | Integer of int
     | String of string
@@ -68,6 +69,7 @@ end = struct
     | Greater
     | GEqual
     | Eq
+    | NEq
     | Exact
     | NotExact
     | Concat
@@ -92,13 +94,14 @@ end = struct
     | Greater -> ">"
     | GEqual -> ">="
     | Eq -> "=="
+    | NEq -> "/="
     | Exact -> "=:="
     | NotExact -> "=/="
     | Concat -> "++"
 
   let string_of_literal = function
     | Atom a -> a
-    | Character c -> "$" ^ String.make 1 c
+    (* | Character c -> "$" ^ String.make 1 c *)
     | Float f -> string_of_float f
     | Integer i -> string_of_int i
     | String s -> s

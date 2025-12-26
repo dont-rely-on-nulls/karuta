@@ -2,7 +2,9 @@ let from_declaration (clause : Ast.parser_clause) :
     Ast.decl Location.with_location =
   match clause with
   | { content = Declaration decl; loc } -> { content = decl; loc }
-  | _ -> failwith "unreachable from_declaration"
+  | _ ->
+      Logger.simply_unreachable "unreachable from_declaration";
+      exit 1
 
 let rec remove_comments (clause : Ast.parser_clause) : Ast.parser_clause option
     =
@@ -36,7 +38,13 @@ let rec remove_comments (clause : Ast.parser_clause) : Ast.parser_clause option
       in
       filtered_queries
       |> List.concat_map Option.to_list
-      |> List.map (fun { content = Ast.QueryConjunction [ func ]; _ } -> func)
+      |> List.map (function
+           | { content = Ast.QueryConjunction [ func ]; _ } -> func
+           | _ ->
+               Logger.simply_unreachable
+                 "The conjunctions we constructed are guaranteed not to have \
+                  this form.";
+               exit 1)
       |> fun funcs ->
       if List.is_empty funcs then None
       else Some { content = Ast.QueryConjunction funcs; loc }
@@ -94,7 +102,8 @@ let parser_to_compiler (clause : Ast.parser_clause) : Ast.clause list =
       let query = { content = Ast.Query head; loc } in
       [ declaration; query ]
 
-let group_clauses (clauses : Ast.parser_clause list) : Ast.clause list =
+let group_clauses (clauses : Ast.parser_clause list) :
+    Ast.clause list * (Ast.tag * int) BatSet.t =
   let compare_func (f1 : Ast.func) (f2 : Ast.func) : int =
     if f1.namef = f2.namef && f1.arity = f2.arity then 0 else 1
   in
@@ -116,10 +125,25 @@ let group_clauses (clauses : Ast.parser_clause list) : Ast.clause list =
             loc;
           };
         ]
-    | _ -> failwith "unreachable group"
+    | _ ->
+        Logger.simply_unreachable "unreachable group";
+        exit 1
+  in
+  let collect_definitions (clauses : Ast.clause list) : (Ast.tag * int) BatSet.t
+      =
+    List.fold_left
+      (fun set clause ->
+        match Location.strip_loc clause with
+        | Ast.MultiDeclaration ({ head = { namef; arity; _ }; _ }, _) ->
+            BatSet.add (namef, arity) set
+        | _ -> set)
+      BatSet.empty clauses
   in
   let open Batteries in
-  clauses
-  |> List.filter_map remove_comments
-  |> List.map check_empty_heads |> List.group compare_clauses
-  |> List.concat_map multi_mapper
+  let grouped_clauses =
+    clauses
+    |> List.filter_map remove_comments
+    |> List.map check_empty_heads |> List.group compare_clauses
+    |> List.concat_map multi_mapper
+  in
+  (grouped_clauses, collect_definitions grouped_clauses)
