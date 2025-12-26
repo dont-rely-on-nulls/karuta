@@ -5,8 +5,7 @@
 
 (env
  (dev
-  (flags
-   (:standard))))
+  (flags (:standard))))
 
 (include_subdirs qualified)
 

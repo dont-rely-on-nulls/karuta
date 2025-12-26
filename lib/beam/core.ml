@@ -60,10 +60,7 @@ module type ERLANG = sig
       after : (t * t) option;
     }
 
-    and maybe =
-      | Expr of t
-      | MaybeBind of (Pattern.t * t)
-
+    and maybe = Expr of t | MaybeBind of (Pattern.t * t)
     and association_type = Assoc | Exact
 
     and mapp =
@@ -261,10 +258,7 @@ module Erlang : ERLANG = struct
       after : (t * t) option;
     }
 
-    and maybe =
-      | Expr of t
-      | MaybeBind of (Pattern.t * t)
-
+    and maybe = Expr of t | MaybeBind of (Pattern.t * t)
     and association_type = Assoc | Exact
 
     and mapp =
@@ -348,10 +342,7 @@ module Erlang : ERLANG = struct
       after : (t * t) option;
     }
 
-    and maybe =
-      | Expr of t
-      | MaybeBind of (Pattern.t * t)
-
+    and maybe = Expr of t | MaybeBind of (Pattern.t * t)
     and association_type = Assoc | Exact
 
     and mapp =
