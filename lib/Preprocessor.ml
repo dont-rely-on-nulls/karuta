@@ -79,6 +79,9 @@ let parser_to_compiler (clause : Ast.parser_clause) : Ast.clause list =
   let open Location in
   match clause with
   | { content = Declaration decl; loc } ->
+      (* TODO: collect all variables, iterate over args list,
+         replace non-variable args with generated variables and
+         add the unification explicitly to the beginning of the body *)
       [ { content = MultiDeclaration (decl, []); loc } ]
   | { content = QueryConjunction funcs; loc } ->
       let folder set func =
