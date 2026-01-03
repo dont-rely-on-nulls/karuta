@@ -3,6 +3,7 @@ type functor_name = string * int [@@deriving ord]
 
 module Form = Beam.Core.Form (Beam.Core.Erlang)
 module FT = BatFingerTree
+module Set = BatSet
 
 module FunctorMap = BatMap.Make (struct
   type t = functor_name [@@deriving ord]
@@ -44,38 +45,85 @@ let initialize filename : t =
         ];
   }
 
-let rec compile_body (clauses : Ast.decl Location.with_location list)
-    (_count : int) =
-  match clauses with
-  | [] ->
-      Logger.simply_unreachable "Predicates must have at least one body";
-      exit 1
-  | [ { content; loc = _ } ] ->
-      let { head = _; body = _ } : Ast.decl = content in
-      [] (* TODO: must not create a choice point *)
-  | _first_clause :: _remaining -> [] (* TODO: must create a choice point *)
+let rec compile_expr (expr : Ast.expr) : Beam.Builder.Expr.t =
+  let open Ast in
+  let open Beam in
+  match Location.strip_loc expr with
+  | Variable var -> Builder.var var.namev
+  | Functor { namef; arity; _ } when arity = 0 -> Builder.atom namef
+  | Functor { namef; elements; _ } ->
+      let name = Builder.atom namef in
+      Builder.tuple (name :: List.map compile_expr elements)
+  | Integer number -> Builder.int number
 
-let compile_declaration
+let compile_declaration_bodies (clauses : Ast.decl Location.with_location list)
+    =
+  if List.is_empty clauses then (
+    Logger.simply_unreachable "Predicates must have at least one body";
+    exit 1)
+  else
+    let open Beam in
+    let compile_single_body ({ content; _ } : Ast.decl Location.with_location) :
+        Builder.Expr.t =
+      let open Ast in
+      let find_variables func = Preprocessor.find_variables (Functor func) in
+      let vars =
+        content.body
+        |> List.map (Fun.compose find_variables Location.strip_loc)
+        |> List.fold_left Set.union Set.empty
+        |> Set.filter (fun { namev } ->
+               Str.string_match (Str.regexp "^[A-Z]") namev 0)
+      in
+      let open Location in
+      let body =
+        (* TODO: We should use locations when calling Beam helpers. They don't use
+           locations yet, hence they are not being sent as arguments *)
+        let make_function { content = { namef; elements; arity }; loc } =
+          let args = List.map compile_expr elements in
+          if namef = "eq" && arity = 2 then (
+            match args with
+            | expr1 :: expr2 :: _ -> Ukaren.eq expr1 expr2
+            | _ ->
+                Logger.unreachable loc
+                  "Mismatch between arity and length of elements in builtin \
+                   'eq'";
+                exit 1)
+          else Builder.call (Builder.atom namef) args
+        in
+        content.body |> List.map make_function |> Ukaren.conj
+      in
+      Set.fold
+        (fun { namev } expr ->
+          Ukaren.call_with_fresh @@ Builder.lambda namev expr)
+        vars body
+    in
+    clauses |> List.map compile_single_body |> Ukaren.disj
+
+let compile_multi_declaration
     ((first_clause, remaining_clauses) :
       Ast.decl Location.with_location * Ast.decl Location.with_location list)
     (compiler : t) : t =
-  let { namef; arity; _ } : Ast.func = first_clause.content.head in
+  let { namef; elements; _ } : Ast.func = first_clause.content.head in
+  (* print_endline @@ Ast.show_func func; *)
   let declaration =
-    Beam.Builder.function_declaration namef (arity + extra_arguments)
-    @@ compile_body (first_clause :: remaining_clauses) 0
+    let args = List.map Ast.Expr.extract_variable elements in
+    Beam.Builder.single_function_declaration namef args
+    @@ compile_declaration_bodies (first_clause :: remaining_clauses)
   in
   { compiler with output = FT.snoc compiler.output declaration }
 
-let compile_form (form : Ast.clause) (compiler : t) : t =
+let compile_clause (clause : Ast.clause) (compiler : t) : t =
   (* TODO: handle location *)
-  match form.content with
+  match clause.content with
   | MultiDeclaration (first, rest) ->
       let open Location in
-      compile_declaration ({ content = first; loc = form.loc }, rest) compiler
+      compile_multi_declaration
+        ({ content = first; loc = clause.loc }, rest)
+        compiler
   | Query _ -> compiler
 
 (* TODO: figure out the logistics of handling the runtime lib *)
 let rec compile : Ast.clause list * t -> Form.t FT.t = function
   | [], { output; _ } -> output
-  | form :: remaining, compiler ->
-      compile (remaining, compile_form form compiler)
+  | clause :: remaining, compiler ->
+      compile (remaining, compile_clause clause compiler)

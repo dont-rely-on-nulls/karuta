@@ -1,7 +1,30 @@
+let rename_arg ({ loc; _ } as expr : Ast.expr) (counter : int) :
+    Ast.expr * Ast.func Location.with_location =
+  let open Ast in
+  let new_var =
+    Location.add_loc (Variable { namev = string_of_int counter }) loc
+  in
+  ( new_var,
+    { content = { namef = "eq"; elements = [ new_var; expr ]; arity = 2 }; loc }
+  )
+
+let rename_declaration ({ head; body } : Ast.decl) : Ast.decl =
+  let open Ast in
+  let decl_args = head.elements in
+  let new_args, _, new_body =
+    List.fold_right
+      (fun arg (new_args, counter, body') ->
+        let new_arg, to_append = rename_arg arg counter in
+        (new_arg :: new_args, counter + 1, to_append :: body'))
+      decl_args ([], 0, body)
+  in
+  { head = { head with elements = new_args }; body = new_body }
+
 let from_declaration (clause : Ast.parser_clause) :
     Ast.decl Location.with_location =
   match clause with
-  | { content = Declaration decl; loc } -> { content = decl; loc }
+  | { content = Declaration decl; loc } ->
+      { content = rename_declaration decl; loc }
   | _ ->
       Logger.simply_unreachable "unreachable from_declaration";
       exit 1
@@ -79,10 +102,7 @@ let parser_to_compiler (clause : Ast.parser_clause) : Ast.clause list =
   let open Location in
   match clause with
   | { content = Declaration decl; loc } ->
-      (* TODO: collect all variables, iterate over args list,
-         replace non-variable args with generated variables and
-         add the unification explicitly to the beginning of the body *)
-      [ { content = MultiDeclaration (decl, []); loc } ]
+      [ { content = MultiDeclaration (rename_declaration decl, []); loc } ]
   | { content = QueryConjunction funcs; loc } ->
       let folder set func =
         S.union set (find_variables @@ Ast.Functor (strip_loc func))
@@ -124,7 +144,8 @@ let group_clauses (clauses : Ast.parser_clause list) :
         [
           {
             content =
-              Ast.MultiDeclaration (first, List.map from_declaration many);
+              Ast.MultiDeclaration
+                (rename_declaration first, List.map from_declaration many);
             loc;
           };
         ]
