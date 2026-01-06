@@ -2,7 +2,8 @@
 
 -export([fresh/1, unify/3, discard/1, deref/2, is_variable/2,
          call_with_fresh/1, eq/2, conj/1, disj/1, conj/2, disj/2, delay/1,
-         pull/1, start/1, true/1, false/1, take_all/1, deref_query_var/2, query_variable/3]).
+         pull/1, start/1, true/1, false/1, take_all/1, deref_query_var/2,
+         deref_query/1, query_variable/3, merge_results/3]).
 
 %% TODO: Swap these with a series of unit tests
 %% test_pop() ->
@@ -59,17 +60,22 @@ deref_tuple(State, Position, Tuple) when Position =< tuple_size(Tuple) ->
 deref_tuple(_, _, Tuple) ->
   Tuple.
 
+deref_map(State, Map) ->
+  maps:map(fun(_, V) -> deref_all(State, V) end, Map).
+
 deref_all(State, Var) ->
   Val = deref(State, Var),
   case Val of
     [H | T] -> [deref_all(State, H) | deref_all(State, T)];
     T when is_tuple(T) -> deref_tuple(State, 1, T);
-    % TODO: add other collection types
+    M when is_map(M) -> deref_map(State, M);
     SomethingElse -> SomethingElse
   end.
 
 deref_query_var(State = #{query := Query}, VarName) when is_map_key(VarName, Query) ->
   deref_all(State, map_get(VarName, Query)).
+
+deref_query(State = #{query := Query}) -> deref_all(State, Query).
 
 query_variable(Var, Name, Goal) ->
   fun (State) ->
@@ -187,3 +193,15 @@ conj(Goals) ->
     fun(Elem, Acc) -> conj(delay(Elem), Acc) end,
     fun true/1,
     Goals).
+
+merge_results(Stream, Pattern, Results) ->
+  fun() ->
+    case pull(Results) of
+      {ok, Head, Tail} ->
+        mplus(
+          bind(Stream, eq(Pattern, Head)),
+          merge_results(Stream, Pattern, Tail)
+        );
+      {error, no_result} -> []
+    end
+  end.
