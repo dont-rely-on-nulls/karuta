@@ -27,22 +27,24 @@ type forms = Form.t FT.t
 
 type t = {
   current_file : string;
+  header : forms;
   output : forms;
   defined_symbols : (Ast.tag * int) BatSet.t;
 }
 
 let initialize filename : t =
-  let module_name = Filename.chop_extension filename in
+  let module_name = Filename.basename @@ Filename.chop_extension filename in
   {
     current_file = filename;
     defined_symbols = BatSet.empty;
-    output =
+    header =
       FT.of_list
         [
           Beam.Builder.Attribute.file filename 1;
           (* TODO: this should be a proper atom *)
           Beam.Builder.Attribute.module_ module_name;
         ];
+    output = FT.empty;
   }
 
 let rec compile_expr (expr : Ast.expr) : Beam.Builder.Expr.t =
@@ -55,6 +57,10 @@ let rec compile_expr (expr : Ast.expr) : Beam.Builder.Expr.t =
       let name = Builder.atom namef in
       Builder.tuple (name :: List.map compile_expr elements)
   | Integer number -> Builder.int number
+
+let call_with_fresh ({ namev } : Ast.var) expr =
+  let open Beam in
+  Ukaren.call_with_fresh @@ Builder.lambda namev expr
 
 let compile_declaration_bodies (clauses : Ast.decl Location.with_location list)
     =
@@ -92,10 +98,7 @@ let compile_declaration_bodies (clauses : Ast.decl Location.with_location list)
         in
         content.body |> List.map make_function |> Ukaren.conj
       in
-      Set.fold
-        (fun { namev } expr ->
-          Ukaren.call_with_fresh @@ Builder.lambda namev expr)
-        vars body
+      Set.fold call_with_fresh vars body
     in
     clauses |> List.map compile_single_body |> Ukaren.disj
 
@@ -103,14 +106,19 @@ let compile_multi_declaration
     ((first_clause, remaining_clauses) :
       Ast.decl Location.with_location * Ast.decl Location.with_location list)
     (compiler : t) : t =
-  let { namef; elements; _ } : Ast.func = first_clause.content.head in
+  let { namef; elements; arity } : Ast.func = first_clause.content.head in
   (* print_endline @@ Ast.show_func func; *)
   let declaration =
     let args = List.map Ast.Expr.extract_variable elements in
-    Beam.Builder.single_function_declaration namef args
+    Beam.Builder.single_function_declaration namef
+      (List.map (fun v -> Beam.Builder.Pattern.Variable v) args)
     @@ compile_declaration_bodies (first_clause :: remaining_clauses)
   in
-  { compiler with output = FT.snoc compiler.output declaration }
+  let export = Beam.Builder.Attribute.export [ (namef, arity) ] in
+  {
+    compiler with
+    output = FT.cons (FT.snoc compiler.output declaration) export;
+  }
 
 let compile_clause (clause : Ast.clause) (compiler : t) : t =
   (* TODO: handle location *)
@@ -120,10 +128,29 @@ let compile_clause (clause : Ast.clause) (compiler : t) : t =
       compile_multi_declaration
         ({ content = first; loc = clause.loc }, rest)
         compiler
-  | Query _ -> compiler
+  | Query { namef; arity; elements } ->
+      let open Beam in
+      let open Ast in
+      let declaration =
+        let query_args = List.map Ast.Expr.extract_variable elements in
+        let fun_args =
+          List.init (arity + 1) @@ Fun.const Builder.pattern_wildcard
+        in
+        Builder.single_function_declaration namef fun_args
+        @@ Ukaren.run_lazy
+        @@ List.fold_right call_with_fresh
+             (List.map (fun namev -> { namev }) query_args)
+        @@ List.fold_right Ukaren.query_variable query_args
+        @@ Builder.call (Builder.atom "") (List.map Builder.var query_args)
+      in
+      let export = Beam.Builder.Attribute.export [ (namef, arity + 1) ] in
+      {
+        compiler with
+        output = FT.cons (FT.snoc compiler.output declaration) export;
+      }
 
 (* TODO: figure out the logistics of handling the runtime lib *)
 let rec compile : Ast.clause list * t -> Form.t FT.t = function
-  | [], { output; _ } -> output
+  | [], { output; header; _ } -> FT.append header output
   | clause :: remaining, compiler ->
       compile (remaining, compile_clause clause compiler)

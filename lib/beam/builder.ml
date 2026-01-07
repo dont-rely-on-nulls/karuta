@@ -32,14 +32,7 @@ let single_function_declaration name args expr =
     {
       name;
       arity = List.length args;
-      clauses =
-        [
-          {
-            guards = [];
-            patterns = List.map (fun v -> Pattern.Variable v) args;
-            body = [ expr ];
-          };
-        ];
+      clauses = [ { guards = []; patterns = args; body = [ expr ] } ];
     }
 
 let lambda arg body =

@@ -120,7 +120,11 @@ let parser_to_compiler (clause : Ast.parser_clause) : Ast.clause list =
         }
       in
       let declaration =
-        { content = Ast.MultiDeclaration ({ head; body = funcs }, []); loc }
+        {
+          content =
+            Ast.MultiDeclaration (rename_declaration { head; body = funcs }, []);
+          loc;
+        }
       in
       let query = { content = Ast.Query head; loc } in
       [ declaration; query ]

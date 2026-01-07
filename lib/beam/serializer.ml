@@ -32,8 +32,9 @@ module Expression = struct
     | Literal lit -> string_of_literal lit
     | Variable name -> string_of_var name
     | Tuple contents -> string_of_tuple string_of_pattern contents
+    | Wildcard -> string_of_var "_"
     | Bitstring _ | Compound _ | Cons _ | Map _ | BinaryOp _ | UnaryOp _
-    | Record _ | Universal | Wildcard ->
+    | Record _ | Universal ->
         "TODO"
 
   and string_of_literal (lit : Primitives.literal) =

@@ -3,7 +3,7 @@
 -export([fresh/1, unify/3, discard/1, deref/2, is_variable/2,
          call_with_fresh/1, eq/2, conj/1, disj/1, conj/2, disj/2, delay/1,
          pull/1, start/1, true/1, false/1, take_all/1, deref_query_var/2,
-         deref_query/1, query_variable/3, merge_results/3]).
+         deref_query/1, query_variable/3, merge_results/3, run_lazy/1]).
 
 %% TODO: Swap these with a series of unit tests
 %% test_pop() ->
@@ -205,3 +205,10 @@ merge_results(Stream, Pattern, Results) ->
       {error, no_result} -> []
     end
   end.
+
+stream_map(_, []) -> [];
+stream_map(F, [H | T]) -> [F(H) | stream_map(F, T)];
+stream_map(F, Stream) when is_function(Stream) ->
+  fun () -> stream_map(F, Stream()) end.
+
+run_lazy(Goal) -> stream_map(fun deref_query/1, start(Goal)).

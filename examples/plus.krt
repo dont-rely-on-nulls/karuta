@@ -1,2 +1,4 @@
 pluz[0, Out, Out].
 pluz[succ[Prev], X, succ[NewOut]] :- pluz[Prev, X, NewOut].
+
+pluz[LHS, RHS, succ[succ[succ[succ[succ[succ[0]]]]]]]?
