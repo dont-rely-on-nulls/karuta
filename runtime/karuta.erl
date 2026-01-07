@@ -166,6 +166,13 @@ take_all(Stream) ->
 %% Primitives
 eq(LHS, RHS) -> fun(State) -> unify(State, LHS, RHS) end.
 
+nat(N) ->
+  Deref_N = deref(N),
+  conj(
+    eq(true, is_integer(Deref_N)),
+    eq(true, 0 =< Deref_N)
+  ).
+
 true(State) -> [State].
 false(_) -> [].
 

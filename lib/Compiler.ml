@@ -86,15 +86,24 @@ let compile_declaration_bodies (clauses : Ast.decl Location.with_location list)
            locations yet, hence they are not being sent as arguments *)
         let make_function { content = { namef; elements; arity }; loc } =
           let args = List.map compile_expr elements in
-          if namef = "eq" && arity = 2 then (
-            match args with
-            | expr1 :: expr2 :: _ -> Ukaren.eq expr1 expr2
-            | _ ->
-                Logger.unreachable loc
-                  "Mismatch between arity and length of elements in builtin \
-                   'eq'";
-                exit 1)
-          else Builder.call (Builder.atom namef) args
+          match (namef, arity) with
+          | "eq", 2 -> (
+              match args with
+              | expr1 :: expr2 :: _ -> Ukaren.eq expr1 expr2
+              | _ ->
+                  Logger.unreachable loc
+                    "Mismatch between arity and length of elements in builtin \
+                     'eq'";
+                  exit 1)
+          | "nat", 1 -> (
+              match args with
+              | expr1 :: _ -> Ukaren.nat expr1
+              | _ ->
+                  Logger.unreachable loc
+                    "Mismatch between arity and length of elements in builtin \
+                     'nat'";
+                  exit 1)
+          | _ -> Builder.call (Builder.atom namef) args
         in
         content.body |> List.map make_function |> Ukaren.conj
       in

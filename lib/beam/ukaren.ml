@@ -3,6 +3,9 @@ open Builder
 let eq (lhs : Expr.t) (rhs : Expr.t) : Expr.t =
   call_with_module (atom "karuta") (atom "eq") [ lhs; rhs ]
 
+let nat (n : Expr.t) : Expr.t =
+  call_with_module (atom "karuta") (atom "nat") [ n ]
+
 let call_with_fresh (f : Expr.func) : Expr.t =
   call_with_module (atom "karuta") (atom "call_with_fresh") [ Expr.Fun f ]
 
