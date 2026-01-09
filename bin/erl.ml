@@ -24,30 +24,14 @@ let spawn_compile_process program =
   [| "-noshell"; "-noinput"; "-eval"; program; "-s"; "erlang"; "halt" |]
   |> create_erl_process |> treat_pid
 
-let compile filepath _forms =
+let compile filepath forms =
   let open Filename in
-  let open Beam.Builder in
+  let open Beam.Serializer in
   let name = remove_extension @@ basename filepath in
-  (* TODO: Serialize the list of forms *)
-  let beam_ast =
-    [
-      Attribute.file name 1;
-      Attribute.module_ name;
-      Attribute.export [ ("hello", 0) ];
-      function_declaration "hello" 0
-        [
-          clause [] []
-            [
-              call_with_module (atom "io") (atom "format")
-                [ string "Hello World!\n" ];
-            ];
-        ];
-      Attribute.eof 8 (* TODO: figure out a nice way to get this line number *);
-    ]
-  in
   let forms =
-    "[" ^ (String.concat "," @@ List.map Attribute.to_string beam_ast) ^ "]"
+    "[" ^ (String.concat "," @@ List.map Attribute.to_string forms) ^ "]"
   in
+  print_endline forms;
   let erlangProgram =
     "{ok, _, BeamByte} = compile:forms(" ^ forms ^ "), file:write_file(\""
     ^ name ^ ".beam\", BeamByte)"

@@ -43,4 +43,10 @@ end
 
 module Expr = struct
   type t = expr [@@deriving show, ord]
+
+  let extract_variable : t -> string = function
+    | { content = Variable { namev }; _ } -> namev
+    | _ ->
+        Logger.simply_error "Trying to extract a variable wrongly";
+        exit 1
 end

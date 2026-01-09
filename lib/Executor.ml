@@ -14,18 +14,12 @@ let preprocess (filepath : string) :
   | decls_queries -> ok @@ fst @@ Preprocessor.group_clauses decls_queries
 
 let compile' (compiler : Compiler.t) :
-    Ast.parser_clause list -> Form.t BatFingerTree.t = function
+    Ast.clause list -> Form.t BatFingerTree.t attempt = function
   | [] ->
       Logger.simply_unreachable
         "Compiler error: unreachable when executing compile function.";
       exit 1
-  | decls_queries ->
-      let grouped_clauses, defined_symbols =
-        Preprocessor.group_clauses decls_queries
-      in
-      Compiler.compile (grouped_clauses, { compiler with defined_symbols })
-
-(* let compile filename = compile' (Compiler.initialize filename) *)
+  | decls_queries -> ok @@ Compiler.compile (decls_queries, compiler)
 
 (* let eval ((compiler, computer) : Compiler.t * Machine.t) : *)
 (*     (Compiler.t * Machine.t) option = *)
@@ -38,8 +32,9 @@ let compile' (compiler : Compiler.t) :
 (*       in *)
 (*       Some (compiler, computer) *)
 
-let compile (filepath : string) : Ast.clause list attempt =
+let compile (filepath : string) : Form.t BatFingerTree.t attempt =
   filepath |> parse ||> preprocess filepath
+  ||> compile' (Compiler.initialize filepath)
 
 (* let load' filter_fn (filepath : string) : Compiler.t * Machine.t = *)
 (*   filepath |> parse |> List.filter filter_fn |> compile *)

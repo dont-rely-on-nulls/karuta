@@ -1,6 +1,9 @@
 -module(karuta).
 
--export([fresh/1, unify/3, discard/1, deref/2, is_variable/2]).
+-export([fresh/1, unify/3, discard/1, deref/2, is_variable/2,
+         call_with_fresh/1, eq/2, conj/1, disj/1, conj/2, disj/2, delay/1,
+         pull/1, start/1, true/1, false/1, take_all/1, deref_query_var/2,
+         deref_query/1, query_variable/3, merge_results/3, run_lazy/1]).
 
 %% TODO: Swap these with a series of unit tests
 %% test_pop() ->
@@ -28,8 +31,8 @@
 %%   Env ! {deref, A, self()},
 %%   test_pop().
 
-is_variable(Var, Bindings) when (is_reference(Var) andalso is_map_key(Var, Bindings)) -> true;
-is_variable(_, _) -> false.
+is_variable(Var, Bindings) ->
+  is_reference(Var) andalso is_map_key(Var, Bindings).
 
 fresh(Bindings) ->
     Var = make_ref(),
@@ -50,33 +53,62 @@ deref(State, Var) when is_reference(Var) ->
 deref(_, Value) ->
   Value.
 
+deref_tuple(State, Position, Tuple) when Position =< tuple_size(Tuple) ->
+  deref_tuple(State, Position + 1,
+    setelement(Position, Tuple, deref_all(State, element(Position, Tuple)))
+  );
+deref_tuple(_, _, Tuple) ->
+  Tuple.
+
+deref_map(State, Map) ->
+  maps:map(fun(_, V) -> deref_all(State, V) end, Map).
+
+deref_all(State, Var) ->
+  Val = deref(State, Var),
+  case Val of
+    [H | T] -> [deref_all(State, H) | deref_all(State, T)];
+    T when is_tuple(T) -> deref_tuple(State, 1, T);
+    M when is_map(M) -> deref_map(State, M);
+    SomethingElse -> SomethingElse
+  end.
+
+deref_query_var(State = #{query := Query}, VarName) when is_map_key(VarName, Query) ->
+  deref_all(State, map_get(VarName, Query)).
+
+deref_query(State = #{query := Query}) -> deref_all(State, Query).
+
+query_variable(Var, Name, Goal) ->
+  fun (State) ->
+    Goal(State#{query => (maps:get(query, State, #{}))#{Name => Var}})
+  end.
+
 unify(State, LHS, RHS) ->
   unify_dereferenced(State, deref(State, LHS), deref(State, RHS)).
 
 unify_variable(State, Var, Value) ->
   case State of
-    #{Var := discard} -> {ok, State};
-    #{Value := discard} -> {ok, State};
-    _ -> {ok, State#{Var => {bound, Value}}}
+    #{Var := discard} -> [State];
+    #{Value := discard} -> [State];
+    _ -> [State#{Var => {bound, Value}}]
   end.
 
 unify_tuple(State, Size, Position, Left, Right) when Position =< Size ->
   maybe
-    {ok, NextState} ?= unify(State, element(Position, Left), element(Position, Right)),
+    [NextState] ?= unify(State, element(Position, Left), element(Position, Right)),
     unify_tuple(NextState, Size, Position + 1, Left, Right)
   end;
 unify_tuple(State, _, _, _, _) ->
-  {ok, State}.
+  [State].
 
-unify_kv(Key, Value, {ok, State}, Map) when is_map_key(Key, Map) ->
+unify_kv(Key, Value, [State], Map) when is_map_key(Key, Map) ->
   unify(State, Value, map_get(Key, Map));
 unify_kv(_, _, _, _) ->
-  {error, unification_failed}.
+  [].
 
 unify_map(State, A, B) ->
   maps:fold(
     fun (Key, Value, Acc) -> unify_kv(Key, Value, Acc, B) end,
-    {ok, State},
+    [State],
     A
   ).
 
@@ -87,22 +119,101 @@ unify_dereferenced(State, A, B) when
    (is_integer(A) andalso is_integer(B)) orelse
    (is_pid(A) andalso is_pid(B)) orelse
    (is_port(A) andalso is_port(B)) orelse
-   (is_reference(A) andalso is_reference(B))) andalso A == B ->
-  {ok, State};
+   (is_reference(A) andalso is_reference(B))) andalso A =:= B ->
+  [State];
 unify_dereferenced(State, A, B) when is_reference(A) andalso is_map_key(A, State) ->
   unify_variable(State, A, B);
 unify_dereferenced(State, A, B) when is_reference(B) andalso is_map_key(B, State) ->
   unify_variable(State, B, A);
 unify_dereferenced(State, [HA|TA], [HB|TB]) ->
   maybe
-    {ok, NextState} ?= unify(State, HA, HB),
+    [NextState] ?= unify(State, HA, HB),
     unify(NextState, TA, TB)
   end;
 unify_dereferenced(State, [], []) ->
-  {ok, State};
+  [State];
 unify_dereferenced(State, A, B) when is_map(A) andalso is_map(B) andalso map_size(A) == map_size(B) ->
   unify_map(State, A, B);
 unify_dereferenced(State, A, B) when is_tuple(A) andalso is_tuple(B) andalso tuple_size(A) == tuple_size(B) ->
   unify_tuple(State, tuple_size(A), 1, A, B);
 unify_dereferenced(_, _, _) ->
-  {error, unification_failed}.
+  [].
+
+mplus([], RHS) -> RHS;
+mplus([H | T], RHS) -> [H | mplus(T, RHS)];
+mplus(LHS, RHS) when is_function(LHS) -> fun() -> mplus(RHS, LHS()) end.
+
+bind([], _) -> [];
+bind([H | T], Goal) -> mplus(Goal(H), bind(T, Goal));
+bind(Stream, Goal) when is_function(Stream) -> fun() -> bind(Stream(), Goal) end.
+
+delay(Goal) -> fun(State) -> fun() -> Goal(State) end end.
+
+pull([]) -> {error, no_result};
+pull([H | T]) -> {ok, H, T};
+pull(Stream) when is_function(Stream) -> pull(Stream()).
+
+start(Goal) -> Goal(#{}).
+
+take_all(Stream) ->
+  case pull(Stream) of
+    {ok, Res, Next} -> [Res | take_all(Next)];
+    {error, no_result} -> []
+  end.
+
+%% Primitives
+eq(LHS, RHS) -> fun(State) -> unify(State, LHS, RHS) end.
+
+nat(N) ->
+  Deref_N = deref(N),
+  conj(
+    eq(true, is_integer(Deref_N)),
+    eq(true, 0 =< Deref_N)
+  ).
+
+true(State) -> [State].
+false(_) -> [].
+
+call_with_fresh(F) ->
+  fun(State) ->
+    {Var, NewState} = fresh(State),
+    Goal = F(Var),
+    Goal(NewState)
+  end.
+
+disj(G1, G2) ->
+  fun(State) -> mplus(G1(State), G2(State)) end.
+
+conj(G1, G2) ->
+  fun(State) -> bind(G1(State), G2) end.
+
+disj(Goals) ->
+  lists:foldr(
+    fun(Elem, Acc) -> disj(delay(Elem), Acc) end,
+    fun false/1,
+    Goals).
+
+conj(Goals) ->
+  lists:foldr(
+    fun(Elem, Acc) -> conj(delay(Elem), Acc) end,
+    fun true/1,
+    Goals).
+
+merge_results(Stream, Pattern, Results) ->
+  fun() ->
+    case pull(Results) of
+      {ok, Head, Tail} ->
+        mplus(
+          bind(Stream, eq(Pattern, Head)),
+          merge_results(Stream, Pattern, Tail)
+        );
+      {error, no_result} -> []
+    end
+  end.
+
+stream_map(_, []) -> [];
+stream_map(F, [H | T]) -> [F(H) | stream_map(F, T)];
+stream_map(F, Stream) when is_function(Stream) ->
+  fun () -> stream_map(F, Stream()) end.
+
+run_lazy(Goal) -> stream_map(fun deref_query/1, start(Goal)).

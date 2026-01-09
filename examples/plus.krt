@@ -1,8 +1,4 @@
-nat[0] :- int[0].
-nat[succ[N]] :- nat[N].
+pluz[0, Out, Out].
+pluz[succ[Prev], X, succ[NewOut]] :- pluz[Prev, X, NewOut].
 
-pluz[Out, 0, Out] :- nat[Out].
-pluz[0, Out, Out] :- nat[Out].
-pluz[succ[Prev], X, Out] :- pluz[Prev, succ[X], Out].
-
-pluz[succ[succ[succ[succ[0]]]], succ[succ[0]], Out]?
+pluz[LHS, RHS, succ[succ[succ[succ[succ[succ[0]]]]]]]?
