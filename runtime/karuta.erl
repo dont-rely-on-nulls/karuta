@@ -139,8 +139,6 @@ unify_dereferenced(State, A, B) when is_tuple(A) andalso is_tuple(B) andalso tup
 unify_dereferenced(_, _, _) ->
   [].
 
-% mzero() -> [].
-
 mplus([], RHS) -> RHS;
 mplus([H | T], RHS) -> [H | mplus(T, RHS)];
 mplus(LHS, RHS) when is_function(LHS) -> fun() -> mplus(RHS, LHS()) end.

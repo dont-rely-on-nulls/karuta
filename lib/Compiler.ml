@@ -10,9 +10,6 @@ module FunctorMap = BatMap.Make (struct
 end)
 [@@warning "-32"]
 
-let extra_arguments =
-  3 (* These are additional arguments used by the runtime  *)
-
 type functor_map = int FunctorMap.t
 
 let show_functor_table (functors : functor_map) : string =
@@ -60,7 +57,7 @@ let rec compile_expr (expr : Ast.expr) : Beam.Builder.Expr.t =
 
 let call_with_fresh ({ namev } : Ast.var) expr =
   let open Beam in
-  Ukaren.call_with_fresh @@ Builder.lambda namev expr
+  Ukanren.call_with_fresh @@ Builder.lambda namev expr
 
 let compile_declaration_bodies (clauses : Ast.decl Location.with_location list)
     =
@@ -89,7 +86,7 @@ let compile_declaration_bodies (clauses : Ast.decl Location.with_location list)
           match (namef, arity) with
           | "eq", 2 -> (
               match args with
-              | expr1 :: expr2 :: _ -> Ukaren.eq expr1 expr2
+              | expr1 :: expr2 :: _ -> Ukanren.eq expr1 expr2
               | _ ->
                   Logger.unreachable loc
                     "Mismatch between arity and length of elements in builtin \
@@ -97,7 +94,7 @@ let compile_declaration_bodies (clauses : Ast.decl Location.with_location list)
                   exit 1)
           | "nat", 1 -> (
               match args with
-              | expr1 :: _ -> Ukaren.nat expr1
+              | expr1 :: _ -> Ukanren.nat expr1
               | _ ->
                   Logger.unreachable loc
                     "Mismatch between arity and length of elements in builtin \
@@ -105,18 +102,17 @@ let compile_declaration_bodies (clauses : Ast.decl Location.with_location list)
                   exit 1)
           | _ -> Builder.call (Builder.atom namef) args
         in
-        content.body |> List.map make_function |> Ukaren.conj
+        content.body |> List.map make_function |> Ukanren.conj
       in
       Set.fold call_with_fresh vars body
     in
-    clauses |> List.map compile_single_body |> Ukaren.disj
+    clauses |> List.map compile_single_body |> Ukanren.disj
 
 let compile_multi_declaration
     ((first_clause, remaining_clauses) :
       Ast.decl Location.with_location * Ast.decl Location.with_location list)
     (compiler : t) : t =
   let { namef; elements; arity } : Ast.func = first_clause.content.head in
-  (* print_endline @@ Ast.show_func func; *)
   let declaration =
     let args = List.map Ast.Expr.extract_variable elements in
     Beam.Builder.single_function_declaration namef
@@ -146,10 +142,10 @@ let compile_clause (clause : Ast.clause) (compiler : t) : t =
           List.init (arity + 1) @@ Fun.const Builder.pattern_wildcard
         in
         Builder.single_function_declaration namef fun_args
-        @@ Ukaren.run_lazy
+        @@ Ukanren.run_lazy
         @@ List.fold_right call_with_fresh
              (List.map (fun namev -> { namev }) query_args)
-        @@ List.fold_right Ukaren.query_variable query_args
+        @@ List.fold_right Ukanren.query_variable query_args
         @@ Builder.call (Builder.atom "") (List.map Builder.var query_args)
       in
       let export = Beam.Builder.Attribute.export [ (namef, arity + 1) ] in
