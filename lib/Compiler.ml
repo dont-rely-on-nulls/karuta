@@ -49,6 +49,8 @@ let rec compile_expr (expr : Ast.expr) : Beam.Builder.Expr.t =
   let open Beam in
   match Location.strip_loc expr with
   | Variable var -> Builder.var var.namev
+  | Nil -> Builder.nil
+  | Cons (h, t) -> Builder.cons (compile_expr h) (compile_expr t)
   | Functor { namef; arity; _ } when arity = 0 -> Builder.atom namef
   | Functor { namef; elements; _ } ->
       let name = Builder.atom namef in

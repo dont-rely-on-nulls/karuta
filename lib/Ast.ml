@@ -1,6 +1,11 @@
 type tag = string [@@deriving show, ord]
 
-type expr' = Variable of var | Functor of func | Integer of int
+type expr' =
+  | Variable of var
+  | Functor of func
+  | Integer of int
+  | Nil
+  | Cons of expr * expr
 [@@deriving show, ord]
 
 and expr = expr' Location.with_location [@@deriving show, ord]

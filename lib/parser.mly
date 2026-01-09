@@ -83,17 +83,16 @@ expression_:
     { let open Location in
       (tail.content, tail.loc)
       |> List.fold_right (fun element (acc, location) ->
-                           ((Ast.Functor { namef = ""; elements = [element;{content = acc; loc = location}]; arity = 2 }),
+                           (Ast.Cons (element, {content = acc; loc = location}),
                             {startl = element.loc.startl; endl = tail.loc.endl}))
                          expressions
       |> (fun (x, _) -> x)
     }
   | LEFT_DELIM; expressions = list_identifiers
     { let open Location in
-      ((Ast.Functor { namef = ""; elements = []; arity = 0 }),
-       {startl = Location.to_t $endpos; endl = Location.to_t $endpos})
+      (Ast.Nil, {startl = Location.to_t $endpos; endl = Location.to_t $endpos})
       |> List.fold_right (fun element (acc, loc) ->
-                        ((Ast.Functor { namef = ""; elements = [element;{content = acc; loc}]; arity = 2 }),
+                        (Ast.Cons (element, {content = acc; loc}),
                          {startl = element.loc.startl; endl = loc.endl}))
                          expressions
       |> (fun (x, _) -> x)}
