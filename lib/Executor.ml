@@ -1,7 +1,7 @@
 open Error
 module Form = Beam.Core.Form (Beam.Core.Erlang)
 
-let parse : string -> Ast.parser_clause list attempt = function
+let parse : string -> Ast.ParserClause.t list attempt = function
   | "" -> error Error.EmptyFilepath
   | str ->
       In_channel.with_open_text str @@ fun inc ->
@@ -9,12 +9,12 @@ let parse : string -> Ast.parser_clause list attempt = function
       else ok @@ Parse.parse str
 
 let preprocess (filepath : string) :
-    Ast.parser_clause list -> Ast.clause list attempt = function
+    Ast.ParserClause.t list -> Ast.Clause.t list attempt = function
   | [] -> error @@ Error.CouldNotPreprocess filepath
   | decls_queries -> ok @@ fst @@ Preprocessor.group_clauses decls_queries
 
 let compile' (compiler : Compiler.t) :
-    Ast.clause list -> Form.t BatFingerTree.t attempt = function
+    Ast.Clause.t list -> Form.t BatFingerTree.t attempt = function
   | [] ->
       Logger.simply_unreachable
         "Compiler error: unreachable when executing compile function.";

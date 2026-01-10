@@ -35,7 +35,7 @@ let parse_loop (input : string) (lexbuf : lexbuf) =
   let checkpoint = Parser.Incremental.program lexbuf.lex_curr_p in
   I.loop_handle Fun.id (fail input buffer) supplier checkpoint
 
-let parse (filepath : string) : Ast.parser_clause list =
+let parse (filepath : string) : Ast.ParserClause.t list =
   let input, lexbuf = L.read filepath in
   try parse_loop input lexbuf
   with Lexer.SyntaxError (loc, message) ->

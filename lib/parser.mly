@@ -35,13 +35,13 @@ located(X):
 
 functorr:
   | functor_name = IDENT; LEFT_DELIM; identifiers = list_identifiers
-  { ({ namef = functor_name; elements = identifiers; arity = List.length identifiers } : Ast.func) }
+  { ({ name = functor_name; elements = identifiers; arity = List.length identifiers } : Ast.Expr.func) }
   | functor_name = LITERAL_ATOM; LEFT_DELIM; identifiers = list_identifiers
-  { ({ namef = functor_name; elements = identifiers; arity = List.length identifiers } : Ast.func) }
+  { ({ name = functor_name; elements = identifiers; arity = List.length identifiers } : Ast.Expr.func) }
   | functor_name = IDENT;
-  { ({ namef = functor_name; elements = []; arity = 0 } : Ast.func) }
+  { ({ name = functor_name; elements = []; arity = 0 } : Ast.Expr.func) }
   | functor_name = LITERAL_ATOM
-  { ({ namef = functor_name; elements = []; arity = 0 } : Ast.func) }
+  { ({ name = functor_name; elements = []; arity = 0 } : Ast.Expr.func) }
   ;
 
 maybe_functorr:
@@ -53,16 +53,16 @@ maybe_functorr:
 
 declaration_:
   | functor_elem = functorr; DOT
-    { Ast.Declaration {head = functor_elem; body = []}}
+    { Ast.ParserClause.Declaration {head = functor_elem; body = []}}
   | functor_elem = functorr; HOLDS; statements = separated_nonempty_list(COMMA, maybe_functorr); DOT
-    { Ast.Declaration { head = functor_elem; body = statements |> List.concat_map Option.to_list } }
+    { Ast.ParserClause.Declaration { head = functor_elem; body = statements |> List.concat_map Option.to_list } }
   ;
 
 declaration: located(declaration_) {$1}
 
 query_:
   | queries = separated_nonempty_list(COMMA, located(functorr)); QUERY
-    { Ast.QueryConjunction queries }
+    { Ast.ParserClause.QueryConjunction queries }
   ;
 
 query: located(query_) {$1}
@@ -76,26 +76,25 @@ list_identifiers:
   ;
 
 expression_:
-  | INTEGER { Ast.Integer (int_of_string $1) }
-  | UPPER_IDENT { Ast.Variable {namev = $1} }
-  | functor_elem = functorr { Ast.Functor functor_elem }
+  | INTEGER { Ast.Expr.Integer (int_of_string $1) }
+  | UPPER_IDENT { Ast.Expr.Variable $1 }
+  | functor_elem = functorr { Ast.Expr.Functor functor_elem }
   | LEFT_DELIM; expressions = separated_nonempty_list(COMMA, expression); PIPE; tail = expression; RIGHT_DELIM
     { let open Location in
       (tail.content, tail.loc)
       |> List.fold_right (fun element (acc, location) ->
-                           (Ast.Cons (element, {content = acc; loc = location}),
+                           (Ast.Expr.Cons (element, {content = acc; loc = location}),
                             {startl = element.loc.startl; endl = tail.loc.endl}))
                          expressions
       |> (fun (x, _) -> x)
     }
   | LEFT_DELIM; expressions = list_identifiers
     { let open Location in
-      (Ast.Nil, {startl = Location.to_t $endpos; endl = Location.to_t $endpos})
+      (Ast.Expr.Nil, {startl = Location.to_t $endpos; endl = Location.to_t $endpos})
       |> List.fold_right (fun element (acc, loc) ->
-                        (Ast.Cons (element, {content = acc; loc}),
+                        (Ast.Expr.Cons (element, {content = acc; loc}),
                          {startl = element.loc.startl; endl = loc.endl}))
                          expressions
       |> (fun (x, _) -> x)}
 
 expression: located(expression_) {$1}
-
