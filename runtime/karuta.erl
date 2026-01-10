@@ -1,6 +1,6 @@
 -module(karuta).
 
--export([fresh/1, unify/3, discard/1, deref/2, is_variable/2,
+-export([fresh/1, unify/3, discard/1, deref/2, is_variable/2, nat/1,
          call_with_fresh/1, eq/2, conj/1, disj/1, conj/2, disj/2, delay/1,
          pull/1, start/1, true/1, false/1, take_all/1, deref_query_var/2,
          deref_query/1, query_variable/3, merge_results/3, run_lazy/1]).
@@ -165,11 +165,13 @@ take_all(Stream) ->
 eq(LHS, RHS) -> fun(State) -> unify(State, LHS, RHS) end.
 
 nat(N) ->
-  Deref_N = deref(N),
-  conj(
-    eq(true, is_integer(Deref_N)),
-    eq(true, 0 =< Deref_N)
-  ).
+  fun (State) ->
+    Deref_N = deref(State, N),
+    conj(
+      eq(true, is_integer(Deref_N)),
+      eq(true, 0 =< Deref_N)
+    )
+  end.
 
 true(State) -> [State].
 false(_) -> [].
