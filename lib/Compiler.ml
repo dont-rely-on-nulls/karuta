@@ -61,15 +61,15 @@ let call_with_fresh ({ namev } : Ast.var) expr =
   let open Beam in
   Ukanren.call_with_fresh @@ Builder.lambda namev expr
 
-let compile_declaration_bodies (clauses : Ast.decl Location.with_location list)
+let compile_declaration_bodies (clauses : Ast.decl' Location.with_location list)
     =
   if List.is_empty clauses then (
     Logger.simply_unreachable "Predicates must have at least one body";
     exit 1)
   else
     let open Beam in
-    let compile_single_body ({ content; _ } : Ast.decl Location.with_location) :
-        Builder.Expr.t =
+    let compile_single_body ({ content; _ } : Ast.decl' Location.with_location)
+        : Builder.Expr.t =
       let open Ast in
       let find_variables func = Preprocessor.find_variables (Functor func) in
       let vars =
@@ -111,17 +111,17 @@ let compile_declaration_bodies (clauses : Ast.decl Location.with_location list)
     clauses |> List.map compile_single_body |> Ukanren.disj
 
 let compile_multi_declaration
-    ((first_clause, remaining_clauses) :
-      Ast.decl Location.with_location * Ast.decl Location.with_location list)
-    (compiler : t) : t =
-  let { namef; elements; arity } : Ast.func = first_clause.content.head in
+    (({ namem; arity }, first_clause, remaining_clauses) :
+      Ast.multi_decl_head
+      * Ast.decl' Location.with_location
+      * Ast.decl' Location.with_location list) (compiler : t) : t =
   let declaration =
-    let args = List.map Ast.Expr.extract_variable elements in
-    Beam.Builder.single_function_declaration namef
+    let args = List.map string_of_int @@ BatList.range 0 `To (arity - 1) in
+    Beam.Builder.single_function_declaration namem
       (List.map (fun v -> Beam.Builder.Pattern.Variable v) args)
     @@ compile_declaration_bodies (first_clause :: remaining_clauses)
   in
-  let export = Beam.Builder.Attribute.export [ (namef, arity) ] in
+  let export = Beam.Builder.Attribute.export [ (namem, arity) ] in
   {
     compiler with
     output = FT.cons (FT.snoc compiler.output declaration) export;
@@ -130,10 +130,10 @@ let compile_multi_declaration
 let compile_clause (clause : Ast.clause) (compiler : t) : t =
   (* TODO: handle location *)
   match clause.content with
-  | MultiDeclaration (first, rest) ->
+  | MultiDeclaration (header, first, rest) ->
       let open Location in
       compile_multi_declaration
-        ({ content = first; loc = clause.loc }, rest)
+        (header, { content = first; loc = clause.loc }, rest)
         compiler
   | Query { namef; arity; elements } ->
       let open Beam in

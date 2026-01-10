@@ -1,27 +1,29 @@
 let rename_arg ({ loc; _ } as expr : Ast.expr) (counter : int) :
-    Ast.expr * Ast.func Location.with_location =
+    Ast.func Location.with_location =
   let open Ast in
   let new_var =
     Location.add_loc (Variable { namev = string_of_int counter }) loc
   in
-  ( new_var,
-    { content = { namef = "eq"; elements = [ new_var; expr ]; arity = 2 }; loc }
-  )
+  { content = { namef = "eq"; elements = [ new_var; expr ]; arity = 2 }; loc }
 
-let rename_declaration ({ head; body } : Ast.decl) : Ast.decl =
-  let open Ast in
-  let decl_args = head.elements in
-  let new_args, _, new_body =
+let decl_header ({ head = { namef; arity; _ }; _ } : Ast.decl) :
+    Ast.multi_decl_head =
+  { namem = namef; arity }
+
+let rename_declaration ({ head = { elements; arity; _ }; body } : Ast.decl) :
+    Ast.decl' =
+  let _, new_body =
     List.fold_right
-      (fun arg (new_args, counter, body') ->
-        let new_arg, to_append = rename_arg arg counter in
-        (new_arg :: new_args, counter + 1, to_append :: body'))
-      decl_args ([], 0, body)
+      (fun arg (counter, body') ->
+        let to_append = rename_arg arg counter in
+        (counter - 1, to_append :: body'))
+      elements
+      (arity - 1, body)
   in
-  { head = { head with elements = new_args }; body = new_body }
+  { body = new_body }
 
 let from_declaration (clause : Ast.parser_clause) :
-    Ast.decl Location.with_location =
+    Ast.decl' Location.with_location =
   match clause with
   | { content = Declaration decl; loc } ->
       { content = rename_declaration decl; loc }
@@ -102,7 +104,13 @@ let parser_to_compiler (clause : Ast.parser_clause) : Ast.clause list =
   let open Location in
   match clause with
   | { content = Declaration decl; loc } ->
-      [ { content = MultiDeclaration (rename_declaration decl, []); loc } ]
+      [
+        {
+          content =
+            MultiDeclaration (decl_header decl, rename_declaration decl, []);
+          loc;
+        };
+      ]
   | { content = QueryConjunction funcs; loc } ->
       let folder set func =
         S.union set (find_variables @@ Ast.Functor (strip_loc func))
@@ -119,10 +127,12 @@ let parser_to_compiler (clause : Ast.parser_clause) : Ast.clause list =
           arity = S.cardinal variables;
         }
       in
+      let fake_decl = { Ast.head; body = funcs } in
       let declaration =
         {
           content =
-            Ast.MultiDeclaration (rename_declaration { head; body = funcs }, []);
+            Ast.MultiDeclaration
+              (decl_header fake_decl, rename_declaration fake_decl, []);
           loc;
         }
       in
@@ -149,7 +159,9 @@ let group_clauses (clauses : Ast.parser_clause list) :
           {
             content =
               Ast.MultiDeclaration
-                (rename_declaration first, List.map from_declaration many);
+                ( decl_header first,
+                  rename_declaration first,
+                  List.map from_declaration many );
             loc;
           };
         ]
@@ -162,8 +174,8 @@ let group_clauses (clauses : Ast.parser_clause list) :
     List.fold_left
       (fun set clause ->
         match Location.strip_loc clause with
-        | Ast.MultiDeclaration ({ head = { namef; arity; _ }; _ }, _) ->
-            BatSet.add (namef, arity) set
+        | Ast.MultiDeclaration ({ namem; arity }, _, _) ->
+            BatSet.add (namem, arity) set
         | _ -> set)
       BatSet.empty clauses
   in
