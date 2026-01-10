@@ -117,9 +117,10 @@ let parser_to_compiler (clause : Ast.parser_clause) : Ast.clause list =
       in
       let variables = List.fold_left folder S.empty funcs in
       let list_variables = S.to_list variables in
+      let query_name = "" in
       let head : Ast.func =
         {
-          namef = "";
+          namef = query_name;
           elements =
             List.map
               (fun var -> { content = Ast.Variable var; loc })
@@ -136,7 +137,14 @@ let parser_to_compiler (clause : Ast.parser_clause) : Ast.clause list =
           loc;
         }
       in
-      let query = { content = Ast.Query head; loc } in
+      let query =
+        {
+          content =
+            Ast.Query
+              { nameq = query_name; arity = head.arity; args = list_variables };
+          loc;
+        }
+      in
       [ declaration; query ]
 
 let group_clauses (clauses : Ast.parser_clause list) :

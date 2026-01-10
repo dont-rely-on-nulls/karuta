@@ -135,22 +135,21 @@ let compile_clause (clause : Ast.clause) (compiler : t) : t =
       compile_multi_declaration
         (header, { content = first; loc = clause.loc }, rest)
         compiler
-  | Query { namef; arity; elements } ->
+  | Query { nameq; arity; args } ->
       let open Beam in
-      let open Ast in
       let declaration =
-        let query_args = List.map Ast.Expr.extract_variable elements in
+        let arg_names = List.map (fun { Ast.namev } -> namev) args in
         let fun_args =
           List.init (arity + 1) @@ Fun.const Builder.pattern_wildcard
         in
-        Builder.single_function_declaration namef fun_args
-        @@ Ukanren.run_lazy
-        @@ List.fold_right call_with_fresh
-             (List.map (fun namev -> { namev }) query_args)
-        @@ List.fold_right Ukanren.query_variable query_args
-        @@ Builder.call (Builder.atom "") (List.map Builder.var query_args)
+        arg_names |> List.map Builder.var
+        |> Builder.call (Builder.atom "")
+        |> List.fold_right Ukanren.query_variable arg_names
+        |> List.fold_right call_with_fresh args
+        |> Ukanren.run_lazy
+        |> Builder.single_function_declaration nameq fun_args
       in
-      let export = Beam.Builder.Attribute.export [ (namef, arity + 1) ] in
+      let export = Beam.Builder.Attribute.export [ (nameq, arity + 1) ] in
       {
         compiler with
         output = FT.cons (FT.snoc compiler.output declaration) export;

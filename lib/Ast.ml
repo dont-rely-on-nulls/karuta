@@ -13,7 +13,7 @@ and expr = expr' Location.with_location [@@deriving show, ord]
 and clause' =
   | MultiDeclaration of
       (multi_decl_head * decl' * decl' Location.with_location list)
-  | Query of func
+  | Query of { nameq : tag; arity : int; args : var list }
 [@@deriving show, ord]
 
 and clause = clause' Location.with_location [@@deriving show, ord]
