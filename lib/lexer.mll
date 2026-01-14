@@ -38,10 +38,13 @@ rule read =
   | '?' { QUERY }
   | quoted_atom { read_atom lexbuf }
   | ":-" { HOLDS }
+  | ":" { MODULE_SEPARATOR }
   | ',' { COMMA }
   | '.' { DOT }
   | '[' { LEFT_DELIM }
   | ']' { RIGHT_DELIM }
+  | '}' { DIRECTIVE_LEFT_DELIM }
+  | '{' { DIRECTIVE_RIGHT_DELIM }  
   | '|' { PIPE }
   | "#%" { EXPRESSION_COMMENT }
   | '%' { skip_line lexbuf }

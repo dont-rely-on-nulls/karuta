@@ -32,7 +32,7 @@ let fail input buffer (checkpoint : _ I.checkpoint) =
 let parse_loop (input : string) (lexbuf : lexbuf) =
   let supplier = I.lexer_lexbuf_to_supplier Lexer.read lexbuf in
   let buffer, supplier = E.wrap_supplier supplier in
-  let checkpoint = Parser.Incremental.program lexbuf.lex_curr_p in
+  let checkpoint = Parser.Incremental.file lexbuf.lex_curr_p in
   I.loop_handle Fun.id (fail input buffer) supplier checkpoint
 
 let parse (filepath : string) : Ast.ParserClause.t list =

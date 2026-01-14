@@ -1,8 +1,18 @@
 let rename_arg ({ loc; _ } as expr : Ast.Expr.t) (counter : int) :
-    Ast.Expr.func Location.with_location =
+    Ast.Expr.call Location.with_location =
   let open Ast in
   let new_var = Location.add_loc (Expr.Variable (string_of_int counter)) loc in
-  { content = { name = "eq"; elements = [ new_var; expr ]; arity = 2 }; loc }
+  {
+    content =
+      Expr.Qualified
+        ( { content = "karuta"; loc },
+          Expr.Unqualified
+            {
+              content = { name = "eq"; elements = [ new_var; expr ]; arity = 2 };
+              loc;
+            } );
+    loc;
+  }
 
 let decl_header ({ head = { name; arity; _ }; _ } : Ast.ParserClause.decl) :
     Ast.Clause.head =
@@ -34,10 +44,27 @@ let rec remove_comments (clause : Ast.ParserClause.t) :
     Ast.ParserClause.t option =
   let open Ast in
   let open Location in
-  let non_comment { content = func; _ } =
-    match func with { Expr.name = "comment"; _ } -> false | _ -> true
+  let non_comment call =
+    match call with
+    | {
+     content =
+       Expr.Qualified
+         ( { content = "karuta"; _ },
+           Expr.Unqualified { content = { Expr.name = "comment"; _ }; _ } );
+     _;
+    } ->
+        false
+    | _ -> true
   in
   match clause with
+  | { content = ParserClause.Directive ({ name = "comment"; _ }, _); _ } -> None
+  | { content = ParserClause.Directive (head, body); loc } ->
+      Some
+        {
+          content =
+            ParserClause.Directive (head, List.filter_map remove_comments body);
+          loc;
+        }
   | { content = Declaration { head = { name = "comment"; _ }; _ }; _ } -> None
   | { content = Declaration { head; body }; _ } as decl ->
       Some
@@ -45,13 +72,6 @@ let rec remove_comments (clause : Ast.ParserClause.t) :
           decl with
           content = Declaration { head; body = body |> List.filter non_comment };
         }
-  | {
-   content = QueryConjunction [ { content = { name = "comment"; _ }; _ } ];
-   _;
-  } ->
-      None
-  | { content = QueryConjunction [ _ ]; _ } as query -> Some query
-  | { content = QueryConjunction []; _ } -> None
   | { content = QueryConjunction queries; loc } ->
       let filtered_queries =
         List.map
@@ -103,10 +123,21 @@ let rec find_variables (element : Ast.Expr.base) : variable_set =
         S.empty more_elements
   | _ -> S.empty
 
-let parser_to_compiler (clause : Ast.ParserClause.t) : Ast.Clause.t list =
+let rec func_of_call : Ast.Expr.call -> Ast.Expr.func = function
+  | Ast.Expr.Qualified (_, more) -> func_of_call more
+  | Ast.Expr.Unqualified func -> func.content
+
+let rec parser_to_compiler (clause : Ast.ParserClause.t) : Ast.Clause.t list =
   let open Location in
   let open Ast in
   match clause with
+  | { content = Directive (head, body); loc } ->
+      [
+        {
+          content = Directive (head, List.concat_map parser_to_compiler body);
+          loc;
+        };
+      ]
   | { content = Declaration decl; loc } ->
       [
         {
@@ -115,11 +146,13 @@ let parser_to_compiler (clause : Ast.ParserClause.t) : Ast.Clause.t list =
           loc;
         };
       ]
-  | { content = QueryConjunction funcs; loc } ->
-      let folder set func =
-        S.union set (find_variables @@ Expr.Functor (strip_loc func))
+  | { content = QueryConjunction calls; loc } ->
+      let folder set call =
+        S.union set
+          (find_variables
+          @@ Expr.Functor ((Fun.compose func_of_call strip_loc) call))
       in
-      let variables = List.fold_left folder S.empty funcs in
+      let variables = List.fold_left folder S.empty calls in
       let list_variables = S.to_list variables in
       let query_name = "" in
       let head : Expr.func =
@@ -132,7 +165,7 @@ let parser_to_compiler (clause : Ast.ParserClause.t) : Ast.Clause.t list =
           arity = S.cardinal variables;
         }
       in
-      let fake_decl = { ParserClause.head; body = funcs } in
+      let fake_decl = { ParserClause.head; body = calls } in
       let declaration =
         {
           content =

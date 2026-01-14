@@ -2,20 +2,22 @@ module type EXPR = sig
   type t [@@deriving show]
   type base [@@deriving show]
   type func [@@deriving show]
+  type call [@@deriving show]
 
   val extract_variable : t -> string
+  val is_functor : t -> bool
 end
 
 module ClauseF (Expr : EXPR) = struct
   type base =
     | MultiDeclaration of (head * decl * decl Location.with_location list)
     | Query of { name : string; arity : int; args : string list }
+    | Directive of Expr.func * t list
   [@@deriving show]
 
-  and decl = { body : Expr.func Location.with_location list } [@@deriving show]
+  and decl = { body : Expr.call Location.with_location list } [@@deriving show]
   and head = { name : string; arity : int } [@@deriving show]
-
-  type t = base Location.with_location [@@deriving show]
+  and t = base Location.with_location [@@deriving show]
 end
 
 module Expr = struct
@@ -32,22 +34,32 @@ module Expr = struct
 
   and t = base Location.with_location [@@deriving show]
 
+  type call =
+    | Qualified of string Location.with_location * call
+    | Unqualified of func Location.with_location
+  [@@deriving show]
+
   let extract_variable : t -> string = function
     | { content = Variable name; _ } -> name
     | _ ->
         Logger.simply_error "Trying to extract a variable wrongly";
         exit 1
+
+  let is_functor : t -> bool = function
+    | { content = Functor _; _ } -> true
+    | _ -> false
 end
 
 module ParserClauseF (Expr : EXPR) = struct
   type base =
     | Declaration of decl
-    | QueryConjunction of Expr.func Location.with_location list
+    | QueryConjunction of Expr.call Location.with_location list
+    | Directive of Expr.func * t list
   [@@deriving show]
 
   and t = base Location.with_location [@@deriving show]
 
-  and decl = { head : Expr.func; body : Expr.func Location.with_location list }
+  and decl = { head : Expr.func; body : Expr.call Location.with_location list }
   [@@deriving show]
 
   let is_decl : t -> bool = function

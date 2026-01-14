@@ -70,7 +70,9 @@ let compile_declaration_bodies
     let compile_single_body
         ({ content; _ } : Ast.Clause.decl Location.with_location) :
         Builder.Expr.t =
-      let find_variables func = Preprocessor.find_variables (Functor func) in
+      let find_variables call =
+        Preprocessor.find_variables (Functor (Preprocessor.func_of_call call))
+      in
       let vars =
         content.body
         |> List.map (Fun.compose find_variables Location.strip_loc)
@@ -82,8 +84,10 @@ let compile_declaration_bodies
       let body =
         (* TODO: We should use locations when calling Beam helpers. They don't use
            locations yet, hence they are not being sent as arguments *)
-        let make_function { content = { Ast.Expr.name; elements; arity }; loc }
-            =
+        let make_function { content = call; loc } =
+          let { Ast.Expr.name; elements; arity } =
+            Preprocessor.func_of_call call
+          in
           let args = List.map compile_expr elements in
           match (name, arity) with
           | "eq", 2 -> (
@@ -130,6 +134,9 @@ let compile_multi_declaration
 let compile_clause (clause : Ast.Clause.t) (compiler : t) : t =
   (* TODO: handle location *)
   match clause.content with
+  | Directive _ ->
+      Logger.simply_unreachable "TODO: Implement modules";
+      exit 1
   | MultiDeclaration (header, first, rest) ->
       let open Location in
       compile_multi_declaration

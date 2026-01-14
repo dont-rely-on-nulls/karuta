@@ -4,28 +4,38 @@
 %token <string> UPPER_IDENT
 %token LEFT_DELIM
 %token RIGHT_DELIM
+%token DIRECTIVE_LEFT_DELIM
+%token DIRECTIVE_RIGHT_DELIM
 %token PIPE
 %token COMMA
 %token DOT
 %token HOLDS
+%token MODULE_SEPARATOR
 %token EOF
 %token QUERY
 %token EXPRESSION_COMMENT
 
-%start <Ast.ParserClause.t list> program
+%start <Ast.ParserClause.t list> file
 %%
 
-program:
-  | declaration program
+program(terminator):
+  | declaration program(terminator)
     { ($1 :: $2) }
-  | EXPRESSION_COMMENT declaration program
+  | EXPRESSION_COMMENT declaration program(terminator)
     { $3 }
-  | query program
+  | query program(terminator)
     { ($1 :: $2) }
-  | EXPRESSION_COMMENT query program
+  | directive program(terminator)
+    { ($1 :: $2) }
+  | EXPRESSION_COMMENT query program(terminator)
     { $3 }
-  | EOF
+  | terminator
     { [] }
+  ;
+
+file:
+  | program(EOF)
+    { $1 }
   ;
 
 located(X):
@@ -44,28 +54,49 @@ functorr:
   { ({ name = functor_name; elements = []; arity = 0 } : Ast.Expr.func) }
   ;
 
-maybe_functorr:
-  | EXPRESSION_COMMENT; functorr;
+call:
+  | module_name = located(IDENT); MODULE_SEPARATOR; nested_call = call;
+    { Ast.Expr.Qualified (module_name, nested_call) }
+  | functor_elem = located(functorr);
+    { Ast.Expr.Unqualified functor_elem } 
+  ;
+
+maybe_call:
+  | EXPRESSION_COMMENT; call;
   { None }
-  | located(functorr)
+  | located(call)
   { Some $1 }
   ;
 
 declaration_:
   | functor_elem = functorr; DOT
     { Ast.ParserClause.Declaration {head = functor_elem; body = []}}
-  | functor_elem = functorr; HOLDS; statements = separated_nonempty_list(COMMA, maybe_functorr); DOT
+  | functor_elem = functorr; HOLDS; statements = separated_nonempty_list(COMMA, maybe_call); DOT
     { Ast.ParserClause.Declaration { head = functor_elem; body = statements |> List.concat_map Option.to_list } }
   ;
 
 declaration: located(declaration_) {$1}
 
 query_:
-  | queries = separated_nonempty_list(COMMA, located(functorr)); QUERY
+  | queries = separated_nonempty_list(COMMA, located(call)); QUERY
     { Ast.ParserClause.QueryConjunction queries }
   ;
 
 query: located(query_) {$1}
+
+program_fragment:
+  | program(DIRECTIVE_RIGHT_DELIM)
+    { $1 }
+  ;
+
+directive_:
+  | HOLDS; functor_elem = functorr; DOT
+    { Ast.ParserClause.Directive (functor_elem, []) }
+  | HOLDS; functor_elem = functorr; DIRECTIVE_LEFT_DELIM; body = program_fragment; DOT
+    { Ast.ParserClause.Directive (functor_elem, body) }
+  ;
+
+directive: located(directive_) {$1}
 
 list_identifiers:
   | RIGHT_DELIM { [] }
