@@ -1,0 +1,25 @@
+:- signature[sig-a, [cons[3], b]].
+
+:- module[a, sig-a] {
+
+  cons[A, B, [A | B]].
+
+  :- signature[sig-b, [
+    pluz[3]
+  ]].
+
+  :- module[b, sig-b] {
+    pluz[A, B, C] :- plus[A, B, C].
+  }.
+}.
+
+:- module[c, [cons[3]]] {
+  cons[A, B, cons[A, B]].
+}.
+
+:- comment {
+  this_is_not_a_fact.
+}.
+
+main :- debug.
+main?
