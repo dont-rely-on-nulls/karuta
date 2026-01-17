@@ -4,8 +4,19 @@ file: EXPRESSION_COMMENT IDENT QUERY UPPER_IDENT
 file: IDENT QUERY UPPER_IDENT
 file: IDENT DOT UPPER_IDENT
 file: EXPRESSION_COMMENT IDENT DOT UPPER_IDENT
+file: HOLDS IDENT DOT UPPER_IDENT
 
 Variables cannot appear as declarations (top level). Declarations must begin with a predicate name, not a variable.
+
+file: HOLDS IDENT DIRECTIVE_LEFT_DELIM UPPER_IDENT
+file: HOLDS IDENT DIRECTIVE_LEFT_DELIM EXPRESSION_COMMENT UPPER_IDENT
+file: HOLDS IDENT DIRECTIVE_LEFT_DELIM EXPRESSION_COMMENT IDENT QUERY UPPER_IDENT
+file: HOLDS IDENT DIRECTIVE_LEFT_DELIM IDENT QUERY UPPER_IDENT
+file: HOLDS IDENT DIRECTIVE_LEFT_DELIM HOLDS IDENT DOT UPPER_IDENT
+file: HOLDS IDENT DIRECTIVE_LEFT_DELIM IDENT DOT UPPER_IDENT
+file: HOLDS IDENT DIRECTIVE_LEFT_DELIM EXPRESSION_COMMENT IDENT DOT UPPER_IDENT
+
+Variables cannot appear as declarations (directive body). Declarations must begin with a predicate name, not a variable.
 
 file: LITERAL_ATOM LEFT_DELIM QUERY
 file: IDENT LEFT_DELIM IDENT QUERY
@@ -14,15 +25,13 @@ file: IDENT LEFT_DELIM QUERY
 file: IDENT LEFT_DELIM EXPRESSION_COMMENT IDENT COMMA QUERY
 file: IDENT LEFT_DELIM IDENT COMMA QUERY
 file: IDENT LEFT_DELIM LEFT_DELIM IDENT COMMA QUERY
-file: IDENT LEFT_DELIM EXPRESSION_COMMENT IDENT QUERY
-file: IDENT LEFT_DELIM LEFT_DELIM IDENT PIPE IDENT QUERY
-file: IDENT LEFT_DELIM LEFT_DELIM IDENT QUERY
 
 Unexpected ? in expression. Question marks are allowed only at the end of a query, not inside expressions or terms.
 
-file: IDENT COMMA IDENT RIGHT_DELIM
 file: IDENT RIGHT_DELIM
-file: IDENT HOLDS IDENT RIGHT_DELIM
+file: HOLDS IDENT RIGHT_DELIM
+file: IDENT MODULE_SEPARATOR LITERAL_ATOM RIGHT_DELIM
+file: LITERAL_ATOM RIGHT_DELIM
 
 Unexpected ']'.
 
@@ -41,7 +50,35 @@ file: IDENT HOLDS IDENT COMMA UPPER_IDENT
 
 A variable cannot be called as a predicate. Predicate calls must start with a lowercase atom.
 
-file: IDENT UPPER_IDENT
 file: LITERAL_ATOM UPPER_IDENT
 
 Expected a comma after $0. Arguments in a predicate must be separated by commas.
+
+file: IDENT LEFT_DELIM EXPRESSION_COMMENT IDENT PIPE
+file: IDENT LEFT_DELIM IDENT PIPE
+
+Pipes are only allowed in lists.
+
+file: IDENT LEFT_DELIM LEFT_DELIM IDENT PIPE IDENT PIPE
+
+Cannot have multiple pipes in the same list.
+
+file: IDENT LEFT_DELIM LEFT_DELIM IDENT DOT
+
+Unexpected dot in expression.
+
+file: HOLDS UPPER_IDENT
+
+Directives cannot be named by variables.
+
+file: IDENT MODULE_SEPARATOR UPPER_IDENT
+
+Variables are not allowed in module paths.
+
+file: IDENT HOLDS IDENT QUERY
+
+Queries are not allowed in predicate bodies.
+
+file: HOLDS IDENT DIRECTIVE_LEFT_DELIM DIRECTIVE_RIGHT_DELIM UPPER_IDENT
+
+Directives cannot have variables as bodies.
