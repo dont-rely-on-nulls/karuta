@@ -23,16 +23,28 @@ let show_functor_table (functors : functor_map) : string =
 type forms = Form.t FT.t
 
 type t = {
-  current_file : string;
   header : forms;
   output : forms;
   defined_symbols : (string * int) BatSet.t;
+  local_modules : t BatMap.String.t;
+  (* TODO: revisit this. *)
+  local_signatures : Ast.Clause.t list BatMap.String.t;
 }
 
-let initialize filename : t =
-  let module_name = Filename.basename @@ Filename.chop_extension filename in
+(*
+ * Strategy:
+ *
+ * A file is not necessarily a module.
+ *
+ * The build procedure must allow you to specify how the files relate
+ * to the module system.
+ *
+ * By default, each file will be wrapped in a module, but the build system
+ * may choose to concatenate multiple files into a single module.
+ *)
+
+let initialize_nested filename module_name : t =
   {
-    current_file = filename;
     defined_symbols = BatSet.empty;
     header =
       FT.of_list
@@ -42,7 +54,13 @@ let initialize filename : t =
           Beam.Builder.Attribute.module_ module_name;
         ];
     output = FT.empty;
+    local_modules = BatMap.String.empty;
+    local_signatures = BatMap.String.empty;
   }
+
+let initialize filename : t =
+  let module_name = Filename.basename @@ Filename.chop_extension filename in
+  initialize_nested filename module_name
 
 let rec compile_expr (expr : Ast.Expr.t) : Beam.Builder.Expr.t =
   let open Beam in
@@ -131,12 +149,30 @@ let compile_multi_declaration
     output = FT.cons (FT.snoc compiler.output declaration) export;
   }
 
+let compile_directive ({ name; elements; arity } : Ast.Expr.func)
+    (body : Ast.Clause.t list) (compiler : t) : t =
+  let _, _, _ = (elements, body, compiler) in
+  match (name, arity) with
+  | "module", 1 ->
+      Logger.simply_unreachable "TODO";
+      exit 1
+  | "module", 2 ->
+      Logger.simply_unreachable "TODO";
+      exit 1
+  | "signature", 1 ->
+      Logger.simply_unreachable "TODO";
+      exit 1
+  | "project", 0 ->
+      Logger.simply_unreachable "TODO";
+      exit 1
+  | _ ->
+      Logger.simply_unreachable "Unknown directive";
+      exit 1
+
 let compile_clause (clause : Ast.Clause.t) (compiler : t) : t =
   (* TODO: handle location *)
   match clause.content with
-  | Directive _ ->
-      Logger.simply_unreachable "TODO: Implement modules";
-      exit 1
+  | Directive (header, body) -> compile_directive header body compiler
   | MultiDeclaration (header, first, rest) ->
       let open Location in
       compile_multi_declaration
