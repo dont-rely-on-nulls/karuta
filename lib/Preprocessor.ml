@@ -14,6 +14,14 @@ let rename_arg ({ loc; _ } as expr : Ast.Expr.t) (counter : int) :
     loc;
   }
 
+let canonical_order (l : Ast.Clause.t) (r : Ast.Clause.t) : int =
+  let open Ast.Clause in
+  match (Location.strip_loc l, Location.strip_loc r) with
+  | Directive _, Directive _ -> 0
+  | Directive _, _ -> -1
+  | _, Directive _ -> 1
+  | _ -> 0
+
 let decl_header ({ head = { name; arity; _ }; _ } : Ast.ParserClause.decl) :
     Ast.Clause.head =
   { name; arity }
@@ -134,7 +142,12 @@ let rec parser_to_compiler (clause : Ast.ParserClause.t) : Ast.Clause.t list =
   | { content = Directive (head, body); loc } ->
       [
         {
-          content = Directive (head, List.concat_map parser_to_compiler body);
+          content =
+            Directive
+              ( head,
+                body
+                |> List.concat_map parser_to_compiler
+                |> List.sort canonical_order );
           loc;
         };
       ]
@@ -231,5 +244,6 @@ let group_clauses (clauses : Ast.ParserClause.t list) :
     |> List.filter_map remove_comments
     |> List.map check_empty_heads |> List.group compare_clauses
     |> List.concat_map multi_mapper
+    |> List.sort canonical_order
   in
   (grouped_clauses, collect_definitions grouped_clauses)
