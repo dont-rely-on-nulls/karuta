@@ -90,6 +90,7 @@ program_fragment:
   ;
 
 directive_:
+  (* TODO: add location to the functorr here *)
   | HOLDS; functor_elem = functorr; DOT
     { Ast.ParserClause.Directive (functor_elem, []) }
   | HOLDS; functor_elem = functorr; DIRECTIVE_LEFT_DELIM; body = program_fragment; DOT
