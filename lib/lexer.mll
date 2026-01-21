@@ -43,8 +43,8 @@ rule read =
   | '.' { DOT }
   | '[' { LEFT_DELIM }
   | ']' { RIGHT_DELIM }
-  | '}' { DIRECTIVE_LEFT_DELIM }
-  | '{' { DIRECTIVE_RIGHT_DELIM }  
+  | '{' { DIRECTIVE_LEFT_DELIM }
+  | '}' { DIRECTIVE_RIGHT_DELIM }
   | '|' { PIPE }
   | "#%" { EXPRESSION_COMMENT }
   | '%' { skip_line lexbuf }
