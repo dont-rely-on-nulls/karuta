@@ -9,8 +9,11 @@ module type EXPR = sig
 end
 
 module ClauseF (Expr : EXPR) = struct
-  type base =
-    | MultiDeclaration of (head * decl * decl Location.with_location list)
+  type multi_declaration = head * decl * decl Location.with_location list
+  [@@deriving show]
+
+  and base =
+    | MultiDeclaration of multi_declaration
     | Query of { name : string; arity : int; args : string list }
     | Directive of Expr.func * t list
   [@@deriving show]

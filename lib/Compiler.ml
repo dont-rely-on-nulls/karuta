@@ -1,19 +1,19 @@
 type entry_point = { p_register : int }
-type functor_name = string * int [@@deriving ord]
+type predicate_name = string * int [@@deriving ord]
 
 module Form = Beam.Core.Form (Beam.Core.Erlang)
 module FT = BatFingerTree
 module Set = BatSet
 
-module FunctorMap = BatMap.Make (struct
-  type t = functor_name [@@deriving ord]
+module PredicateMap = BatMap.Make (struct
+  type t = predicate_name [@@deriving ord]
 end)
 [@@warning "-32"]
 
-type functor_map = int FunctorMap.t
+type functor_map = int PredicateMap.t
 
 let show_functor_table (functors : functor_map) : string =
-  let open FunctorMap in
+  let open PredicateMap in
   BatSeq.fold_left
     (fun acc ((label, arity), address) ->
       acc ^ label ^ "/" ^ string_of_int arity ^ ":" ^ string_of_int address
@@ -22,13 +22,22 @@ let show_functor_table (functors : functor_map) : string =
 
 type forms = Form.t FT.t
 
+type ('comptime_entity, 'predicate_definition) module_t =
+  'comptime_entity BatMap.String.t * 'predicate_definition PredicateMap.t
+
+type signature =
+  | PlainSignature of signature BatMap.String.t * predicate_name Set.t
+  | Abstract
+  | ModuleSignature of (signature, unit) module_t
+
+type comptime =
+  | Module of (comptime, Ast.Clause.multi_declaration) module_t
+  | Signature of signature
+
 type t = {
   header : forms;
   output : forms;
-  defined_symbols : (string * int) BatSet.t;
-  local_modules : t BatMap.String.t;
-  (* TODO: revisit this. *)
-  local_signatures : Ast.Clause.t list BatMap.String.t;
+  env : (comptime, Ast.Clause.multi_declaration) module_t;
 }
 
 (*
@@ -45,7 +54,6 @@ type t = {
 
 let initialize_nested filename module_name : t =
   {
-    defined_symbols = BatSet.empty;
     header =
       FT.of_list
         [
@@ -54,8 +62,7 @@ let initialize_nested filename module_name : t =
           Beam.Builder.Attribute.module_ module_name;
         ];
     output = FT.empty;
-    local_modules = BatMap.String.empty;
-    local_signatures = BatMap.String.empty;
+    env = (BatMap.String.empty, PredicateMap.empty);
   }
 
 let initialize filename : t =
@@ -149,8 +156,14 @@ let compile_multi_declaration
     output = FT.cons (FT.snoc compiler.output declaration) export;
   }
 
-let compile_directive ({ name; elements; arity } : Ast.Expr.func)
+let compile_signature (loc : Location.location) (name : string)
     (body : Ast.Clause.t list) (compiler : t) : t =
+  let _, _, _ = (loc, name, body) in
+  compiler
+
+let compile_directive (directive_loc : Location.location)
+    ({ name; elements; arity } : Ast.Expr.func) (body : Ast.Clause.t list)
+    (compiler : t) : t =
   let _, _, _ = (elements, body, compiler) in
   match (name, arity) with
   | "module", 1 ->
@@ -159,8 +172,25 @@ let compile_directive ({ name; elements; arity } : Ast.Expr.func)
   | "module", 2 ->
       Logger.simply_unreachable "TODO";
       exit 1
-  | "signature", 1 ->
-      Logger.simply_unreachable "TODO";
+  | "signature", 1 -> (
+      match elements with
+      | [ { content = Ast.Expr.Functor { name; elements = []; arity = 0 }; _ } ]
+        ->
+          compile_signature directive_loc name body compiler
+      | [ { content = _; loc } ] ->
+          Logger.error loc "Signature names must be atoms.";
+          exit 1
+      | _ ->
+          Logger.unreachable directive_loc
+            "Somehow there is a mismatch between the expected arity and the \
+             actual arity.";
+          exit 1)
+  | "signature", 0 ->
+      Logger.error directive_loc "Signature directives must have a name.";
+      exit 1
+  | "signature", n when 1 < n ->
+      Logger.error directive_loc
+        "Signature directives must have only a name and a body.";
       exit 1
   | "project", 0 ->
       Logger.simply_unreachable "TODO";
@@ -172,7 +202,8 @@ let compile_directive ({ name; elements; arity } : Ast.Expr.func)
 let compile_clause (clause : Ast.Clause.t) (compiler : t) : t =
   (* TODO: handle location *)
   match clause.content with
-  | Directive (header, body) -> compile_directive header body compiler
+  | Directive (header, body) ->
+      compile_directive clause.loc header body compiler
   | MultiDeclaration (header, first, rest) ->
       let open Location in
       compile_multi_declaration
