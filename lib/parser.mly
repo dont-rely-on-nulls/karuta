@@ -15,7 +15,11 @@
 %token QUERY
 %token EXPRESSION_COMMENT
 
+%token IMPOSSIBLE
+
 %start <Ast.ParserClause.t list> file
+
+%on_error_reduce functorr
 %%
 
 program(terminator):
@@ -29,6 +33,20 @@ program(terminator):
     { ($1 :: $2) }
   | EXPRESSION_COMMENT query program(terminator)
     { $3 }
+  | expression IMPOSSIBLE
+    { failwith "Do the impossible, see the invisible, row, row, fight the power." }
+  | MODULE_SEPARATOR IMPOSSIBLE
+    { failwith "Do the impossible, see the invisible, row, row, fight the power." }
+  | PIPE IMPOSSIBLE
+    { failwith "Do the impossible, see the invisible, row, row, fight the power." }
+  | QUERY IMPOSSIBLE
+    { failwith "Do the impossible, see the invisible, row, row, fight the power." }
+  | RIGHT_DELIM IMPOSSIBLE
+    { failwith "Do the impossible, see the invisible, row, row, fight the power." }
+  | DIRECTIVE_RIGHT_DELIM IMPOSSIBLE
+    { failwith "Do the impossible, see the invisible, row, row, fight the power." }
+  | DIRECTIVE_LEFT_DELIM IMPOSSIBLE
+    { failwith "Do the impossible, see the invisible, row, row, fight the power." }
   | terminator
     { [] }
   ;
