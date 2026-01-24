@@ -11,7 +11,7 @@ let parse : string -> Ast.ParserClause.t list attempt = function
 let preprocess (filepath : string) :
     Ast.ParserClause.t list -> Ast.Clause.t list attempt = function
   | [] -> error @@ Error.CouldNotPreprocess filepath
-  | decls_queries -> ok @@ fst @@ Preprocessor.group_clauses decls_queries
+  | decls_queries -> ok @@ Preprocessor.group_clauses decls_queries
 
 let compile' (compiler : Compiler.t) :
     Ast.Clause.t list -> Form.t BatFingerTree.t attempt = function

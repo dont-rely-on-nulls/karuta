@@ -9,6 +9,8 @@ module type EXPR = sig
 end
 
 module ClauseF (Expr : EXPR) = struct
+  type head = { name : string; arity : int } [@@deriving show, ord]
+
   type multi_declaration = head * decl * decl Location.with_location list
   [@@deriving show]
 
@@ -18,8 +20,12 @@ module ClauseF (Expr : EXPR) = struct
     | Directive of Expr.func * t list
   [@@deriving show]
 
-  and decl = { body : Expr.call Location.with_location list } [@@deriving show]
-  and head = { name : string; arity : int } [@@deriving show]
+  and decl = {
+    body : Expr.call Location.with_location list;
+    original_arg_list : Expr.t list;
+  }
+  [@@deriving show]
+
   and t = base Location.with_location [@@deriving show]
 end
 

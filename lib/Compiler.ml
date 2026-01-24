@@ -1,12 +1,12 @@
 type entry_point = { p_register : int }
-type predicate_name = string * int [@@deriving ord]
+type predicate_name = Ast.Clause.head [@@deriving show, ord]
 
 module Form = Beam.Core.Form (Beam.Core.Erlang)
 module FT = BatFingerTree
 module Set = BatSet
 
 module PredicateMap = BatMap.Make (struct
-  type t = predicate_name [@@deriving ord]
+  type t = predicate_name [@@deriving show, ord]
 end)
 [@@warning "-32"]
 
@@ -15,18 +15,25 @@ type functor_map = int PredicateMap.t
 let show_functor_table (functors : functor_map) : string =
   let open PredicateMap in
   BatSeq.fold_left
-    (fun acc ((label, arity), address) ->
-      acc ^ label ^ "/" ^ string_of_int arity ^ ":" ^ string_of_int address
+    (fun acc ({ Ast.Clause.name; arity }, address) ->
+      acc ^ name ^ "/" ^ string_of_int arity ^ ":" ^ string_of_int address
       ^ "\n")
     "" (to_seq functors)
 
 type forms = Form.t FT.t
 
-type ('comptime_entity, 'predicate_definition) module_t =
-  'comptime_entity BatMap.String.t * 'predicate_definition PredicateMap.t
+type ('comptime_entity, 'predicate_definition) module_t = {
+  modules : 'comptime_entity Location.with_location BatMap.String.t;
+  predicates : 'predicate_definition PredicateMap.t;
+}
 
-type signature =
-  | PlainSignature of signature BatMap.String.t * predicate_name Set.t
+type compiled_signature = {
+  modules : signature BatMap.String.t;
+  predicates : predicate_name Set.t;
+}
+
+and signature =
+  | PlainSignature of compiled_signature
   | Abstract
   | ModuleSignature of (signature, unit) module_t
 
@@ -62,7 +69,7 @@ let initialize_nested filename module_name : t =
           Beam.Builder.Attribute.module_ module_name;
         ];
     output = FT.empty;
-    env = (BatMap.String.empty, PredicateMap.empty);
+    env = { modules = BatMap.String.empty; predicates = PredicateMap.empty };
   }
 
 let initialize filename : t =
@@ -157,9 +164,74 @@ let compile_multi_declaration
   }
 
 let compile_signature (loc : Location.location) (name : string)
-    (body : Ast.Clause.t list) (compiler : t) : t =
-  let _, _, _ = (loc, name, body) in
-  compiler
+    (body : Ast.Clause.t list)
+    ({ env = { modules; _ } as env; _ } as compiler : t) : t =
+  match BatMap.String.find_opt name modules with
+  | Some existing ->
+      Logger.error loc "Failed to define signature";
+      Logger.error existing.loc
+        "There's already a module or signature with the same name";
+      exit 1
+  | None ->
+      let all_underscores : Ast.Expr.t list -> bool =
+        List.for_all
+        @@ Fun.compose
+             (function Ast.Expr.Variable "_" -> true | _ -> false)
+             Location.strip_loc
+      in
+      let step (acc : compiled_signature) (next : Ast.Clause.t) =
+        let predicate_happy_case (head : predicate_name) =
+          print_endline @@ "Happy case: " ^ show_predicate_name head;
+          { acc with predicates = Set.add head acc.predicates }
+        in
+        match next.content with
+        | MultiDeclaration (_, _, second :: (_ as remaining_bodies)) ->
+            Logger.error next.loc
+              "You cannot have multiple definitions when declaring a predicate \
+               in a signature.";
+            Logger.error second.loc "Second definition here.";
+            (match remaining_bodies with
+            | [] -> ()
+            | more ->
+                Logger.simply_error @@ "Plus "
+                ^ (string_of_int @@ List.length more)
+                ^ " other definitions.");
+            exit 1
+        | MultiDeclaration (head, { original_arg_list; body }, [])
+          when List.length body = head.arity
+               && all_underscores original_arg_list ->
+            predicate_happy_case head
+        | MultiDeclaration (head, { body; _ }, [])
+          when List.length body = head.arity ->
+            Logger.warning next.loc
+              "Types are not supported yet. Ignoring argument types.";
+            predicate_happy_case head
+        | MultiDeclaration _ ->
+            Logger.error next.loc
+              "You cannot have a body when declaring a predicate in a \
+               signature.";
+            exit 1
+        | def ->
+            print_endline @@ Ast.Clause.show_base def;
+            acc
+      in
+      let compiled_sig =
+        PlainSignature
+          (List.fold_left step
+             { modules = BatMap.String.empty; predicates = Set.empty }
+             body)
+      in
+      {
+        compiler with
+        env =
+          {
+            env with
+            modules =
+              BatMap.String.add name
+                (Location.add_loc (Signature compiled_sig) loc)
+                modules;
+          };
+      }
 
 let compile_directive (directive_loc : Location.location)
     ({ name; elements; arity } : Ast.Expr.func) (body : Ast.Clause.t list)

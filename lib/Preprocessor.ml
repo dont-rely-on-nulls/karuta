@@ -14,6 +14,18 @@ let rename_arg ({ loc; _ } as expr : Ast.Expr.t) (counter : int) :
     loc;
   }
 
+let compare_func (f1 : Ast.Expr.func) (f2 : Ast.Expr.func) : int =
+  Ast.Clause.compare_head
+    { name = f1.name; arity = f1.arity }
+    { name = f2.name; arity = f2.arity }
+
+let compare_clauses (c1 : Ast.ParserClause.t) (c2 : Ast.ParserClause.t) : int =
+  match (c1, c2) with
+  | ( { content = Declaration { head = h1; _ }; _ },
+      { content = Declaration { head = h2; _ }; _ } ) ->
+      compare_func h1 h2
+  | _, _ -> -1
+
 let canonical_order (l : Ast.Clause.t) (r : Ast.Clause.t) : int =
   let open Ast.Clause in
   match (Location.strip_loc l, Location.strip_loc r) with
@@ -37,7 +49,7 @@ let rename_declaration
       elements
       (arity - 1, body)
   in
-  { body = new_body }
+  { body = new_body; original_arg_list = elements }
 
 let from_declaration (clause : Ast.ParserClause.t) :
     Ast.Clause.decl Location.with_location =
@@ -140,17 +152,7 @@ let rec parser_to_compiler (clause : Ast.ParserClause.t) : Ast.Clause.t list =
   let open Ast in
   match clause with
   | { content = Directive (head, body); loc } ->
-      [
-        {
-          content =
-            Directive
-              ( head,
-                body
-                |> List.concat_map parser_to_compiler
-                |> List.sort canonical_order );
-          loc;
-        };
-      ]
+      [ { content = Directive (head, group_clauses body); loc } ]
   | { content = Declaration decl; loc } ->
       [
         {
@@ -197,19 +199,7 @@ let rec parser_to_compiler (clause : Ast.ParserClause.t) : Ast.Clause.t list =
       in
       [ declaration; query ]
 
-let group_clauses (clauses : Ast.ParserClause.t list) :
-    Ast.Clause.t list * (string * int) BatSet.t =
-  let compare_func (f1 : Ast.Expr.func) (f2 : Ast.Expr.func) : int =
-    if f1.name = f2.name && f1.arity = f2.arity then 0 else 1
-  in
-  let compare_clauses (c1 : Ast.ParserClause.t) (c2 : Ast.ParserClause.t) : int
-      =
-    match (c1, c2) with
-    | ( { content = Declaration { head = h1; _ }; _ },
-        { content = Declaration { head = h2; _ }; _ } ) ->
-        compare_func h1 h2
-    | _, _ -> 1
-  in
+and group_clauses (clauses : Ast.ParserClause.t list) : Ast.Clause.t list =
   let multi_mapper (group : Ast.ParserClause.t list) : Ast.Clause.t list =
     match group with
     | [ x ] -> parser_to_compiler x
@@ -228,22 +218,9 @@ let group_clauses (clauses : Ast.ParserClause.t list) :
         Logger.simply_unreachable "unreachable group";
         exit 1
   in
-  let collect_definitions (clauses : Ast.Clause.t list) :
-      (string * int) BatSet.t =
-    List.fold_left
-      (fun set clause ->
-        match Location.strip_loc clause with
-        | Ast.Clause.MultiDeclaration ({ name; arity }, _, _) ->
-            BatSet.add (name, arity) set
-        | _ -> set)
-      BatSet.empty clauses
-  in
   let open Batteries in
-  let grouped_clauses =
-    clauses
-    |> List.filter_map remove_comments
-    |> List.map check_empty_heads |> List.group compare_clauses
-    |> List.concat_map multi_mapper
-    |> List.sort canonical_order
-  in
-  (grouped_clauses, collect_definitions grouped_clauses)
+  clauses
+  |> List.filter_map remove_comments
+  |> List.map check_empty_heads |> List.group compare_clauses
+  |> List.concat_map multi_mapper
+  |> List.sort canonical_order

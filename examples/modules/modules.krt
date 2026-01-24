@@ -1,25 +1,42 @@
-:- signature[sig-a, [cons[3], b]].
+% :- signature[a, b, c].
 
-:- module[a, sig-a] {
+:- signature[sig-a] {
+  blah[whatever].
+  broken[whatever] :- false.
+  cons[_, _, _]. % Eventually, we'll use types here.
 
-  cons[A, B, [A | B]].
+  many[a].
+  many[b].
+  many[_].
+  many[_].
 
-  :- signature[sig-b, [
-    pluz[3]
-  ]].
-
-  :- module[b, sig-b] {
-    pluz[A, B, C] :- plus[A, B, C].
-  }.
+  % :- module[b, sig-b].
+  % :- signature[sig-b].
+  % :- signature[concrete] {
+  %   :- signature[abstract].
+  % }.
 }.
 
-:- module[c, [cons[3]]] {
-  cons[A, B, cons[A, B]].
-}.
+% :- module[a, sig-a] {
 
-:- comment {
-  this_is_not_a_fact.
-}.
+%   cons[A, B, [A | B]].
 
-main :- debug.
-main?
+%   :- signature[sig-b, [
+%     pluz[3]
+%   ]].
+
+%   :- module[b, sig-b] {
+%     pluz[A, B, C] :- plus[A, B, C].
+%   }.
+% }.
+
+% :- module[c, [cons[3]]] {
+%   cons[A, B, cons[A, B]].
+% }.
+
+% :- comment {
+%   this_is_not_a_fact.
+% }.
+
+% main :- debug.
+% main?
