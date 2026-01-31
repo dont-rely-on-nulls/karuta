@@ -17,6 +17,7 @@ module ClauseF (Expr : EXPR) = struct
   and base =
     | MultiDeclaration of multi_declaration
     | Query of { name : string; arity : int; args : string list }
+    (* TODO: we want to allow multiple bodies for each directive. *)
     | Directive of Expr.func * t list
   [@@deriving show]
 
@@ -43,6 +44,7 @@ module Expr = struct
 
   and t = base Location.with_location [@@deriving show]
 
+  (* TODO: we want to allow qualified atoms when declaring modules and signatures. *)
   type call =
     | Qualified of string Location.with_location * call
     | Unqualified of func Location.with_location
@@ -50,6 +52,12 @@ module Expr = struct
 
   let extract_variable : t -> string = function
     | { content = Variable name; _ } -> name
+    | _ ->
+        Logger.simply_error "Trying to extract a variable wrongly";
+        exit 1
+
+  let extract_functor_label : t -> string = function
+    | { content = Functor { name; _ }; _ } -> name
     | _ ->
         Logger.simply_error "Trying to extract a variable wrongly";
         exit 1

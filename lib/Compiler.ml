@@ -28,13 +28,13 @@ type ('comptime_entity, 'predicate_definition) module_t = {
 }
 
 type compiled_signature = {
-  modules : signature BatMap.String.t;
+  modules : signature Location.with_location BatMap.String.t;
   predicates : predicate_name Set.t;
 }
 
 and signature =
   | PlainSignature of compiled_signature
-  | Abstract
+  | Abstract (* TODO: add a way to tell different abstract signatures apart *)
   | ModuleSignature of (signature, unit) module_t
 
 type comptime =
@@ -163,7 +163,7 @@ let compile_multi_declaration
     output = FT.cons (FT.snoc compiler.output declaration) export;
   }
 
-let compile_signature (loc : Location.location) (name : string)
+let rec compile_signature (loc : Location.location) (name : string)
     (body : Ast.Clause.t list)
     ({ env = { modules; _ } as env; _ } as compiler : t) : t =
   match BatMap.String.find_opt name modules with
@@ -179,10 +179,32 @@ let compile_signature (loc : Location.location) (name : string)
              (function Ast.Expr.Variable "_" -> true | _ -> false)
              Location.strip_loc
       in
+      let all_atoms (args : Ast.Expr.t list) : unit =
+        match
+          args
+          |> List.find_opt
+             @@ Fun.compose
+                  (function
+                    | Ast.Expr.Functor { arity = 0; elements = []; _ } -> false
+                    | _ -> true)
+                  Location.strip_loc
+        with
+        | None -> ()
+        | Some { loc; _ } ->
+            Logger.error loc "Expected atom.";
+            exit 1
+      in
       let step (acc : compiled_signature) (next : Ast.Clause.t) =
         let predicate_happy_case (head : predicate_name) =
           print_endline @@ "Happy case: " ^ show_predicate_name head;
           { acc with predicates = Set.add head acc.predicates }
+        in
+        let signature_happy_case (comptime_name : string)
+            (definition : signature Location.with_location) =
+          {
+            acc with
+            modules = BatMap.String.add comptime_name definition acc.modules;
+          }
         in
         match next.content with
         | MultiDeclaration (_, _, second :: (_ as remaining_bodies)) ->
@@ -211,8 +233,137 @@ let compile_signature (loc : Location.location) (name : string)
               "You cannot have a body when declaring a predicate in a \
                signature.";
             exit 1
+        | Directive
+            ( {
+                name = "module";
+                arity = 2;
+                elements = [ module_name; module_signature ] as elements;
+              },
+              [] ) -> (
+            all_atoms elements;
+            let report_module_as_signature sig_loc module_loc =
+              Logger.error sig_loc
+                "This name does not actually refer to a signature.";
+              Logger.error module_loc "Definition in scope.";
+              exit 1
+            in
+            let ascribed_signature_to_module
+                ({ modules; predicates } : compiled_signature) :
+                (signature, unit) module_t =
+              {
+                modules;
+                predicates =
+                  predicates
+                  |> Set.map (fun v -> (v, ()))
+                  |> Set.to_seq |> PredicateMap.of_seq;
+              }
+            in
+            match
+              ( Location.strip_loc module_name,
+                Location.strip_loc module_signature )
+            with
+            | ( Functor { name = module_name'; _ },
+                Functor { name = module_signature'; _ } ) -> (
+                match BatMap.String.find_opt module_signature' acc.modules with
+                | Some { content = PlainSignature payload; _ } ->
+                    signature_happy_case module_name'
+                    @@ Location.add_loc
+                         (ModuleSignature (ascribed_signature_to_module payload))
+                         next.loc
+                | Some { content = Abstract; _ } ->
+                    (* TODO: handle this correctly *)
+                    signature_happy_case module_name'
+                    @@ Location.add_loc
+                         (ModuleSignature
+                            (ascribed_signature_to_module
+                               {
+                                 modules = BatMap.String.empty;
+                                 predicates = Set.empty;
+                               }))
+                         next.loc
+                | Some { content = ModuleSignature _; loc } ->
+                    report_module_as_signature next.loc loc
+                | None -> (
+                    match
+                      BatMap.String.find_opt module_signature' env.modules
+                    with
+                    | Some
+                        {
+                          content = Signature (PlainSignature _ as outer_sig);
+                          loc;
+                        }
+                    | Some { content = Signature (Abstract as outer_sig); loc }
+                      ->
+                        signature_happy_case module_name'
+                        @@ Location.add_loc outer_sig loc
+                    | Some
+                        { loc = outer; content = Signature (ModuleSignature _) }
+                    | Some { loc = outer; content = Module _ } ->
+                        report_module_as_signature module_signature.loc outer
+                    | None ->
+                        Logger.error module_signature.loc
+                          "Undefined signature name. Remember: the order \
+                           matters (for now 😉).";
+                        exit 1))
+            | _ ->
+                Logger.unreachable next.loc
+                  "Inconsistency between all_atoms and pattern match";
+                exit 1)
+        (* | Directive
+             ( {
+                 name = "module";
+                 arity = 1;
+                 elements = [ module_name ] as elements;
+               },
+               inline_signature )
+           when inline_signature != [] ->
+             exit 1 (* TODO *) *)
+        | Directive ({ name = "module"; _ }, _) ->
+            Logger.error next.loc
+              "Module declarations in signatures must have exactly one name \
+               and one signature.";
+            exit 1
+        | Directive
+            ( ({ name = "signature"; elements = signature_name :: _; _ } as
+               directive_head),
+              directive_body ) -> (
+            let merge_function _ (lval : comptime Location.with_location option)
+                (rval : signature Location.with_location option) =
+              match (lval, rval) with
+              | Some existing, None -> Some existing
+              | None, None -> None
+              (* TODO: disallow shadowing everywhere *)
+              | _, Some { content; loc } ->
+                  Some (Location.add_loc (Signature content) loc)
+            in
+            let nested_compiler =
+              compile_directive next.loc directive_head directive_body
+                {
+                  compiler with
+                  env =
+                    {
+                      env with
+                      modules =
+                        BatMap.String.merge merge_function modules acc.modules;
+                    };
+                }
+            in
+            let signature_name =
+              Ast.Expr.extract_functor_label signature_name
+            in
+            match
+              BatMap.String.find_opt signature_name nested_compiler.env.modules
+            with
+            | Some { content = Signature compiled_sig; loc } ->
+                signature_happy_case signature_name
+                @@ Location.add_loc compiled_sig loc
+            | _ ->
+                Logger.unreachable next.loc
+                  "If we reached this point, something is very wrong because \
+                   compile_directive should have blown up first.";
+                exit 1)
         | def ->
-            print_endline @@ Ast.Clause.show_base def;
+            Logger.debug @@ Ast.Clause.show_base def;
             acc
       in
       let compiled_sig =
@@ -233,7 +384,7 @@ let compile_signature (loc : Location.location) (name : string)
           };
       }
 
-let compile_directive (directive_loc : Location.location)
+and compile_directive (directive_loc : Location.location)
     ({ name; elements; arity } : Ast.Expr.func) (body : Ast.Clause.t list)
     (compiler : t) : t =
   let _, _, _ = (elements, body, compiler) in
