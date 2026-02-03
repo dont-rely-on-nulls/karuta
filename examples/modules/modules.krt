@@ -6,12 +6,14 @@
   cons[_, _, _]. % Eventually, we'll use types here.
 
   many[a].
-  %  many[b].
-  %  many[_].
-  %  many[_].
+  many[b].
+  many[_].
+  many[_].
   :- signature[sig-b] {}.
 
-  :- module[b, sig-b].
+  :- module[b] {
+    more[_].
+  }.
   :- signature[sig-c] {
      :- module[whatever, sig-b].
   }.
