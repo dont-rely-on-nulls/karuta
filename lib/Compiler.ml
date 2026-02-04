@@ -37,14 +37,16 @@ and signature =
   | Abstract (* TODO: add a way to tell different abstract signatures apart *)
   | ModuleSignature of (signature, unit) module_t
 
-type comptime =
-  | Module of (comptime, Ast.Clause.multi_declaration) module_t
-  | Signature of signature
+type compiled_module = (comptime, Ast.Clause.multi_declaration) module_t
+and comptime = Module of compiled_module | Signature of signature
 
 type t = {
   header : forms;
   output : forms;
-  env : (comptime, Ast.Clause.multi_declaration) module_t;
+  filename : string;
+  module_name : string;
+  parent : t option;
+  env : compiled_module;
 }
 
 (*
@@ -59,8 +61,11 @@ type t = {
  * may choose to concatenate multiple files into a single module.
  *)
 
-let initialize_nested filename module_name : t =
+let initialize_nested parent filename module_name : t =
   {
+    parent;
+    filename;
+    module_name;
     header =
       FT.of_list
         [
@@ -72,9 +77,17 @@ let initialize_nested filename module_name : t =
     env = { modules = BatMap.String.empty; predicates = PredicateMap.empty };
   }
 
+let initialize_from_parent module_name parent : t =
+  let inner_module_name = parent.module_name ^ "|" ^ module_name in
+  let inner_filename =
+    (Filename.basename @@ Filename.chop_extension parent.filename)
+    ^ "." ^ module_name ^ ".krt"
+  in
+  initialize_nested (Some parent) inner_filename inner_module_name
+
 let initialize filename : t =
   let module_name = Filename.basename @@ Filename.chop_extension filename in
-  initialize_nested filename module_name
+  initialize_nested None filename module_name
 
 let rec compile_expr (expr : Ast.Expr.t) : Beam.Builder.Expr.t =
   let open Beam in
@@ -91,6 +104,31 @@ let rec compile_expr (expr : Ast.Expr.t) : Beam.Builder.Expr.t =
 let call_with_fresh (name : string) expr =
   let open Beam in
   Ukanren.call_with_fresh @@ Builder.lambda name expr
+
+let all_atoms (args : Ast.Expr.t list) : unit =
+  match
+    args
+    |> List.find_opt
+       @@ Fun.compose
+            (function
+              | Ast.Expr.Functor { arity = 0; elements = []; _ } -> false
+              | _ -> true)
+            Location.strip_loc
+  with
+  | None -> ()
+  | Some { loc; _ } ->
+      Logger.error loc "Expected atom.";
+      exit 1
+
+let ascribed_signature_to_module ({ modules; predicates } : compiled_signature)
+    : (signature, unit) module_t =
+  {
+    modules;
+    predicates =
+      predicates
+      |> Set.map (fun v -> (v, ()))
+      |> Set.to_seq |> PredicateMap.of_seq;
+  }
 
 let compile_declaration_bodies
     (clauses : Ast.Clause.decl Location.with_location list) =
@@ -146,7 +184,11 @@ let compile_declaration_bodies
     in
     clauses |> List.map compile_single_body |> Ukanren.disj
 
-let compile_multi_declaration
+let rec compile ((body, compiler) : Ast.Clause.t list * t) : Form.t FT.t =
+  let { output; header; _ } = compile_step (body, compiler) in
+  FT.append header output
+
+and compile_multi_declaration
     (({ name; arity }, first_clause, remaining_clauses) :
       Ast.Clause.head
       * Ast.Clause.decl Location.with_location
@@ -163,32 +205,7 @@ let compile_multi_declaration
     output = FT.cons (FT.snoc compiler.output declaration) export;
   }
 
-let all_atoms (args : Ast.Expr.t list) : unit =
-  match
-    args
-    |> List.find_opt
-       @@ Fun.compose
-            (function
-              | Ast.Expr.Functor { arity = 0; elements = []; _ } -> false
-              | _ -> true)
-            Location.strip_loc
-  with
-  | None -> ()
-  | Some { loc; _ } ->
-      Logger.error loc "Expected atom.";
-      exit 1
-
-let ascribed_signature_to_module ({ modules; predicates } : compiled_signature)
-    : (signature, unit) module_t =
-  {
-    modules;
-    predicates =
-      predicates
-      |> Set.map (fun v -> (v, ()))
-      |> Set.to_seq |> PredicateMap.of_seq;
-  }
-
-let rec compile_module_signature (loc : Location.location)
+and compile_module_signature (loc : Location.location)
     (inline_signature : Ast.Clause.t list) (compiler : t) :
     signature Location.with_location =
   let compiled_sig = compile_signature loc inline_signature compiler in
@@ -384,9 +401,71 @@ and compile_directive (directive_loc : Location.location)
   | "module", 1 ->
       Logger.simply_unreachable "TODO";
       exit 1
-  | "module", 2 ->
-      Logger.simply_unreachable "TODO";
-      exit 1
+  | "module", 2 -> (
+      match elements with
+      | [
+       {
+         content =
+           Ast.Expr.Functor { name = module_name; elements = []; arity = 0 };
+         loc = module_loc;
+       };
+       {
+         content =
+           Ast.Expr.Functor { name = signature_name; elements = []; arity = 0 };
+         loc = signature_loc;
+       };
+      ] -> (
+          match
+            ( BatMap.String.find_opt module_name modules,
+              BatMap.String.find_opt signature_name modules )
+          with
+          | Some existing, _ ->
+              Logger.error module_loc "Failed to define module";
+              Logger.error existing.loc
+                "There's already a module or signature with the same name";
+              exit 1
+          | None, None ->
+              Logger.error signature_loc "Failed to find named signature";
+              exit 1
+          | None, Some { content = Signature (PlainSignature _signature); _ } ->
+              Logger.debug
+                "TODO: Deal with matching module implementation with provided \
+                 signature";
+              let compiled_module =
+                ( ( compiler |> initialize_from_parent module_name |> fun c ->
+                    compile_step (body, c) )
+                |> fun c -> c.env )
+                |> fun e -> Location.add_loc (Module e) directive_loc
+              in
+              {
+                compiler with
+                env =
+                  {
+                    env with
+                    modules =
+                      BatMap.String.add module_name compiled_module modules;
+                  };
+              }
+          | None, Some { content = Signature Abstract; _ } ->
+              Logger.unreachable directive_loc
+                "Found signature for module cannot be abstract";
+              exit 1
+          | None, Some { content = Signature (ModuleSignature _); _ } ->
+              Logger.unreachable directive_loc
+                "Found signature for module cannot be a module signature \
+                 definition";
+              exit 1
+          | None, Some { content = Module _; _ } ->
+              Logger.error directive_loc "Modules are not signatures";
+              exit 1)
+      | [ { content = _; loc } ] ->
+          Logger.error loc "Signature names must be atoms.";
+          exit 1
+      | _ ->
+          Logger.unreachable directive_loc
+            "Somehow there is a mismatch between the expected arity and the \
+             actual arity.";
+          exit 1)
   | "signature", 1 -> (
       match elements with
       | [
@@ -436,7 +515,7 @@ and compile_directive (directive_loc : Location.location)
       Logger.simply_unreachable "Unknown directive";
       exit 1
 
-let compile_clause (clause : Ast.Clause.t) (compiler : t) : t =
+and compile_clause (clause : Ast.Clause.t) (compiler : t) : t =
   (* TODO: handle location *)
   match clause.content with
   | Directive (header, body) ->
@@ -466,7 +545,17 @@ let compile_clause (clause : Ast.Clause.t) (compiler : t) : t =
       }
 
 (* TODO: figure out the logistics of handling the runtime lib *)
-let rec compile : Ast.Clause.t list * t -> Form.t FT.t = function
-  | [], { output; header; _ } -> FT.append header output
+and compile_step : Ast.Clause.t list * t -> t = function
+  | [], compiler ->
+      let list_forms = FT.to_list (FT.append compiler.header compiler.output) in
+      let open Beam.Serializer in
+      let forms =
+        "["
+        ^ (String.concat "," @@ List.map Attribute.to_string list_forms)
+        ^ "]"
+      in
+      print_endline forms;
+      compiler
   | clause :: remaining, compiler ->
-      compile (remaining, compile_clause clause compiler)
+      (* TODO: We should save the intermediary outputs, due to this being a step by module *)
+      compile_step (remaining, compile_clause clause compiler)
