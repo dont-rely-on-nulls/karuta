@@ -44,41 +44,39 @@ located(X):
   ;
 
 functorr:
-  | functor_name = IDENT; LEFT_DELIM; identifiers = list_identifiers
+  | functor_name = functor_label; LEFT_DELIM; identifiers = list_identifiers
   { ({ name = functor_name; elements = identifiers; arity = List.length identifiers } : Ast.Expr.func) }
-  | functor_name = LITERAL_ATOM; LEFT_DELIM; identifiers = list_identifiers
-  { ({ name = functor_name; elements = identifiers; arity = List.length identifiers } : Ast.Expr.func) }
-  | functor_name = IDENT;
-  { ({ name = functor_name; elements = []; arity = 0 } : Ast.Expr.func) }
-  | functor_name = LITERAL_ATOM
+  | functor_name = functor_label
   { ({ name = functor_name; elements = []; arity = 0 } : Ast.Expr.func) }
   ;
 
-call:
-  | module_name = located(IDENT); MODULE_SEPARATOR; nested_call = call;
-    { Ast.Expr.Qualified (module_name, nested_call) }
-  | functor_elem = located(functorr);
-    { Ast.Expr.Unqualified functor_elem } 
+functor_label:
+  | module_name = located(IDENT); MODULE_SEPARATOR; remaining = functor_label;
+    { let (prefix, name) = remaining in (module_name :: prefix, name) }
+  | name = located(IDENT);
+    { [], name }
+  | name = located(LITERAL_ATOM);
+    { [], name }
   ;
 
-maybe_call:
-  | EXPRESSION_COMMENT; call;
+maybe_functor:
+  | EXPRESSION_COMMENT; functorr;
   { None }
-  | located(call)
+  | located(functorr)
   { Some $1 }
   ;
 
 declaration_:
   | functor_elem = functorr; DOT
     { Ast.ParserClause.Declaration {head = functor_elem; body = []}}
-  | functor_elem = functorr; HOLDS; statements = separated_nonempty_list(COMMA, maybe_call); DOT
+  | functor_elem = functorr; HOLDS; statements = separated_nonempty_list(COMMA, maybe_functor); DOT
     { Ast.ParserClause.Declaration { head = functor_elem; body = statements |> List.concat_map Option.to_list } }
   ;
 
 declaration: located(declaration_) {$1}
 
 query_:
-  | queries = separated_nonempty_list(COMMA, located(call)); QUERY
+  | queries = separated_nonempty_list(COMMA, located(functorr)); QUERY
     { Ast.ParserClause.QueryConjunction queries }
   ;
 
@@ -91,9 +89,9 @@ program_fragment:
 
 directive_:
   (* TODO: add location to the functorr here *)
-  | HOLDS; functor_elem = functorr; DOT
+  | HOLDS; functor_elem = located(functorr); DOT
     { Ast.ParserClause.Directive (functor_elem, []) }
-  | HOLDS; functor_elem = functorr; DIRECTIVE_LEFT_DELIM; body = program_fragment; DOT
+  | HOLDS; functor_elem = located(functorr); DIRECTIVE_LEFT_DELIM; body = program_fragment; DOT
     { Ast.ParserClause.Directive (functor_elem, body) }
   ;
 

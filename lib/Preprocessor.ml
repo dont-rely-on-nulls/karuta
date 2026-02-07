@@ -1,23 +1,21 @@
 let rename_arg ({ loc; _ } as expr : Ast.Expr.t) (counter : int) :
-    Ast.Expr.call Location.with_location =
+    Ast.Expr.func Location.with_location =
   let open Ast in
   let new_var = Location.add_loc (Expr.Variable (string_of_int counter)) loc in
   {
     content =
-      Expr.Qualified
-        ( { content = "karuta"; loc },
-          Expr.Unqualified
-            {
-              content = { name = "eq"; elements = [ new_var; expr ]; arity = 2 };
-              loc;
-            } );
+      {
+        name = ([ { content = "karuta"; loc } ], { content = "eq"; loc });
+        elements = [ new_var; expr ];
+        arity = 2;
+      };
     loc;
   }
 
 let compare_func (f1 : Ast.Expr.func) (f2 : Ast.Expr.func) : int =
   Ast.Clause.compare_head
-    { name = f1.name; arity = f1.arity }
-    { name = f2.name; arity = f2.arity }
+    { name = Ast.Expr.extract_func_label f1; arity = f1.arity }
+    { name = Ast.Expr.extract_func_label f2; arity = f2.arity }
 
 let compare_clauses (c1 : Ast.ParserClause.t) (c2 : Ast.ParserClause.t) : int =
   match (c1, c2) with
@@ -34,9 +32,9 @@ let canonical_order (l : Ast.Clause.t) (r : Ast.Clause.t) : int =
   | _, Directive _ -> 1
   | _ -> 0
 
-let decl_header ({ head = { name; arity; _ }; _ } : Ast.ParserClause.decl) :
+let decl_header ({ head = { arity; _ } as f; _ } : Ast.ParserClause.decl) :
     Ast.Clause.head =
-  { name; arity }
+  { name = Ast.Expr.extract_func_label f; arity }
 
 let rename_declaration
     ({ head = { elements; arity; _ }; body } : Ast.ParserClause.decl) :
@@ -68,16 +66,21 @@ let rec remove_comments (clause : Ast.ParserClause.t) :
     match call with
     | {
      content =
-       Expr.Qualified
-         ( { content = "karuta"; _ },
-           Expr.Unqualified { content = { Expr.name = "comment"; _ }; _ } );
+       Expr.Functor
+         { name = [ { content = "karuta"; _ } ], { content = "comment"; _ }; _ };
      _;
     } ->
         false
     | _ -> true
   in
   match clause with
-  | { content = ParserClause.Directive ({ name = "comment"; _ }, _); _ } -> None
+  | {
+   content =
+     ParserClause.Directive
+       ({ content = { name = [], { content = "comment"; _ }; _ }; _ }, _);
+   _;
+  } ->
+      None
   | { content = ParserClause.Directive (head, body); loc } ->
       Some
         {
@@ -85,12 +88,26 @@ let rec remove_comments (clause : Ast.ParserClause.t) :
             ParserClause.Directive (head, List.filter_map remove_comments body);
           loc;
         }
-  | { content = Declaration { head = { name = "comment"; _ }; _ }; _ } -> None
+  | {
+   content =
+     Declaration { head = { name = [], { content = "comment"; _ }; _ }; _ };
+   _;
+  } ->
+      None
   | { content = Declaration { head; body }; _ } as decl ->
       Some
         {
           decl with
-          content = Declaration { head; body = body |> List.filter non_comment };
+          content =
+            Declaration
+              {
+                head;
+                body =
+                  body
+                  |> List.filter
+                     @@ Fun.compose non_comment
+                          (Location.fmap (fun v -> Ast.Expr.Functor v));
+              };
         }
   | { content = QueryConjunction queries; loc } ->
       let filtered_queries =
@@ -122,7 +139,10 @@ let show_clauses (clauses : Ast.Clause.t list) : string =
 
 let check_empty_heads (clause : Ast.ParserClause.t) : Ast.ParserClause.t =
   match clause with
-  | { content = Declaration { head = { name = ""; _ }; _ }; loc } ->
+  | {
+   content = Declaration { head = { name = _, { content = ""; _ }; _ }; _ };
+   loc;
+  } ->
       Logger.error loc
         "You cannot have a query or declaration with an empty name";
       exit 1
@@ -143,10 +163,6 @@ let rec find_variables (element : Ast.Expr.base) : variable_set =
         S.empty more_elements
   | _ -> S.empty
 
-let rec func_of_call : Ast.Expr.call -> Ast.Expr.func = function
-  | Ast.Expr.Qualified (_, more) -> func_of_call more
-  | Ast.Expr.Unqualified func -> func.content
-
 let rec parser_to_compiler (clause : Ast.ParserClause.t) : Ast.Clause.t list =
   let open Location in
   let open Ast in
@@ -163,16 +179,14 @@ let rec parser_to_compiler (clause : Ast.ParserClause.t) : Ast.Clause.t list =
       ]
   | { content = QueryConjunction calls; loc } ->
       let folder set call =
-        S.union set
-          (find_variables
-          @@ Expr.Functor ((Fun.compose func_of_call strip_loc) call))
+        S.union set (find_variables @@ Expr.Functor (strip_loc call))
       in
       let variables = List.fold_left folder S.empty calls in
       let list_variables = S.to_list variables in
       let query_name = "" in
       let head : Expr.func =
         {
-          name = query_name;
+          name = ([], { content = query_name; loc });
           elements =
             List.map
               (fun var -> { content = Expr.Variable var; loc })

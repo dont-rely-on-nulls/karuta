@@ -2,7 +2,7 @@ module type EXPR = sig
   type t [@@deriving show]
   type base [@@deriving show]
   type func [@@deriving show]
-  type call [@@deriving show]
+  type func_label [@@deriving show]
 
   val extract_variable : t -> string
   val is_functor : t -> bool
@@ -18,11 +18,11 @@ module ClauseF (Expr : EXPR) = struct
     | MultiDeclaration of multi_declaration
     | Query of { name : string; arity : int; args : string list }
     (* TODO: we want to allow multiple bodies for each directive. *)
-    | Directive of Expr.func * t list
+    | Directive of Expr.func Location.with_location * t list
   [@@deriving show]
 
   and decl = {
-    body : Expr.call Location.with_location list;
+    body : Expr.func Location.with_location list;
     original_arg_list : Expr.t list;
   }
   [@@deriving show]
@@ -31,7 +31,11 @@ module ClauseF (Expr : EXPR) = struct
 end
 
 module Expr = struct
-  type func = { name : string; elements : t list; arity : int }
+  type func_label =
+    string Location.with_location list * string Location.with_location
+  [@@deriving show]
+
+  type func = { name : func_label; elements : t list; arity : int }
   [@@deriving show]
 
   and base =
@@ -44,22 +48,24 @@ module Expr = struct
 
   and t = base Location.with_location [@@deriving show]
 
-  (* TODO: we want to allow qualified atoms when declaring modules and signatures. *)
-  type call =
-    | Qualified of string Location.with_location * call
-    | Unqualified of func Location.with_location
-  [@@deriving show]
-
   let extract_variable : t -> string = function
     | { content = Variable name; _ } -> name
     | _ ->
         Logger.simply_error "Trying to extract a variable wrongly";
         exit 1
 
+  let extract_func_label : func -> string = function
+    | { name = [], name; _ } -> name.content
+    | { name = first_segment :: _, _; _ } ->
+        Logger.error first_segment.loc
+          "Expected functor to have an unqualified label";
+        exit 1
+
   let extract_functor_label : t -> string = function
-    | { content = Functor { name; _ }; _ } -> name
+    | { content = Functor f; _ } -> extract_func_label f
     | _ ->
-        Logger.simply_error "Trying to extract a variable wrongly";
+        Logger.simply_error
+          "Trying to extract a functor label out of a non-functor";
         exit 1
 
   let is_functor : t -> bool = function
@@ -70,13 +76,13 @@ end
 module ParserClauseF (Expr : EXPR) = struct
   type base =
     | Declaration of decl
-    | QueryConjunction of Expr.call Location.with_location list
-    | Directive of Expr.func * t list
+    | QueryConjunction of Expr.func Location.with_location list
+    | Directive of Expr.func Location.with_location * t list
   [@@deriving show]
 
   and t = base Location.with_location [@@deriving show]
 
-  and decl = { head : Expr.func; body : Expr.call Location.with_location list }
+  and decl = { head : Expr.func; body : Expr.func Location.with_location list }
   [@@deriving show]
 
   let is_decl : t -> bool = function

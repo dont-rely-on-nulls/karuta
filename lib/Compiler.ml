@@ -95,9 +95,10 @@ let rec compile_expr (expr : Ast.Expr.t) : Beam.Builder.Expr.t =
   | Variable var -> Builder.var var
   | Nil -> Builder.nil
   | Cons (h, t) -> Builder.cons (compile_expr h) (compile_expr t)
-  | Functor { name; arity; _ } when arity = 0 -> Builder.atom name
-  | Functor { name; elements; _ } ->
-      let name = Builder.atom name in
+  | Functor ({ arity; _ } as f) when arity = 0 ->
+      Builder.atom @@ Ast.Expr.extract_func_label f
+  | Functor ({ elements; _ } as f) ->
+      let name = Builder.atom @@ Ast.Expr.extract_func_label f in
       Builder.tuple (name :: List.map compile_expr elements)
   | Integer number -> Builder.int number
 
@@ -140,9 +141,7 @@ let compile_declaration_bodies
     let compile_single_body
         ({ content; _ } : Ast.Clause.decl Location.with_location) :
         Builder.Expr.t =
-      let find_variables call =
-        Preprocessor.find_variables (Functor (Preprocessor.func_of_call call))
-      in
+      let find_variables call = Preprocessor.find_variables (Functor call) in
       let vars =
         content.body
         |> List.map (Fun.compose find_variables Location.strip_loc)
@@ -155,12 +154,10 @@ let compile_declaration_bodies
         (* TODO: We should use locations when calling Beam helpers. They don't use
            locations yet, hence they are not being sent as arguments *)
         let make_function { content = call; loc } =
-          let { Ast.Expr.name; elements; arity } =
-            Preprocessor.func_of_call call
-          in
+          let { Ast.Expr.name; elements; arity } = call in
           let args = List.map compile_expr elements in
           match (name, arity) with
-          | "eq", 2 -> (
+          | ([], { content = "eq"; _ }), 2 -> (
               match args with
               | expr1 :: expr2 :: _ -> Ukanren.eq expr1 expr2
               | _ ->
@@ -168,7 +165,7 @@ let compile_declaration_bodies
                     "Mismatch between arity and length of elements in builtin \
                      'eq'";
                   exit 1)
-          | "nat", 1 -> (
+          | ([], { content = "nat"; _ }), 1 -> (
               match args with
               | expr1 :: _ -> Ukanren.nat expr1
               | _ ->
@@ -176,7 +173,11 @@ let compile_declaration_bodies
                     "Mismatch between arity and length of elements in builtin \
                      'nat'";
                   exit 1)
-          | _ -> Builder.call (Builder.atom name) args
+          | _ ->
+              (* TODO: handle namespacing *)
+              Builder.call
+                (Builder.atom @@ Ast.Expr.extract_func_label call)
+                args
         in
         content.body |> List.map make_function |> Ukanren.conj
       in
@@ -267,9 +268,13 @@ and compile_signature (loc : Location.location) (body : Ast.Clause.t list)
         exit 1
     | Directive
         ( {
-            name = "module";
-            arity = 2;
-            elements = [ module_name; module_signature ] as elements;
+            content =
+              {
+                name = [], { content = "module"; _ };
+                arity = 2;
+                elements = [ module_name; module_signature ] as elements;
+              };
+            _;
           },
           [] ) -> (
         all_atoms elements;
@@ -282,8 +287,9 @@ and compile_signature (loc : Location.location) (body : Ast.Clause.t list)
         match
           (Location.strip_loc module_name, Location.strip_loc module_signature)
         with
-        | ( Functor { name = module_name'; _ },
-            Functor { name = module_signature'; _ } ) -> (
+        | ( Functor { name = [], { content = module_name'; _ }; _ },
+            Functor { name = [], { content = module_signature'; _ }; _ } ) -> (
+            (* TODO: handle qualified names *)
             match BatMap.String.find_opt module_signature' acc.modules with
             | Some { content = PlainSignature payload; _ } ->
                 signature_happy_case module_name'
@@ -323,7 +329,15 @@ and compile_signature (loc : Location.location) (body : Ast.Clause.t list)
               "Inconsistency between all_atoms and pattern match";
             exit 1)
     | Directive
-        ( { name = "module"; arity = 1; elements = [ module_name ] },
+        ( {
+            content =
+              {
+                name = [], { content = "module"; _ };
+                arity = 1;
+                elements = [ module_name ];
+              };
+            _;
+          },
           inline_signature )
       when inline_signature != [] -> (
         all_atoms [ module_name ];
@@ -339,14 +353,22 @@ and compile_signature (loc : Location.location) (body : Ast.Clause.t list)
               compile_module_signature loc inline_signature compiler
             in
             signature_happy_case atom_module_name compiled_module_sig)
-    | Directive ({ name = "module"; _ }, _) ->
+    | Directive ({ content = { name = [], { content = "module"; _ }; _ }; _ }, _)
+      ->
         Logger.error next.loc
           "Module declarations in signatures must have exactly one name and \
            one signature.";
         exit 1
     | Directive
-        ( ({ name = "signature"; elements = signature_name :: _; _ } as
-           directive_head),
+        ( {
+            content =
+              {
+                name = [], { content = "signature"; _ };
+                elements = signature_name :: _;
+                _;
+              } as directive_head;
+            _;
+          },
           directive_body ) -> (
         let merge_function _ (lval : comptime Location.with_location option)
             (rval : signature Location.with_location option) =
@@ -381,6 +403,9 @@ and compile_signature (loc : Location.location) (body : Ast.Clause.t list)
               "If we reached this point, something is very wrong because \
                compile_directive should have blown up first.";
             exit 1)
+    | Directive ({ loc; content = { name = _ :: _, _; _ } }, _) ->
+        Logger.error loc "Directives in signatures cannot be qualified";
+        exit 1
     | def ->
         Logger.debug @@ Ast.Clause.show_base def;
         acc
@@ -394,10 +419,10 @@ and compile_signature (loc : Location.location) (body : Ast.Clause.t list)
   Location.add_loc compiled_sig loc
 
 and compile_directive (directive_loc : Location.location)
-    ({ name; elements; arity } : Ast.Expr.func) (body : Ast.Clause.t list)
+    ({ elements; arity; _ } as f : Ast.Expr.func) (body : Ast.Clause.t list)
     ({ env = { modules; _ } as env; _ } as compiler : t) : t =
   let _, _, _ = (elements, body, compiler) in
-  match (name, arity) with
+  match (Ast.Expr.extract_func_label f, arity) with
   | "module", 1 ->
       Logger.simply_unreachable "TODO";
       exit 1
@@ -406,12 +431,23 @@ and compile_directive (directive_loc : Location.location)
       | [
        {
          content =
-           Ast.Expr.Functor { name = module_name; elements = []; arity = 0 };
+           Ast.Expr.Functor
+             {
+               name = [], { content = module_name; _ };
+               elements = [];
+               arity = 0;
+             };
          loc = module_loc;
        };
        {
          content =
-           Ast.Expr.Functor { name = signature_name; elements = []; arity = 0 };
+           Ast.Expr.Functor
+             {
+               (* TODO: signature references can be qualified *)
+               name = [], { content = signature_name; _ };
+               elements = [];
+               arity = 0;
+             };
          loc = signature_loc;
        };
       ] -> (
@@ -469,7 +505,12 @@ and compile_directive (directive_loc : Location.location)
   | "signature", 1 -> (
       match elements with
       | [
-       { content = Ast.Expr.Functor { name; elements = []; arity = 0 }; loc };
+       {
+         content =
+           Ast.Expr.Functor
+             { name = [], { content = name; _ }; elements = []; arity = 0 };
+         loc;
+       };
       ] -> (
           match BatMap.String.find_opt name modules with
           | Some existing ->
@@ -518,8 +559,11 @@ and compile_directive (directive_loc : Location.location)
 and compile_clause (clause : Ast.Clause.t) (compiler : t) : t =
   (* TODO: handle location *)
   match clause.content with
-  | Directive (header, body) ->
-      compile_directive clause.loc header body compiler
+  | Directive ({ loc; content = { name = _ :: _, _; _ } }, _) ->
+      Logger.error loc "Directives cannot be qualified";
+      exit 1
+  | Directive ({ content = header; loc }, body) ->
+      compile_directive loc header body compiler
   | MultiDeclaration (header, first, rest) ->
       let open Location in
       compile_multi_declaration
