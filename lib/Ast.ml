@@ -5,6 +5,7 @@ module type EXPR = sig
   type func_label [@@deriving show]
 
   val extract_variable : t -> string
+  val extract_unqualified_atom : t -> string
   val is_functor : t -> bool
 end
 
@@ -66,6 +67,16 @@ module Expr = struct
     | _ ->
         Logger.simply_error
           "Trying to extract a functor label out of a non-functor";
+        exit 1
+
+  let extract_unqualified_atom : t -> string = function
+    | { content = Functor { name = [], unqualified_name; _ }; _ } ->
+        unqualified_name.content
+    | { content = Functor { name = _ :: _, _; _ }; loc } ->
+        Logger.error loc "Expected unqualified atom (and it is qualified)";
+        exit 1
+    | { loc; _ } ->
+        Logger.error loc "Expected unqualified atom";
         exit 1
 
   let is_functor : t -> bool = function

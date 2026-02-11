@@ -40,6 +40,8 @@ and signature =
 type compiled_module = (comptime, Ast.Clause.multi_declaration) module_t
 and comptime = Module of compiled_module | Signature of signature
 
+type mod_sig_env = comptime Location.with_location BatMap.String.t
+
 type t = {
   header : forms;
   output : forms;
@@ -185,6 +187,90 @@ let compile_declaration_bodies
     in
     clauses |> List.map compile_single_body |> Ukanren.disj
 
+module Lookup = struct
+  type mode = Safe | Unsafe
+
+  let rec lookup_mod_sig (parent : t option) (env : mod_sig_env)
+      (names : string Location.with_location list) =
+    let rec lookup_mod_sig_qualified (rest : string Location.with_location list)
+        (value : comptime Location.with_location) =
+      match rest with
+      | [] -> value
+      | qualifier :: more -> (
+          match value with
+          | { content = Module { modules; _ }; _ } -> (
+              match BatMap.String.find_opt qualifier.content modules with
+              | None ->
+                  Logger.error qualifier.loc "Undefined qualifier";
+                  exit 1
+              | Some env -> lookup_mod_sig_qualified more env)
+          | { content = Signature _; loc = sig_loc } ->
+              Logger.error qualifier.loc
+                "Qualifiers reference signature instead of module";
+              Logger.error sig_loc "Reference is here";
+              exit 1)
+    in
+    match names with
+    | [] ->
+        Logger.simply_unreachable "";
+        exit 1
+    | first :: rest -> (
+        match BatMap.String.find_opt first.content env with
+        | None -> (
+            match parent with
+            | Some parent ->
+                lookup_mod_sig parent.parent parent.env.modules (first :: rest)
+            | None ->
+                Logger.error first.loc "Undefined in current scope";
+                exit 1)
+        | Some value -> lookup_mod_sig_qualified rest value)
+
+  (* TODO: Supress log levels to avoid reporting false negatives to the user
+     These functions can report their own errors, but they don't know when to exit 1*)
+
+  let signature ({ parent; env; _ } : t)
+      ((qualifiers, unqualified_name) : Ast.Expr.func_label) : signature option
+      =
+    match
+      lookup_mod_sig parent env.modules
+        (List.append qualifiers [ unqualified_name ])
+    with
+    | { content = Module _; loc } ->
+        Logger.error unqualified_name.loc "Found module instead of signature";
+        Logger.error loc "Module defined here";
+        None
+    | { content = Signature signature; _ } -> Some signature
+
+  let m0dule ({ parent; env; _ } : t)
+      ((qualifiers, unqualified_name) : Ast.Expr.func_label) :
+      compiled_module option =
+    match
+      lookup_mod_sig parent env.modules
+        (List.append qualifiers [ unqualified_name ])
+    with
+    | { content = Module module'; _ } -> Some module'
+    | { content = Signature _; loc } ->
+        Logger.error unqualified_name.loc "Found signature instead of module";
+        Logger.error loc "Signature defined here";
+        None
+
+  let predicate ({ parent; env; _ } : t)
+      ((qualifiers, { content = name; loc }) : Ast.Expr.func_label)
+      (arity : int) : Ast.Clause.multi_declaration option =
+    match lookup_mod_sig parent env.modules qualifiers with
+    | { content = Module comp_module; _ } -> (
+        let open Ast.Clause in
+        match PredicateMap.find_opt { name; arity } comp_module.predicates with
+        | None ->
+            Logger.error loc "Undefined predicate";
+            None
+        | Some predicate -> Some predicate)
+    | { content = Signature _; loc = sig_loc } ->
+        Logger.error loc "Qualifiers reference signature instead of module";
+        Logger.error sig_loc "Reference is here";
+        None
+end
+
 let rec compile ((body, compiler) : Ast.Clause.t list * t) : Form.t FT.t =
   let { output; header; _ } = compile_step (body, compiler) in
   FT.append header output
@@ -278,27 +364,25 @@ and compile_signature (loc : Location.location) (body : Ast.Clause.t list)
           },
           [] ) -> (
         all_atoms elements;
+        let module_name = Ast.Expr.extract_unqualified_atom module_name in
         let report_module_as_signature sig_loc module_loc =
           Logger.error sig_loc
             "This name does not actually refer to a signature.";
           Logger.error module_loc "Definition in scope.";
           exit 1
         in
-        match
-          (Location.strip_loc module_name, Location.strip_loc module_signature)
-        with
-        | ( Functor { name = [], { content = module_name'; _ }; _ },
-            Functor { name = [], { content = module_signature'; _ }; _ } ) -> (
+        match Location.strip_loc module_signature with
+        | Functor { name = [], { content = module_signature'; _ }; _ } -> (
             (* TODO: handle qualified names *)
             match BatMap.String.find_opt module_signature' acc.modules with
             | Some { content = PlainSignature payload; _ } ->
-                signature_happy_case module_name'
+                signature_happy_case module_name
                 @@ Location.add_loc
                      (ModuleSignature (ascribed_signature_to_module payload))
                      next.loc
             | Some { content = Abstract; _ } ->
                 (* TODO: handle this correctly *)
-                signature_happy_case module_name'
+                signature_happy_case module_name
                 @@ Location.add_loc
                      (ModuleSignature
                         (ascribed_signature_to_module
@@ -314,7 +398,7 @@ and compile_signature (loc : Location.location) (body : Ast.Clause.t list)
                 | Some
                     { content = Signature (PlainSignature _ as outer_sig); loc }
                 | Some { content = Signature (Abstract as outer_sig); loc } ->
-                    signature_happy_case module_name'
+                    signature_happy_case module_name
                     @@ Location.add_loc outer_sig loc
                 | Some { loc = outer; content = Signature (ModuleSignature _) }
                 | Some { loc = outer; content = Module _ } ->
