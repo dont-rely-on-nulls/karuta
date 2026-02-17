@@ -50,19 +50,18 @@ let bind f (p : ('a, 'e) parser) (state : parser_state) =
 
 open BatSubstring
 
-type void = []
-
 let stride previous current = size previous - size current
 
 let horizontal_whitespace :
-    (unit, [ `ExpectedHorizontalWhitespace of Location.t ]) parser =
+      'e.
+      (unit, ([> `ExpectedHorizontalWhitespace of Location.t ] as 'e)) parser =
  fun { remaining = current; loc } ->
   let remaining = dropl (function ' ' | '\t' -> true | _ -> false) current in
   match stride current remaining with
   | 0 -> Error (`ExpectedHorizontalWhitespace loc)
   | dropped -> Ok ((), { remaining; loc = Location.step dropped loc })
 
-let newline : (unit, [ `ExpectedNewline of Location.t ]) parser =
+let newline : 'e. (unit, ([> `ExpectedNewline of Location.t ] as 'e)) parser =
  fun { remaining = current; loc } ->
   match
     if is_prefix "\n" current then Some 1
@@ -75,9 +74,12 @@ let newline : (unit, [ `ExpectedNewline of Location.t ]) parser =
   | None -> Error (`ExpectedNewline loc)
 
 let horizontal :
-    ( unit,
-      [ `UnexpectedEOF of Location.t | `UnexpectedNewline of Location.t ] )
-    parser =
+      'e.
+      ( unit,
+        ([> `UnexpectedEOF of Location.t | `UnexpectedNewline of Location.t ]
+         as
+         'e) )
+      parser =
  fun { remaining; loc } ->
   match first remaining with
   | None -> Error (`UnexpectedEOF loc)
@@ -85,7 +87,7 @@ let horizontal :
   | Some _ ->
       Ok ((), { remaining = triml 1 remaining; loc = Location.step 1 loc })
 
-let rec skip_whitespace : (unit, void) parser =
+let rec skip_whitespace : 'e. (unit, 'e) parser =
  fun state ->
   match horizontal_whitespace state with
   | Ok (_, state) -> skip_whitespace state
@@ -95,10 +97,13 @@ let rec skip_whitespace : (unit, void) parser =
       | Error (`ExpectedNewline _) -> Ok ((), state))
 
 let variable :
-    ( string Location.with_location,
-      [ `ExpectedUppercaseOrUnderscore of Location.t
-      | `UnexpectedEOF of Location.t ] )
-    parser =
+      'e.
+      ( string Location.with_location,
+        ([> `ExpectedUppercaseOrUnderscore of Location.t
+         | `UnexpectedEOF of Location.t ]
+         as
+         'e) )
+      parser =
  fun { remaining = current; loc } ->
   let variable_start = function
     | '_' -> true
@@ -119,24 +124,30 @@ let variable :
   | Some _ -> Error (`ExpectedUppercaseOrUnderscore loc)
 
 let integer :
-    ( int Location.with_location,
-      [ `ExpectedInteger of Location.t | `UnexpectedEOF of Location.t ] )
-    parser =
+      'e.
+      ( int Location.with_location,
+        ([> `NotADigit of Location.t | `UnexpectedEOF of Location.t ] as 'e) )
+      parser =
  fun ({ remaining = current; loc } as state) ->
   let positive_integer ((), { remaining = current; loc = after_minus }) =
-    let digits, remaining = splitl BatChar.is_digit current in
-    let endl = Location.step (stride current remaining) after_minus in
-    Ok
-      ( Location.add_loc
-          (digits |> to_string |> int_of_string)
-          { startl = loc; endl },
-        { remaining; loc = endl } )
+    match size current with
+    | 0 -> Error (`UnexpectedEOF after_minus)
+    | _ -> (
+        let digits, remaining = splitl BatChar.is_digit current in
+        let endl = Location.step (stride current remaining) after_minus in
+        match to_string digits with
+        | "" -> Error (`NotADigit after_minus)
+        | digits ->
+            Ok
+              ( Location.add_loc (int_of_string digits) { startl = loc; endl },
+                { remaining; loc = endl } ))
   in
   match first current with
   | Some '-' -> (
       match bind positive_integer horizontal state with
       | Ok (result, next_state) -> Ok (Location.fmap Int.neg result, next_state)
-      | Error (`UnexpectedNewline endl | `UnexpectedEOF endl) ->
+      | Error (`NotADigit _ | `UnexpectedEOF _) as err -> err
+      | Error (`UnexpectedNewline endl) ->
           Logger.unreachable { startl = loc; endl }
             "This should never happen since we already saw the minus character \
              at the start of the state";
@@ -144,7 +155,8 @@ let integer :
   | Some _ -> positive_integer ((), state)
   | None -> Error (`UnexpectedEOF loc)
 
-let parse_file : (Ast.ParserClause.t list, 'e) parser = fun _ -> failwith "TODO"
+let parse_file : 'e. (Ast.ParserClause.t list, 'e) parser =
+ fun _ -> failwith "TODO"
 
 let parse' (filepath : string) (source : string) =
   match
