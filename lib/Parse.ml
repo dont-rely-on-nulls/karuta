@@ -45,8 +45,7 @@ let parse (filepath : string) : Ast.ParserClause.t list =
 type parser_state = { remaining : BatSubstring.t; loc : Location.t }
 type ('a, 'e) parser = parser_state -> ('a * parser_state, 'e) result
 
-let bind f (p : ('a, 'e) parser) (state : parser_state) =
-  match p state with Error _ as error -> error | Ok r -> f r
+let ( @> ) prefix suffix state = Result.bind (prefix state) suffix
 
 open BatSubstring
 
@@ -87,6 +86,30 @@ let horizontal :
   | Some _ ->
       Ok ((), { remaining = triml 1 remaining; loc = Location.step 1 loc })
 
+let one c { remaining; loc } =
+  match first remaining with
+  | None -> Error (`UnexpectedEOF loc)
+  | Some found when found = c ->
+      Ok
+        ( (),
+          {
+            remaining = triml 1 remaining;
+            loc =
+              (Location.step 1 loc |> if c = '\n' then Location.jump else Fun.id);
+          } )
+  | Some _ -> Error (`WrongCharacter loc)
+
+let colon = one ':'
+let single_quote = one '\''
+let comma = one ','
+let period = one '.'
+let pipe = one '|'
+let left_bracket = one '['
+let right_bracket = one ']'
+let left_curly_brace = one '{'
+let right_curly_brace = one '}'
+let empty state = Ok ((), state)
+
 let rec skip_whitespace : 'e. (unit, 'e) parser =
  fun state ->
   match horizontal_whitespace state with
@@ -96,6 +119,28 @@ let rec skip_whitespace : 'e. (unit, 'e) parser =
       | Ok (_, state) -> skip_whitespace state
       | Error (`ExpectedNewline _) -> Ok ((), state))
 
+let ident_like is_start is_character fallthrough { remaining = current; loc } =
+  match first current with
+  | None -> Error (`UnexpectedEOF loc)
+  | Some c when is_start c ->
+      let atom, remaining = splitl is_character current in
+      let next_loc = Location.step (stride current remaining) loc in
+      Ok
+        ( Location.add_loc (to_string atom) { startl = loc; endl = next_loc },
+          { remaining; loc = next_loc } )
+  | Some _ -> Error (fallthrough loc)
+
+let atom :
+      'e.
+      ( string Location.with_location,
+        ([> `UnexpectedEOF of Location.t | `ExpectedLowercase of Location.t ]
+         as
+         'e) )
+      parser =
+  ident_like BatChar.is_lowercase
+    (fun c -> BatChar.is_letter c || BatChar.is_digit c || c = '_' || c = '-')
+    (fun loc -> `ExpectedLowercase loc)
+
 let variable :
       'e.
       ( string Location.with_location,
@@ -104,24 +149,35 @@ let variable :
          as
          'e) )
       parser =
+  ident_like
+    (function
+      | '_' -> true | c when BatChar.is_uppercase c -> true | _ -> false)
+    (fun c -> BatChar.is_letter c || BatChar.is_digit c || c = '_')
+    (fun loc -> `ExpectedUppercaseOrUnderscore loc)
+
+let quoted_atom :
+      'e.
+      ( string Location.with_location,
+        ([> `UnexpectedEOF of Location.t
+         | `ExpectedSingleQuote of Location.t
+         | `WrongCharacter of Location.t ]
+         as
+         'e) )
+      parser =
  fun { remaining = current; loc } ->
-  let variable_start = function
-    | '_' -> true
-    | c when BatChar.is_uppercase c -> true
-    | _ -> false
-  in
-  let variable_character c =
-    BatChar.is_letter c || BatChar.is_digit c || c = '_'
-  in
-  match first current with
-  | None -> Error (`UnexpectedEOF loc)
-  | Some c when variable_start c ->
-      let variable, remaining = splitl variable_character current in
+  match getc current with
+  | Some ('\'', remaining) ->
+      let atom_name, remaining =
+        splitl
+          (function '\'' -> true | c when c <> '\n' -> true | _ -> false)
+          remaining
+      in
       let next_loc = Location.step (stride current remaining) loc in
-      Ok
-        ( Location.add_loc (to_string variable) { startl = loc; endl = next_loc },
-          { remaining; loc = next_loc } )
-  | Some _ -> Error (`ExpectedUppercaseOrUnderscore loc)
+      { remaining; loc = next_loc }
+      |> single_quote @> fun ((), ({ loc = endl; _ } as state)) ->
+         Ok
+           (Location.add_loc (to_string atom_name) { startl = loc; endl }, state)
+  | Some _ | None -> Error (`ExpectedSingleQuote loc)
 
 let integer :
       'e.
@@ -144,7 +200,7 @@ let integer :
   in
   match first current with
   | Some '-' -> (
-      match bind positive_integer horizontal state with
+      match state |> horizontal @> positive_integer with
       | Ok (result, next_state) -> Ok (Location.fmap Int.neg result, next_state)
       | Error (`NotADigit _ | `UnexpectedEOF _) as err -> err
       | Error (`UnexpectedNewline endl) ->
@@ -154,6 +210,33 @@ let integer :
           exit 1)
   | Some _ -> positive_integer ((), state)
   | None -> Error (`UnexpectedEOF loc)
+
+let list_of :
+      'a 'e.
+      (unit, 'e) parser ->
+      (unit, 'e) parser ->
+      (unit, 'e) parser ->
+      ('a, 'e) parser ->
+      ('a BatFingerTree.t, 'e) parser =
+ fun start_delim separator end_delim item ->
+  start_delim @> fun ((), after_start) ->
+  after_start
+  |>
+  let open BatFingerTree in
+  (* TODO: This is too greedy. Rethink the grammar. *)
+  let rec loop acc =
+    item @> fun (elem, state) ->
+    let acc = BatFingerTree.snoc acc elem in
+    match separator state with
+    | Error _ -> state |> end_delim @> fun ((), state) -> Ok (acc, state)
+    | Ok ((), state) -> state |> loop acc
+  in
+  loop empty
+
+(*
+   let func_label : 'e. (Ast.Expr.func_label, 'e) parser =
+     list_of empty colon empty
+*)
 
 let parse_file : 'e. (Ast.ParserClause.t list, 'e) parser =
  fun _ -> failwith "TODO"
