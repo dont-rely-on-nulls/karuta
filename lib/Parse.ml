@@ -45,7 +45,57 @@ let parse (filepath : string) : Ast.ParserClause.t list =
 type parser_state = { remaining : BatSubstring.t; loc : Location.t }
 type ('a, 'e) parser = parser_state -> ('a * parser_state, 'e) result
 
-let ( @> ) prefix suffix state = Result.bind (prefix state) suffix
+let ( @> ) : 'a 'b 'c. ('a -> 'b) -> ('b -> 'c) -> 'a -> 'c =
+ fun l r -> Fun.compose r l
+
+let ( @>> ) :
+      'a 'b 'c 'e.
+      ('a -> ('b, 'e) result) ->
+      ('b -> ('c, 'e) result) ->
+      'a ->
+      ('c, 'e) result =
+ fun prefix suffix state -> Result.bind (prefix state) suffix
+
+let replace :
+      'a 's 'b 'e. ('a -> 'b) -> ('a * 's, 'e) result -> ('b * 's, 'e) result =
+ fun f -> Result.map (fun (a, s) -> (f a, s))
+
+let just_state : 'a 'b 'e. ('a * 'b, 'e) result -> ('b, 'e) result =
+ fun r -> Result.map (fun (_, s) -> s) r
+
+let ifte :
+      'a 'b 'c 'et 'ec.
+      ('a -> ('b, 'et) result) ->
+      ('b -> ('c, 'ec) result) ->
+      ('a -> ('c, 'ec) result) ->
+      'a ->
+      ('c, 'ec) result =
+ fun test consequent alternative state ->
+  state
+  |> test @> Result.fold ~ok:consequent ~error:(fun _ -> alternative state)
+
+let ( @|| ) l r = ifte l Result.ok r
+let ( @&& ) l r = l @> just_state @>> r
+let succeed : 'e. (unit, 'e) parser = fun state -> Ok ((), state)
+
+let is_not :
+      'a 'errin 'errout.
+      ('a, 'errin) parser ->
+      ('a -> Location.location -> 'errout) ->
+      (unit, 'errout) parser =
+ fun p handler ({ loc = startl; _ } as state) ->
+  ifte p
+    (fun (r, { loc = endl; _ }) -> Error (handler r { startl; endl }))
+    succeed state
+
+let is : 'a 'e. ('a, 'e) parser -> ('a, 'e) parser =
+ fun p state -> state |> p @>> fun (r, _) -> Ok (r, state)
+
+let mapl f (a, b) = (f a, b)
+
+let maybe : 'a 'el 'er. ('a, 'el) parser -> ('a option, 'er) parser =
+ fun p ->
+  ifte p (mapl Option.some @> Result.ok) (succeed @> replace @@ Fun.const None)
 
 open BatSubstring
 
@@ -97,7 +147,7 @@ let one c { remaining; loc } =
             loc =
               (Location.step 1 loc |> if c = '\n' then Location.jump else Fun.id);
           } )
-  | Some _ -> Error (`WrongCharacter loc)
+  | Some _ -> Error (`WrongCharacter (loc, c))
 
 let colon = one ':'
 let single_quote = one '\''
@@ -108,7 +158,6 @@ let left_bracket = one '['
 let right_bracket = one ']'
 let left_curly_brace = one '{'
 let right_curly_brace = one '}'
-let empty state = Ok ((), state)
 
 let rec skip_whitespace : 'e. (unit, 'e) parser =
  fun state ->
@@ -158,9 +207,7 @@ let variable :
 let quoted_atom :
       'e.
       ( string Location.with_location,
-        ([> `UnexpectedEOF of Location.t
-         | `ExpectedSingleQuote of Location.t
-         | `WrongCharacter of Location.t ]
+        ([> `UnexpectedEOF of Location.t | `WrongCharacter of Location.t * char ]
          as
          'e) )
       parser =
@@ -174,10 +221,10 @@ let quoted_atom :
       in
       let next_loc = Location.step (stride current remaining) loc in
       { remaining; loc = next_loc }
-      |> single_quote @> fun ((), ({ loc = endl; _ } as state)) ->
+      |> single_quote @>> fun ((), ({ loc = endl; _ } as state)) ->
          Ok
            (Location.add_loc (to_string atom_name) { startl = loc; endl }, state)
-  | Some _ | None -> Error (`ExpectedSingleQuote loc)
+  | Some _ | None -> Error (`WrongCharacter (loc, '\''))
 
 let integer :
       'e.
@@ -200,7 +247,7 @@ let integer :
   in
   match first current with
   | Some '-' -> (
-      match state |> horizontal @> positive_integer with
+      match state |> horizontal @>> positive_integer with
       | Ok (result, next_state) -> Ok (Location.fmap Int.neg result, next_state)
       | Error (`NotADigit _ | `UnexpectedEOF _) as err -> err
       | Error (`UnexpectedNewline endl) ->
@@ -213,30 +260,49 @@ let integer :
 
 let list_of :
       'a 'e.
+      ?allow_trailing:bool ->
       (unit, 'e) parser ->
       (unit, 'e) parser ->
       (unit, 'e) parser ->
       ('a, 'e) parser ->
       ('a BatFingerTree.t, 'e) parser =
- fun start_delim separator end_delim item ->
-  start_delim @> fun ((), after_start) ->
-  after_start
-  |>
+ fun ?(allow_trailing = false) start_delim separator end_delim item ->
   let open BatFingerTree in
-  (* TODO: This is too greedy. Rethink the grammar. *)
-  let rec loop acc =
-    item @> fun (elem, state) ->
-    let acc = BatFingerTree.snoc acc elem in
-    match separator state with
-    | Error _ -> state |> end_delim @> fun ((), state) -> Ok (acc, state)
-    | Ok ((), state) -> state |> loop acc
+  let trailing =
+    if allow_trailing then maybe separator @&& succeed else succeed
   in
-  loop empty
+  start_delim
+  @&& ifte end_delim (mapl (Fun.const empty) @> Result.ok)
+  @@ item @> replace singleton
+  @>>
+  let rec loop (acc, state) =
+    state
+    |> ifte
+         (separator @&& item @> replace (snoc acc))
+         loop
+         (trailing @&& end_delim @> replace @@ Fun.const acc)
+  in
+  loop
 
-(*
-   let func_label : 'e. (Ast.Expr.func_label, 'e) parser =
-     list_of empty colon empty
-*)
+let func_label :
+      'e.
+      ( Ast.Expr.func_label,
+        ([> `UnexpectedEOF of Location.t
+         | `ExpectedLowercase of Location.t
+         | `WrongCharacter of Location.t * char ]
+         as
+         'e) )
+      parser =
+  list_of succeed colon
+    (is @@ colon @&& single_quote @|| atom
+    @&& is_not colon (fun () { Location.startl; _ } ->
+            `WrongCharacter (startl, ':')))
+    atom
+  @> replace BatFingerTree.to_list
+  @>> fun (qualifiers, state) ->
+  state
+  |> (quoted_atom @|| atom) @> replace
+     @@ fun label_name -> (qualifiers, label_name)
 
 let parse_file : 'e. (Ast.ParserClause.t list, 'e) parser =
  fun _ -> failwith "TODO"
