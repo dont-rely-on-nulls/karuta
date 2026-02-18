@@ -60,9 +60,6 @@ let replace :
       'a 's 'b 'e. ('a -> 'b) -> ('a * 's, 'e) result -> ('b * 's, 'e) result =
  fun f -> Result.map (fun (a, s) -> (f a, s))
 
-let just_state : 'a 'b 'e. ('a * 'b, 'e) result -> ('b, 'e) result =
- fun r -> Result.map (fun (_, s) -> s) r
-
 let ifte :
       'a 'b 'c 'et 'ec.
       ('a -> ('b, 'et) result) ->
@@ -75,8 +72,9 @@ let ifte :
   |> test @> Result.fold ~ok:consequent ~error:(fun _ -> alternative state)
 
 let ( @|| ) l r = ifte l Result.ok r
-let ( @&& ) l r = l @> just_state @>> r
-let succeed : 'e. (unit, 'e) parser = fun state -> Ok ((), state)
+let ( @&& ) l r = l @> Result.map snd @>> r
+let return : 'a 'e. 'a -> ('a, 'e) parser = fun v state -> Ok (v, state)
+let succeed : 'e. (unit, 'e) parser = return ()
 
 let is_not :
       'a 'errin 'errout.
@@ -92,14 +90,22 @@ let is : 'a 'e. ('a, 'e) parser -> ('a, 'e) parser =
  fun p state -> state |> p @>> fun (r, _) -> Ok (r, state)
 
 let mapl f (a, b) = (f a, b)
+let injl v a = (v, a)
 
 let maybe : 'a 'el 'er. ('a, 'el) parser -> ('a option, 'er) parser =
- fun p ->
-  ifte p (mapl Option.some @> Result.ok) (succeed @> replace @@ Fun.const None)
+ fun p -> ifte p (mapl Option.some @> Result.ok) (return None)
 
 open BatSubstring
 
 let stride previous current = size previous - size current
+
+let some : 'e. (unit, ([> `UnexpectedEOF of Location.t ] as 'e)) parser =
+  function
+  | { remaining; loc } -> (
+      match first remaining with
+      | None -> Error (`UnexpectedEOF loc)
+      | Some _ ->
+          Ok ((), { remaining = triml 1 remaining; loc = Location.step 1 loc }))
 
 let horizontal_whitespace :
       'e.
@@ -150,23 +156,26 @@ let one c { remaining; loc } =
   | Some _ -> Error (`WrongCharacter (loc, c))
 
 let colon = one ':'
+let percent = one '%'
+let hash = one '#'
 let single_quote = one '\''
 let comma = one ','
 let period = one '.'
 let pipe = one '|'
+let left_paren = one '('
+let right_paren = one ')'
 let left_bracket = one '['
 let right_bracket = one ']'
 let left_curly_brace = one '{'
 let right_curly_brace = one '}'
 
+let rec skip_line : 'e. (unit, 'e) parser =
+ fun state -> state |> newline @|| ifte some (snd @> skip_line) succeed
+
 let rec skip_whitespace : 'e. (unit, 'e) parser =
  fun state ->
-  match horizontal_whitespace state with
-  | Ok (_, state) -> skip_whitespace state
-  | Error (`ExpectedHorizontalWhitespace _) -> (
-      match newline state with
-      | Ok (_, state) -> skip_whitespace state
-      | Error (`ExpectedNewline _) -> Ok ((), state))
+  let loop = snd @> skip_whitespace in
+  state |> ifte horizontal_whitespace loop @@ ifte newline loop succeed
 
 let ident_like is_start is_character fallthrough { remaining = current; loc } =
   match first current with
@@ -261,12 +270,12 @@ let integer :
 let list_of :
       'a 'e.
       ?allow_trailing:bool ->
-      (unit, 'e) parser ->
-      (unit, 'e) parser ->
-      (unit, 'e) parser ->
+      start_delim:(unit, 'e) parser ->
+      separator:(unit, 'e) parser ->
+      end_delim:(unit, 'e) parser ->
       ('a, 'e) parser ->
       ('a BatFingerTree.t, 'e) parser =
- fun ?(allow_trailing = false) start_delim separator end_delim item ->
+ fun ?(allow_trailing = false) ~start_delim ~separator ~end_delim item ->
   let open BatFingerTree in
   let trailing =
     if allow_trailing then maybe separator @&& succeed else succeed
@@ -286,23 +295,122 @@ let list_of :
 
 let func_label :
       'e.
-      ( Ast.Expr.func_label,
+      ( Ast.Expr.func_label Location.with_location,
         ([> `UnexpectedEOF of Location.t
          | `ExpectedLowercase of Location.t
          | `WrongCharacter of Location.t * char ]
          as
          'e) )
       parser =
-  list_of succeed colon
-    (is @@ colon @&& single_quote @|| atom
-    @&& is_not colon (fun () { Location.startl; _ } ->
-            `WrongCharacter (startl, ':')))
-    atom
-  @> replace BatFingerTree.to_list
-  @>> fun (qualifiers, state) ->
+ fun ({ loc = startl; _ } as state) ->
   state
-  |> (quoted_atom @|| atom) @> replace
-     @@ fun label_name -> (qualifiers, label_name)
+  |> list_of ~start_delim:succeed ~separator:colon
+       ~end_delim:
+         (is @@ colon @&& single_quote @|| atom
+         @&& is_not colon (fun () { Location.startl; _ } ->
+                 `WrongCharacter (startl, ':')))
+       atom
+     @> replace BatFingerTree.to_list
+     @>> fun (qualifiers, state) ->
+     state
+     |> (quoted_atom @|| atom)
+        @>> fun (label_name, ({ loc = endl; _ } as state)) ->
+        Ok (Location.add_loc (qualifiers, label_name) { startl; endl }, state)
+
+type expr_errors =
+  [ `ExpectedLowercase of Location.t
+  | `UnexpectedEOF of Location.t
+  | `WrongCharacter of Location.t * char ]
+
+let rec expr : 'e. (Ast.Expr.t, ([> expr_errors ] as 'e)) parser =
+ fun state ->
+  state
+  |> skip_whitespace_and_comments
+     @&& ifte integer (mapl (Location.fmap Ast.Expr.integer) @> Result.ok)
+     @@ ifte variable (mapl (Location.fmap Ast.Expr.variable) @> Result.ok)
+     @@ ifte func (mapl (Location.fmap Ast.Expr.functorr) @> Result.ok)
+     @@ list
+
+and skip_whitespace_and_comments : 'e. (unit, ([> expr_errors ] as 'e)) parser =
+ fun state ->
+  state
+  |> skip_whitespace
+     @&& ifte percent (snd @> skip_line @&& skip_whitespace_and_comments)
+     @@ ifte (hash @&& percent)
+          (snd @> expr @&& skip_whitespace_and_comments)
+          succeed
+
+and list : 'e. (Ast.Expr.t, ([> expr_errors ] as 'e)) parser =
+ fun ({ loc = startl; _ } as state) ->
+  let prefix_elements =
+    list_of ~start_delim:left_bracket
+      ~separator:(skip_whitespace_and_comments @&& comma)
+      ~end_delim:(skip_whitespace_and_comments @&& is right_bracket @|| is pipe)
+    @@ skip_whitespace_and_comments @&& expr
+  in
+  let build_cons startl endl prefix (tail : Ast.Expr.t) : Ast.Expr.t =
+    BatFingerTree.fold_right
+      (fun acc elem ->
+        Location.add_loc
+          (Ast.Expr.Cons (elem, acc))
+          { startl = elem.loc.startl; endl })
+      tail prefix
+    |> fun { loc; content } ->
+    { Location.content; loc = { startl; endl = loc.endl } }
+  in
+  let nil startl =
+    right_bracket @&& fun ({ loc = endl; _ } as state) ->
+    Ok
+      ( { Location.content = Ast.Expr.Nil; loc = { Location.startl; endl } },
+        state )
+  in
+  state
+  |> prefix_elements @>> fun (prefix, state) ->
+     if BatFingerTree.is_empty prefix then state |> right_bracket @&& nil startl
+     else
+       state
+       |> ifte pipe
+            (snd @> skip_whitespace_and_comments @&& expr
+            @>> fun (tail, state) ->
+            state
+            |> skip_whitespace_and_comments @&& right_bracket @>> snd
+               @> fun ({ loc = endl; _ } as state) ->
+               Ok (build_cons startl endl prefix tail, state))
+          @@ nil startl
+          @>> fun (tail, ({ loc = endl; _ } as state)) ->
+          Ok (build_cons startl endl prefix tail, state)
+
+and func :
+      'e.
+      (Ast.Expr.func Location.with_location, ([> expr_errors ] as 'e)) parser =
+ fun ({ loc = startl; _ } as state) ->
+  let single_element = skip_whitespace_and_comments @&& expr in
+  let karuta_elements =
+    list_of ~start_delim:left_bracket
+      ~separator:(skip_whitespace_and_comments @&& comma)
+      ~end_delim:(skip_whitespace_and_comments @&& right_bracket)
+    @@ single_element
+  in
+  let prolog_elements =
+    list_of ~start_delim:left_paren
+      ~separator:(skip_whitespace_and_comments @&& comma)
+      ~end_delim:(skip_whitespace_and_comments @&& right_paren)
+    @@ single_element
+  in
+  state
+  |> func_label @>> fun (label, state) ->
+     state
+     |> ifte
+          (is left_bracket @|| is left_paren)
+          (snd
+          @> (prolog_elements @|| karuta_elements)
+          @>> fun (args, ({ loc = endl; _ } as state)) ->
+          Ok
+            ( Location.add_loc
+                (Ast.Expr.func label.content (BatFingerTree.to_list args))
+                { startl; endl },
+              state ))
+          (injl (Location.fmap Ast.Expr.atom label) @> Result.ok)
 
 let parse_file : 'e. (Ast.ParserClause.t list, 'e) parser =
  fun _ -> failwith "TODO"

@@ -49,6 +49,15 @@ module Expr = struct
 
   and t = base Location.with_location [@@deriving show]
 
+  let atom : func_label -> func = fun name -> { name; elements = []; arity = 0 }
+
+  let func : func_label -> t list -> func =
+   fun name elements -> { name; elements; arity = List.length elements }
+
+  let functorr f = Functor f
+  let integer i = Integer i
+  let variable v = Variable v
+
   let extract_variable : t -> string = function
     | { content = Variable name; _ } -> name
     | _ ->
