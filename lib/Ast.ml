@@ -105,6 +105,10 @@ module ParserClauseF (Expr : EXPR) = struct
   and decl = { head : Expr.func; body : Expr.func Location.with_location list }
   [@@deriving show]
 
+  let query q = QueryConjunction q
+  let declaration d = Declaration d
+  let directive (header, body) = Directive (header, body)
+
   let is_decl : t -> bool = function
     | { content = Declaration _; _ } -> true
     | _ -> false

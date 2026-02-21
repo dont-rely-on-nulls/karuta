@@ -6,7 +6,7 @@ let parse : string -> Ast.ParserClause.t list attempt = function
   | str ->
       In_channel.with_open_text str @@ fun inc ->
       if in_channel_length inc = 0 then error @@ Error.EmptyFile str
-      else ok @@ Parse.parse str
+      else ok @@ Parse.parse' str (In_channel.input_all inc)
 
 let preprocess (filepath : string) :
     Ast.ParserClause.t list -> Ast.Clause.t list attempt = function
