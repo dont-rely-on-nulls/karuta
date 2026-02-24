@@ -49,6 +49,15 @@ module Expr = struct
 
   and t = base Location.with_location [@@deriving show]
 
+  let atom : func_label -> func = fun name -> { name; elements = []; arity = 0 }
+
+  let func : func_label -> t list -> func =
+   fun name elements -> { name; elements; arity = List.length elements }
+
+  let functorr f = Functor f
+  let integer i = Integer i
+  let variable v = Variable v
+
   let extract_variable : t -> string = function
     | { content = Variable name; _ } -> name
     | _ ->
@@ -95,6 +104,10 @@ module ParserClauseF (Expr : EXPR) = struct
 
   and decl = { head : Expr.func; body : Expr.func Location.with_location list }
   [@@deriving show]
+
+  let query q = QueryConjunction q
+  let declaration d = Declaration d
+  let directive (header, body) = Directive (header, body)
 
   let is_decl : t -> bool = function
     | { content = Declaration _; _ } -> true
