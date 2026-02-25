@@ -1,5 +1,10 @@
 % :- signature[a, b, c].
 
+:- module[b] {
+  another[A].
+  :- module[c] {}.
+}.
+
 :- signature[sig-a] {
   blah[whatever].
   % broken[whatever] :- false.
@@ -12,10 +17,11 @@
   :- signature[sig-b] {}.
 
   :- module[b] {
+    :- signature[sig-x] {}.
     more[_].
   }.
   :- signature[sig-c] {
-     :- module[whatever, sig-b].
+     :- module[whatever, b:sig-x].
   }.
   % :- module[c].
   % :- signature[sig-b].
