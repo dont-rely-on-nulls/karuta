@@ -1,3 +1,6 @@
+(* TODO: Something is wrong with the locations due to the parser. Investigate that. *)
+(* TODO: Rename this to Parser. Parse only bothers Lemos *)
+
 type parser_state = { remaining : BatSubstring.t; loc : Location.t }
 type ('a, 'e) parser = parser_state -> ('a * parser_state, 'e) result
 
@@ -419,7 +422,6 @@ let declaration :
 let rec parser_clause :
       'e. (Ast.ParserClause.t, ([> expr_errors ] as 'e)) parser =
  fun state ->
-  print_endline "Parsing a clause";
   state
   |> (ifte holds
         (snd @> skip_whitespace_and_comments @&& directive @> replace
