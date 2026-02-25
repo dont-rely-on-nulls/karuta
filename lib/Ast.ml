@@ -54,6 +54,9 @@ module Expr = struct
   let func : func_label -> t list -> func =
    fun name elements -> { name; elements; arity = List.length elements }
 
+  let func_label_of_string : string Location.with_location -> func_label =
+   fun s -> ([], s)
+
   let functorr f = Functor f
   let integer i = Integer i
   let variable v = Variable v
@@ -67,6 +70,7 @@ module Expr = struct
   let extract_func_label : func -> string = function
     | { name = [], name; _ } -> name.content
     | { name = first_segment :: _, _; _ } ->
+        Logger.simply_error first_segment.content;
         Logger.error first_segment.loc
           "Expected functor to have an unqualified label";
         exit 1

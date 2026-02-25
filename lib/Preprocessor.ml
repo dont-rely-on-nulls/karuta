@@ -109,6 +109,8 @@ let rec remove_comments (clause : Ast.ParserClause.t) :
                           (Location.fmap (fun v -> Ast.Expr.Functor v));
               };
         }
+  | { content = QueryConjunction [ _ ]; _ } as query -> Some query
+  | { content = QueryConjunction []; _ } -> None
   | { content = QueryConjunction queries; loc } ->
       let filtered_queries =
         List.map

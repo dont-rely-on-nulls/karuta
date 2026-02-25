@@ -159,7 +159,7 @@ let compile_declaration_bodies
           let { Ast.Expr.name; elements; arity } = call in
           let args = List.map compile_expr elements in
           match (name, arity) with
-          | ([], { content = "eq"; _ }), 2 -> (
+          | ([ { content = "karuta"; _ } ], { content = "eq"; _ }), 2 -> (
               match args with
               | expr1 :: expr2 :: _ -> Ukanren.eq expr1 expr2
               | _ ->
@@ -167,7 +167,7 @@ let compile_declaration_bodies
                     "Mismatch between arity and length of elements in builtin \
                      'eq'";
                   exit 1)
-          | ([], { content = "nat"; _ }), 1 -> (
+          | ([ { content = "karuta"; _ } ], { content = "nat"; _ }), 1 -> (
               match args with
               | expr1 :: _ -> Ukanren.nat expr1
               | _ ->
@@ -238,20 +238,21 @@ module Lookup = struct
             Logger.error first.loc "Undefined in current scope";
             `Undefined first)
 
-  let ancestors_of_compiler (compiler : t) =
+  (* TODO: Supress log levels to avoid reporting false negatives to the user
+     These functions can report their own errors, but they don't know when to exit 1*)
+
+  type scope = comptime Location.with_location BatMap.String.t BatLazyList.t
+
+  let ancestors_of_compiler (compiler : t) : scope =
     let open BatLazyList in
     unfold (Some compiler) (function
       | None -> None
       | Some { parent; env; _ } -> Some (env.modules, parent))
 
-  (* TODO: Supress log levels to avoid reporting false negatives to the user
-     These functions can report their own errors, but they don't know when to exit 1*)
-
-  let signature (compiler : t)
+  let signature (scope : scope)
       ((qualifiers, unqualified_name) : Ast.Expr.func_label) =
     match
-      lookup_mod_sig
-        (ancestors_of_compiler compiler)
+      lookup_mod_sig scope
         (List.append qualifiers [ unqualified_name ])
         comptime_select
     with
@@ -262,11 +263,10 @@ module Lookup = struct
     | `Ok { content = Signature found; loc } -> `Ok (Location.add_loc found loc)
     | (`Undefined _ | `UnexpectedSignature _) as other -> other
 
-  let m0dule (compiler : t)
+  let m0dule (scope : scope)
       ((qualifiers, unqualified_name) : Ast.Expr.func_label) =
     match
-      lookup_mod_sig
-        (ancestors_of_compiler compiler)
+      lookup_mod_sig scope
         (List.append qualifiers [ unqualified_name ])
         comptime_select
     with
@@ -278,12 +278,10 @@ module Lookup = struct
         `UnexpectedSignature (Location.add_loc signature loc)
     | (`Undefined _ | `UnexpectedSignature _) as other -> other
 
-  let predicate (compiler : t)
+  let predicate (scope : scope)
       ((qualifiers, ({ content = name; loc } as name_with_loc)) :
         Ast.Expr.func_label) (arity : int) =
-    match
-      lookup_mod_sig (ancestors_of_compiler compiler) qualifiers comptime_select
-    with
+    match lookup_mod_sig scope qualifiers comptime_select with
     | `Ok { content = Module comp_module; _ } -> (
         let open Ast.Clause in
         match PredicateMap.find_opt { name; arity } comp_module.predicates with
@@ -411,32 +409,31 @@ and compile_signature (loc : Location.location) (body : Ast.Clause.t list)
             (ModuleSignature (ascribed_signature_to_module payload))
             next.loc
         in
+
         match Location.strip_loc module_signature with
-        | Functor { name = (_, { content = module_signature'; _ }) as label; _ }
-          -> (
-            (* TODO: handle qualified names *)
-            match BatMap.String.find_opt module_signature' acc.modules with
-            | Some { content = PlainSignature payload; _ } ->
+        | Functor { name = label; _ } -> (
+            let scope : Lookup.scope = Lookup.ancestors_of_compiler compiler in
+            let comptime_value =
+              BatMap.String.map
+                (Location.fmap (fun s -> Signature s))
+                acc.modules
+            in
+            match
+              Lookup.signature (BatLazyList.cons comptime_value scope) label
+            with
+            | `Ok { content = PlainSignature payload; _ } ->
                 signature_happy_case module_name @@ module_of_plain payload
-            | Some { content = Abstract; _ } ->
+            | `Ok { content = Abstract; _ } ->
                 signature_happy_case module_name module_of_abstract
-            | Some { content = ModuleSignature _; loc } ->
-                report_module_as_signature next.loc loc
-            | None -> (
-                match Lookup.signature compiler label with
-                | `Ok { content = PlainSignature payload; _ } ->
-                    signature_happy_case module_name @@ module_of_plain payload
-                | `Ok { content = Abstract; _ } ->
-                    signature_happy_case module_name module_of_abstract
-                | `UnexpectedModule { loc = outer; _ }
-                | `Ok { content = ModuleSignature _; loc = outer } ->
-                    report_module_as_signature module_signature.loc outer
-                | `UnexpectedSignature _ -> exit 1
-                | `Undefined _ ->
-                    Logger.error module_signature.loc
-                      "Undefined signature name. Remember: the order matters \
-                       (for now 😉).";
-                    exit 1))
+            | `UnexpectedModule { loc = outer; _ }
+            | `Ok { content = ModuleSignature _; loc = outer } ->
+                report_module_as_signature module_signature.loc outer
+            | `UnexpectedSignature _ -> exit 1
+            | `Undefined _ ->
+                Logger.error module_signature.loc
+                  "Undefined signature name. Remember: the order matters (for \
+                   now 😉).";
+                exit 1)
         | _ ->
             Logger.unreachable next.loc
               "Inconsistency between all_atoms and pattern match";
@@ -536,9 +533,52 @@ and compile_directive (directive_loc : Location.location)
     ({ env = { modules; _ } as env; _ } as compiler : t) : t =
   let _, _, _ = (elements, body, compiler) in
   match (Ast.Expr.extract_func_label f, arity) with
-  | "module", 1 ->
-      Logger.simply_unreachable "TODO";
-      exit 1
+  | "module", 1 -> (
+      match elements with
+      | [
+       {
+         content =
+           Ast.Expr.Functor
+             {
+               name = ([], { content = module_name; _ }) as module_name';
+               elements = [];
+               arity = 0;
+             };
+         loc = module_loc;
+       };
+      ] -> (
+          let comptime_value = Lookup.ancestors_of_compiler compiler in
+          match Lookup.m0dule comptime_value module_name' with
+          | `Ok { loc; _ } | `UnexpectedSignature { loc; _ } ->
+              Logger.error module_loc "Failed to define module";
+              Logger.error loc
+                "There's already a module or signatures with the same name. \
+                 Modules and signatures share their scope.";
+              exit 1
+          | `Undefined _ ->
+              Logger.debug
+                "TODO: Deal with matching module implementation with provided \
+                 signature";
+              let compiled_module =
+                ( ( compiler |> initialize_from_parent module_name |> fun c ->
+                    compile_step (body, c) )
+                |> fun c -> c.env )
+                |> fun e -> Location.add_loc (Module e) directive_loc
+              in
+              {
+                compiler with
+                env =
+                  {
+                    env with
+                    modules =
+                      BatMap.String.add module_name compiled_module modules;
+                  };
+              })
+      | _ ->
+          Logger.unreachable directive_loc
+            "Somehow there is a mismatch between the expected arity and the \
+             actual arity.";
+          exit 1)
   | "module", 2 -> (
       match elements with
       | [
@@ -546,7 +586,7 @@ and compile_directive (directive_loc : Location.location)
          content =
            Ast.Expr.Functor
              {
-               name = [], { content = module_name; _ };
+               name = ([], { content = module_name; _ }) as module_name';
                elements = [];
                arity = 0;
              };
@@ -554,29 +594,22 @@ and compile_directive (directive_loc : Location.location)
        };
        {
          content =
-           Ast.Expr.Functor
-             {
-               (* TODO: signature references can be qualified *)
-               name = [], { content = signature_name; _ };
-               elements = [];
-               arity = 0;
-             };
-         loc = signature_loc;
+           Ast.Expr.Functor { name = signature_name; elements = []; arity = 0 };
+         _;
        };
       ] -> (
+          let comptime_value = Lookup.ancestors_of_compiler compiler in
           match
-            ( BatMap.String.find_opt module_name modules,
-              BatMap.String.find_opt signature_name modules )
+            ( Lookup.m0dule comptime_value module_name',
+              Lookup.signature comptime_value signature_name )
           with
-          | Some existing, _ ->
+          | `Ok { loc; _ }, _ | `UnexpectedSignature { loc; _ }, _ ->
               Logger.error module_loc "Failed to define module";
-              Logger.error existing.loc
-                "There's already a module or signature with the same name";
+              Logger.error loc
+                "There's already a module or signatures with the same name. \
+                 Modules and signatures share their scope.";
               exit 1
-          | None, None ->
-              Logger.error signature_loc "Failed to find named signature";
-              exit 1
-          | None, Some { content = Signature (PlainSignature _signature); _ } ->
+          | `Undefined _, `Ok { content = PlainSignature _signature; _ } ->
               Logger.debug
                 "TODO: Deal with matching module implementation with provided \
                  signature";
@@ -595,17 +628,26 @@ and compile_directive (directive_loc : Location.location)
                       BatMap.String.add module_name compiled_module modules;
                   };
               }
-          | None, Some { content = Signature Abstract; _ } ->
+          | `Undefined _, `Ok { content = Abstract; _ } ->
               Logger.unreachable directive_loc
                 "Found signature for module cannot be abstract";
               exit 1
-          | None, Some { content = Signature (ModuleSignature _); _ } ->
+          | `Undefined _, `Ok { content = ModuleSignature _; _ } ->
               Logger.unreachable directive_loc
                 "Found signature for module cannot be a module signature \
                  definition";
               exit 1
-          | None, Some { content = Module _; _ } ->
-              Logger.error directive_loc "Modules are not signatures";
+          | `Undefined _, `UnexpectedModule { loc; _ } ->
+              Logger.error loc "Modules are not signatures";
+              exit 1
+          | `Undefined _, `Undefined { loc; _ } ->
+              Logger.error loc
+                "This name is undefined when looking up for signatures";
+              exit 1
+          | `Undefined _, `UnexpectedSignature { loc; _ } ->
+              Logger.error loc
+                "You cannot inspect other signatures when qualifying \
+                 signatures. Only modules can be inspected.";
               exit 1)
       | [ { content = _; loc } ] ->
           Logger.error loc "Signature names must be atoms.";
@@ -676,6 +718,7 @@ and compile_clause (clause : Ast.Clause.t) (compiler : t) : t =
       Logger.error loc "Directives cannot be qualified";
       exit 1
   | Directive ({ content = header; loc }, body) ->
+      print_endline "Directives for some reason";
       compile_directive loc header body compiler
   | MultiDeclaration (header, first, rest) ->
       let open Location in

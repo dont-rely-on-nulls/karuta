@@ -175,6 +175,8 @@ module type API = sig
   val simply_unreachable : string -> unit
   val info : Location.location -> string -> unit
   val simply_info : string -> unit
+
+  (* TODO: Debug should receive location but location of THE SOURCE CODE OF THE COMPILER instead of Karuta source code. *)
   val debug : string -> unit
 end
 
