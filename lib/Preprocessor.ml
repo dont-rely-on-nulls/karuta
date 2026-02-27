@@ -85,7 +85,8 @@ let rec remove_comments (clause : Ast.ParserClause.t) :
       Some
         {
           content =
-            ParserClause.Directive (head, List.filter_map remove_comments body);
+            ParserClause.Directive
+              (head, List.map (List.filter_map remove_comments) body);
           loc;
         }
   | {
@@ -170,7 +171,7 @@ let rec parser_to_compiler (clause : Ast.ParserClause.t) : Ast.Clause.t list =
   let open Ast in
   match clause with
   | { content = Directive (head, body); loc } ->
-      [ { content = Directive (head, group_clauses body); loc } ]
+      [ { content = Directive (head, List.map group_clauses body); loc } ]
   | { content = Declaration decl; loc } ->
       [
         {

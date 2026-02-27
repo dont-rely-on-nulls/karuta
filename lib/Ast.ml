@@ -19,7 +19,7 @@ module ClauseF (Expr : EXPR) = struct
     | MultiDeclaration of multi_declaration
     | Query of { name : string; arity : int; args : string list }
     (* TODO: we want to allow multiple bodies for each directive. *)
-    | Directive of Expr.func Location.with_location * t list
+    | Directive of Expr.func Location.with_location * t list list
   [@@deriving show]
 
   and decl = {
@@ -101,7 +101,7 @@ module ParserClauseF (Expr : EXPR) = struct
   type base =
     | Declaration of decl
     | QueryConjunction of Expr.func Location.with_location list
-    | Directive of Expr.func Location.with_location * t list
+    | Directive of Expr.func Location.with_location * t list list
   [@@deriving show]
 
   and t = base Location.with_location [@@deriving show]
@@ -111,7 +111,7 @@ module ParserClauseF (Expr : EXPR) = struct
 
   let query q = QueryConjunction q
   let declaration d = Declaration d
-  let directive (header, body) = Directive (header, body)
+  let directive (header, bodies) = Directive (header, bodies)
 
   let is_decl : t -> bool = function
     | { content = Declaration _; _ } -> true

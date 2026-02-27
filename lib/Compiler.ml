@@ -25,6 +25,7 @@ type forms = Form.t FT.t
 type ('comptime_entity, 'predicate_definition) module_t = {
   modules : 'comptime_entity Location.with_location BatMap.String.t;
   predicates : 'predicate_definition PredicateMap.t;
+  hidden : ('comptime_entity, 'predicate_definition) module_t option;
 }
 
 type compiled_signature = {
@@ -76,7 +77,12 @@ let initialize_nested parent filename module_name : t =
           Beam.Builder.Attribute.module_ module_name;
         ];
     output = FT.empty;
-    env = { modules = BatMap.String.empty; predicates = PredicateMap.empty };
+    env =
+      {
+        modules = BatMap.String.empty;
+        predicates = PredicateMap.empty;
+        hidden = None;
+      };
   }
 
 let initialize_from_parent module_name parent : t =
@@ -126,6 +132,7 @@ let all_atoms (args : Ast.Expr.t list) : unit =
 let ascribed_signature_to_module ({ modules; predicates } : compiled_signature)
     : (signature, unit) module_t =
   {
+    hidden = None;
     modules;
     predicates =
       predicates
@@ -448,7 +455,7 @@ and compile_signature (loc : Location.location) (body : Ast.Clause.t list)
               };
             _;
           },
-          inline_signature )
+          [ inline_signature ] )
       when inline_signature != [] -> (
         all_atoms [ module_name ];
         let atom_module_name = Ast.Expr.extract_functor_label module_name in
@@ -479,7 +486,7 @@ and compile_signature (loc : Location.location) (body : Ast.Clause.t list)
               } as directive_head;
             _;
           },
-          directive_body ) -> (
+          [ directive_body ] ) -> (
         let merge_function _ (lval : comptime Location.with_location option)
             (rval : signature Location.with_location option) =
           match (lval, rval) with
@@ -490,7 +497,7 @@ and compile_signature (loc : Location.location) (body : Ast.Clause.t list)
               Some (Location.add_loc (Signature content) loc)
         in
         let nested_compiler =
-          compile_directive next.loc directive_head directive_body
+          compile_directive next.loc directive_head [ directive_body ]
             {
               compiler with
               env =
@@ -513,6 +520,15 @@ and compile_signature (loc : Location.location) (body : Ast.Clause.t list)
               "If we reached this point, something is very wrong because \
                compile_directive should have blown up first.";
             exit 1)
+    | Directive
+        ( {
+            content =
+              { name = [], { content = "signature"; _ }; elements = _ :: _; _ };
+            _;
+          },
+          _ :: _ :: _ ) ->
+        Logger.error loc "Signatures must have at most one body";
+        exit 1
     | Directive ({ loc; content = { name = _ :: _, _; _ } }, _) ->
         Logger.error loc "Directives in signatures cannot be qualified";
         exit 1
@@ -529,11 +545,12 @@ and compile_signature (loc : Location.location) (body : Ast.Clause.t list)
   Location.add_loc compiled_sig loc
 
 and compile_directive (directive_loc : Location.location)
-    ({ elements; arity; _ } as f : Ast.Expr.func) (body : Ast.Clause.t list)
+    ({ elements; arity; _ } as f : Ast.Expr.func)
+    (body : Ast.Clause.t list list)
     ({ env = { modules; _ } as env; _ } as compiler : t) : t =
   let _, _, _ = (elements, body, compiler) in
-  match (Ast.Expr.extract_func_label f, arity) with
-  | "module", 1 -> (
+  match (Ast.Expr.extract_func_label f, arity, body) with
+  | "module", 1, [ body ] -> (
       match elements with
       | [
        {
@@ -579,7 +596,7 @@ and compile_directive (directive_loc : Location.location)
             "Somehow there is a mismatch between the expected arity and the \
              actual arity.";
           exit 1)
-  | "module", 2 -> (
+  | "module", 2, [ body ] -> (
       match elements with
       | [
        {
@@ -657,7 +674,7 @@ and compile_directive (directive_loc : Location.location)
             "Somehow there is a mismatch between the expected arity and the \
              actual arity.";
           exit 1)
-  | "signature", 1 -> (
+  | "signature", 1, [ body ] -> (
       match elements with
       | [
        {
@@ -697,14 +714,14 @@ and compile_directive (directive_loc : Location.location)
             "Somehow there is a mismatch between the expected arity and the \
              actual arity.";
           exit 1)
-  | "signature", 0 ->
+  | "signature", 0, _ ->
       Logger.error directive_loc "Signature directives must have a name.";
       exit 1
-  | "signature", n when 1 < n ->
+  | "signature", n, _ when 1 < n ->
       Logger.error directive_loc
         "Signature directives must have only a name and a body.";
       exit 1
-  | "project", 0 ->
+  | "project", 0, _ ->
       Logger.simply_unreachable "TODO";
       exit 1
   | _ ->

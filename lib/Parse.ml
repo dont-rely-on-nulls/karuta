@@ -438,7 +438,7 @@ let rec parser_clause :
 
 and directive :
       'e.
-      ( (Ast.Expr.func Location.with_location * Ast.ParserClause.t list)
+      ( (Ast.Expr.func Location.with_location * Ast.ParserClause.t list list)
         Location.with_location,
         ([> expr_errors ] as 'e) )
       parser =
@@ -446,12 +446,15 @@ and directive :
   state
   |> func @>> fun (header, state) ->
      state
-     |> skip_whitespace_and_comments @&& left_curly_brace @&& top_level
+     |> star
+          (skip_whitespace_and_comments @&& left_curly_brace @&& top_level
+         @>> capture
+          @@ fun body ->
+          right_curly_brace @&& skip_whitespace_and_comments @&& return body)
         @>> capture
-        @@ fun body ->
-        right_curly_brace @&& skip_whitespace_and_comments @&& period
-        @&& skip_whitespace_and_comments @&& return
-        @@ Location.add_loc (header, body) header.loc
+        @@ fun bodies ->
+        period @&& skip_whitespace_and_comments @&& return
+        @@ Location.add_loc (header, BatFingerTree.to_list bodies) header.loc
 
 and top_level : 'e. (Ast.ParserClause.t list, ([> expr_errors ] as 'e)) parser =
  fun state ->
