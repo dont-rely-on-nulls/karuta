@@ -6,12 +6,12 @@ let parse : string -> Ast.ParserClause.t list attempt = function
   | str ->
       In_channel.with_open_text str @@ fun inc ->
       if in_channel_length inc = 0 then error @@ Error.EmptyFile str
-      else ok @@ Parse.parse str
+      else ok @@ Parse.parse str (In_channel.input_all inc)
 
 let preprocess (filepath : string) :
     Ast.ParserClause.t list -> Ast.Clause.t list attempt = function
   | [] -> error @@ Error.CouldNotPreprocess filepath
-  | decls_queries -> ok @@ fst @@ Preprocessor.group_clauses decls_queries
+  | decls_queries -> ok @@ Preprocessor.group_clauses decls_queries
 
 let compile' (compiler : Compiler.t) :
     Ast.Clause.t list -> Form.t BatFingerTree.t attempt = function

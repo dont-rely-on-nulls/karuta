@@ -72,11 +72,6 @@
             duneVersion = "3";
             src = sources.ocaml;
 
-            nativeBuildInputs = [
-              ocamlPackages.menhir
-              ocamlPackages.menhirLib
-            ];
-
             buildInputs = [
               ocamlPackages.ppx_deriving
               ocamlPackages.ppx_enumerate

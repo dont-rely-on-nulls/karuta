@@ -1,0 +1,13 @@
+:- signature[first-signature] {
+   my-nat[nat].
+   :- module[b] {
+     my-eq[nat, nat].
+   }.
+}.
+
+:- module[first-module, first-signature] {
+  my-nat[A] :- karuta:nat[A].
+  :- module[b] {
+    my-eq[A, B] :- karuta:eq[A, B].
+  }.
+}.

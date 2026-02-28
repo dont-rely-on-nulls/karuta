@@ -103,10 +103,11 @@ module Terminal = Make ((
       let filepath = loc.startl.pos_fname in
       let begin_characters = get_column loc.startl in
       let end_characters = get_column loc.endl in
-      let how_many_characters = end_characters - (begin_characters + 1) in
+      (* TODO: double-check inclusivity/off-by-one issues *)
+      let how_many_characters = end_characters - begin_characters in
       let line_number = loc.startl.pos_lnum in
       let line_digits : int = line_number |> string_of_int |> String.length in
-      let spaces = String.make (3 + line_digits + begin_characters) ' ' in
+      let spaces = String.make (line_digits + begin_characters) ' ' in
       let markers =
         make_bold @@ add_color color
         @@ String.make (max how_many_characters 1) '^'
@@ -174,6 +175,8 @@ module type API = sig
   val simply_unreachable : string -> unit
   val info : Location.location -> string -> unit
   val simply_info : string -> unit
+
+  (* TODO: Debug should receive location but location of THE SOURCE CODE OF THE COMPILER instead of Karuta source code. *)
   val debug : string -> unit
 end
 
