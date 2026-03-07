@@ -277,6 +277,14 @@ module Lookup = struct
     | `UnexpectedSignature _ as other -> other
     | `Undefined _ as other -> other
 
+  let nested_signature (compiled_signature : compiled_signature) (scope : scope)
+      ((qualifiers, unqualified_name) : Ast.Expr.func_label) :
+      [> `Ok of signature Location.with_location
+      | `Undefined of string Location.with_location
+      | `UnexpectedModule of compiled_module Location.with_location
+      | `UnexpectedSignature of Location.location ] =
+    failwith "TODO"
+
   let predicate (scope : scope)
       ((qualifiers, ({ content = name; loc } as name_with_loc)) :
         Ast.Expr.func_label) (arity : int) =
@@ -462,17 +470,10 @@ and compile_signature (loc : Location.location) (body : Ast.Clause.t list)
         match Location.strip_loc module_signature with
         | Functor { name = label; _ } -> (
             let scope : Lookup.scope = Lookup.ancestors_of_compiler compiler in
-            let comptime_value =
-              BatMap.String.map
-                (Location.fmap (fun s -> Signature s))
-                acc.modules
-            in
-            match
-              Lookup.signature (BatLazyList.cons comptime_value scope) label
-            with
+            match Lookup.nested_signature acc scope label with
             | `Ok { content = PlainSignature payload; _ } ->
                 signature_happy_case module_name @@ module_of_plain payload
-            | `Ok { content = Abstract; _ } ->
+            | `Ok { content = Abstract _; _ } ->
                 signature_happy_case module_name module_of_abstract
             | `UnexpectedModule { loc = outer; _ }
             | `Ok { content = ModuleSignature _; loc = outer } ->
@@ -557,7 +558,7 @@ and compile_signature (loc : Location.location) (body : Ast.Clause.t list)
         with
         | Some { content = Signature compiled_sig; loc } ->
             signature_happy_case signature_name
-            @@ Location.add_loc compiled_sig loc
+            @@ Location.add_loc (PlainSignature compiled_sig) loc
         | _ ->
             Logger.unreachable next.loc
               "If we reached this point, something is very wrong because \
@@ -580,10 +581,9 @@ and compile_signature (loc : Location.location) (body : Ast.Clause.t list)
         acc
   in
   let compiled_sig =
-    PlainSignature
-      (List.fold_left step
-         { modules = BatMap.String.empty; predicates = Set.empty }
-         body)
+    List.fold_left step
+      { modules = BatMap.String.empty; predicates = Set.empty }
+      body
   in
   Location.add_loc compiled_sig loc
 
