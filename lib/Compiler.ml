@@ -239,7 +239,9 @@ module Lookup = struct
   (* TODO: Supress log levels to avoid reporting false negatives to the user
      These functions can report their own errors, but they don't know when to exit 1*)
 
-  type scope = comptime Location.with_location BatMap.String.t BatLazyList.t
+  type 'a nested_env = 'a Location.with_location BatMap.String.t BatLazyList.t
+  type scope = comptime nested_env
+  type sig_scope = signature nested_env
 
   let ancestors_of_compiler (compiler : t) : scope =
     let open BatLazyList in
@@ -277,8 +279,8 @@ module Lookup = struct
     | `UnexpectedSignature _ as other -> other
     | `Undefined _ as other -> other
 
-  let nested_signature (compiled_signature : compiled_signature) (scope : scope)
-      ((qualifiers, unqualified_name) : Ast.Expr.func_label) :
+  let nested_signature (_compiled_signatures : sig_scope) (_scope : scope)
+      ((_qualifiers, _unqualified_name) : Ast.Expr.func_label) :
       [> `Ok of signature Location.with_location
       | `Undefined of string Location.with_location
       | `UnexpectedModule of compiled_module Location.with_location
@@ -353,7 +355,7 @@ let rec ascribe_signature
                 exit 1
             | Some nested_sig -> (
                 match v.content with
-                | Signature rhs_sig -> failwith "TODO"
+                | Signature _ -> failwith "TODO"
                 | Module nested_module ->
                     Location.fmap (fun m -> Module m)
                     @@ ascribe_signature nested_sig
@@ -392,8 +394,12 @@ and compile_multi_declaration
   }
 
 and compile_signature (loc : Location.location) (body : Ast.Clause.t list)
-    ({ env = { modules; _ } as env; _ } as compiler : t) :
-    compiled_signature Location.with_location =
+    (compiler : t) : compiled_signature Location.with_location =
+  compile_nested_signature loc body compiler BatLazyList.nil
+
+and compile_nested_signature (loc : Location.location)
+    (body : Ast.Clause.t list) ({ env = { modules; _ }; _ } as compiler : t)
+    (sig_scope : Lookup.sig_scope) =
   let all_underscores : Ast.Expr.t list -> bool =
     List.for_all
     @@ Fun.compose
@@ -470,7 +476,11 @@ and compile_signature (loc : Location.location) (body : Ast.Clause.t list)
         match Location.strip_loc module_signature with
         | Functor { name = label; _ } -> (
             let scope : Lookup.scope = Lookup.ancestors_of_compiler compiler in
-            match Lookup.nested_signature acc scope label with
+            match
+              Lookup.nested_signature
+                (BatLazyList.of_list [ acc.modules ])
+                scope label
+            with
             | `Ok { content = PlainSignature payload; _ } ->
                 signature_happy_case module_name @@ module_of_plain payload
             | `Ok { content = Abstract _; _ } ->
@@ -527,43 +537,17 @@ and compile_signature (loc : Location.location) (body : Ast.Clause.t list)
                 name = [], { content = "signature"; _ };
                 elements = signature_name :: _;
                 _;
-              } as directive_head;
+              };
             _;
           },
-          [ directive_body ] ) -> (
-        let merge_function _ (lval : comptime Location.with_location option)
-            (rval : signature Location.with_location option) =
-          match (lval, rval) with
-          | Some existing, None -> Some existing
-          | None, None -> None
-          (* TODO: disallow shadowing everywhere *)
-          | _, Some { content; loc } ->
-              Some (Location.add_loc (Signature content) loc)
-        in
-        let nested_compiler =
-          compile_directive next.loc directive_head [ directive_body ]
-            {
-              compiler with
-              env =
-                {
-                  env with
-                  modules =
-                    BatMap.String.merge merge_function modules acc.modules;
-                };
-            }
+          [ directive_body ] ) ->
+        let compiled_sig =
+          compile_nested_signature next.loc directive_body compiler
+            (BatLazyList.cons acc.modules sig_scope)
         in
         let signature_name = Ast.Expr.extract_functor_label signature_name in
-        match
-          BatMap.String.find_opt signature_name nested_compiler.env.modules
-        with
-        | Some { content = Signature compiled_sig; loc } ->
-            signature_happy_case signature_name
-            @@ Location.add_loc (PlainSignature compiled_sig) loc
-        | _ ->
-            Logger.unreachable next.loc
-              "If we reached this point, something is very wrong because \
-               compile_directive should have blown up first.";
-            exit 1)
+        signature_happy_case signature_name
+        @@ Location.fmap (fun v -> PlainSignature v) compiled_sig
     | Directive
         ( {
             content =
@@ -609,7 +593,7 @@ and compile_directive (directive_loc : Location.location)
       ] -> (
           let comptime_value = Lookup.ancestors_of_compiler compiler in
           match Lookup.m0dule comptime_value module_name' with
-          | `Ok { loc; _ } | `UnexpectedSignature { loc; _ } ->
+          | `Ok { loc; _ } | `UnexpectedSignature loc ->
               Logger.error module_loc "Failed to define module";
               Logger.error loc
                 "There's already a module or signatures with the same name. \
@@ -669,7 +653,11 @@ and compile_directive (directive_loc : Location.location)
                       BatMap.String.add module_name
                         (Location.fmap
                            (fun m -> Module m)
-                           (ascribe_signature inline_sig content))
+                           (ascribe_signature
+                              (Location.fmap
+                                 (fun s -> PlainSignature s)
+                                 inline_sig)
+                              content))
                         modules;
                   };
               }
@@ -703,13 +691,13 @@ and compile_directive (directive_loc : Location.location)
             ( Lookup.m0dule comptime_value module_name',
               Lookup.signature comptime_value signature_name )
           with
-          | `Ok { loc; _ }, _ | `UnexpectedSignature { loc; _ }, _ ->
+          | `Ok { loc; _ }, _ | `UnexpectedSignature loc, _ ->
               Logger.error module_loc "Failed to define module";
               Logger.error loc
                 "There's already a module or signatures with the same name. \
                  Modules and signatures share their scope.";
               exit 1
-          | `Undefined _, `Ok { content = PlainSignature _signature; _ } ->
+          | `Undefined _, `Ok { content = _signature; _ } ->
               Logger.debug
                 "TODO: Deal with matching module implementation with provided \
                  signature";
@@ -728,15 +716,6 @@ and compile_directive (directive_loc : Location.location)
                       BatMap.String.add module_name compiled_module modules;
                   };
               }
-          | `Undefined _, `Ok { content = Abstract; _ } ->
-              Logger.unreachable directive_loc
-                "Found signature for module cannot be abstract";
-              exit 1
-          | `Undefined _, `Ok { content = ModuleSignature _; _ } ->
-              Logger.unreachable directive_loc
-                "Found signature for module cannot be a module signature \
-                 definition";
-              exit 1
           | `Undefined _, `UnexpectedModule { loc; _ } ->
               Logger.error loc "Modules are not signatures";
               exit 1
@@ -744,7 +723,7 @@ and compile_directive (directive_loc : Location.location)
               Logger.error loc
                 "This name is undefined when looking up for signatures";
               exit 1
-          | `Undefined _, `UnexpectedSignature { loc; _ } ->
+          | `Undefined _, `UnexpectedSignature loc ->
               Logger.error loc
                 "You cannot inspect other signatures when qualifying \
                  signatures. Only modules can be inspected.";
