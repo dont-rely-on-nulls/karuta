@@ -34,12 +34,13 @@ and signature =
 
 type hidden_definitions = {
   modules : comptime Location.with_location BatMap.String.t;
-  predicates : Ast.Clause.multi_declaration PredicateMap.t;
+  predicates : unit PredicateMap.t;
 }
 
 and compiled_module = {
   modules : comptime Location.with_location BatMap.String.t;
-  predicates : Ast.Clause.multi_declaration PredicateMap.t;
+      (* TODO: Later this will become something related to types *)
+  predicates : unit PredicateMap.t;
   hidden : hidden_definitions option;
 }
 
@@ -279,13 +280,21 @@ module Lookup = struct
     | `UnexpectedSignature _ as other -> other
     | `Undefined _ as other -> other
 
-  let nested_signature (_compiled_signatures : sig_scope) (_scope : scope)
-      ((_qualifiers, _unqualified_name) : Ast.Expr.func_label) :
-      [> `Ok of signature Location.with_location
-      | `Undefined of string Location.with_location
-      | `UnexpectedModule of compiled_module Location.with_location
-      | `UnexpectedSignature of Location.location ] =
-    failwith "TODO"
+  let nested_signature (compiled_signatures : sig_scope) (scope : scope)
+      ((qualifiers, unqualified_name) as names : Ast.Expr.func_label) =
+    match
+      lookup_mod_sig compiled_signatures
+        (List.append qualifiers [ unqualified_name ])
+        signature_select
+    with
+    | `Ok _ as ok -> ok
+    | `Undefined _ -> (
+        match signature scope names with
+        | `Ok ok -> `Ok (Location.fmap (fun v -> PlainSignature v) ok)
+        | (`Undefined _ | `UnexpectedModule _ | `UnexpectedSignature _) as error
+          ->
+            error)
+    | `UnexpectedSignature _ as error -> error
 
   let predicate (scope : scope)
       ((qualifiers, ({ content = name; loc } as name_with_loc)) :
@@ -305,6 +314,7 @@ module Lookup = struct
     | (`Undefined _ | `UnexpectedSignature _) as other -> other
 end
 
+(* Ascribing a signature means matching a module implementation with a given signature *)
 let rec ascribe_signature
     ({ Location.content = given_signature; loc = sig_loc } :
       signature Location.with_location)
@@ -318,15 +328,41 @@ let rec ascribe_signature
           (fun pred_name _ -> BatSet.mem pred_name given_signature.predicates)
           given_module.predicates
       in
-      if
-        PredicateMap.cardinal public_predicates
-        <> BatSet.cardinal given_signature.predicates
-      then (
-        (* TODO: list which predicates are missing *)
+      (* TODO: The functionality below can be separated into a function for both predicates and comptimes *)
+      (* TODO: We are using sets, which do not have order in consideration. However,
+         this matters for listing the missing ones. One would expect the order of reported
+         missing ones to be in order of declaration in the signature. You can either change
+         the type to be a finger tree OR include location into those predicate names.*)
+      let module_predicate_names =
+        BatSet.of_enum @@ PredicateMap.keys public_predicates
+      in
+      let missing_predicates =
+        BatSet.diff given_signature.predicates module_predicate_names
+      in
+      if not @@ BatSet.is_empty missing_predicates then (
+        let first, rest =
+          missing_predicates |> BatSet.to_seq |> Seq.uncons |> function
+          | Some elems -> elems
+          | None ->
+              Logger.simply_unreachable
+                "The above if is guarding against this case";
+              exit 1
+        in
+        let make_msg ({ name; arity } : predicate_name) : string =
+          name ^ "/" ^ string_of_int arity
+        in
+        let error_msg =
+          Seq.fold_left
+            (fun acc missing_predicate ->
+              acc ^ ", " ^ make_msg missing_predicate)
+            (make_msg first) rest
+        in
         Logger.error module_loc
           "Mismatch between signature and module: some required predicates are \
            missing";
         Logger.error sig_loc "Signature defined here";
+        Logger.simply_error
+        @@ "The following predicates are missing implementation: " ^ error_msg;
         exit 1);
       let public_comptimes, hidden_comptimes =
         BatMap.String.partition
@@ -334,15 +370,35 @@ let rec ascribe_signature
             BatMap.String.mem comptime_name given_signature.modules)
           given_module.modules
       in
-      if
-        BatMap.String.cardinal public_comptimes
-        <> BatMap.String.cardinal given_signature.modules
-      then (
-        (* TODO: list which modules and signatures are missing *)
+      let public_comptimes_set =
+        BatSet.of_enum @@ BatMap.String.keys public_comptimes
+      in
+      let signature_comptimes_set =
+        BatSet.of_enum @@ BatMap.String.keys given_signature.modules
+      in
+      let missing_comptimes =
+        BatSet.diff signature_comptimes_set public_comptimes_set
+      in
+      if not @@ BatSet.is_empty missing_comptimes then (
+        let first, rest =
+          missing_comptimes |> BatSet.to_seq |> Seq.uncons |> function
+          | Some elems -> elems
+          | None ->
+              Logger.simply_unreachable
+                "The above if is guarding against this case";
+              exit 1
+        in
+        let error_msg =
+          Seq.fold_left
+            (fun acc missing_comptime -> acc ^ ", " ^ missing_comptime)
+            first rest
+        in
         Logger.error module_loc
           "Mismatch between signature and module: some required modules or \
            signatures are missing";
         Logger.error sig_loc "Signature defined here";
+        Logger.simply_error @@ "The following are missing implementation: "
+        ^ error_msg;
         exit 1);
       let public_comptimes : comptime Location.with_location BatMap.String.t =
         BatMap.String.mapi
@@ -355,7 +411,38 @@ let rec ascribe_signature
                 exit 1
             | Some nested_sig -> (
                 match v.content with
-                | Signature _ -> failwith "TODO"
+                | Signature module_signature -> (
+                    match nested_sig.content with
+                    | PlainSignature compiled_signature ->
+                        (* TODO: You must check for predicates as well otherwise nested stuff won't be checked *)
+                        let module_keys =
+                          BatSet.of_enum
+                          @@ BatMap.String.keys module_signature.modules
+                        in
+                        let sig_keys =
+                          BatSet.of_enum
+                          @@ BatMap.String.keys compiled_signature.modules
+                        in
+                        if BatSet.equal module_keys sig_keys then v
+                        else (
+                          Logger.simply_warning
+                            "Signature subtyping is not implemented yet";
+                          Logger.error v.loc
+                            "Nested signatures cannot differ from implemented \
+                             ones";
+                          Logger.error nested_sig.loc "Signature here";
+                          exit 1)
+                    | ModuleSignature _ ->
+                        Logger.error nested_sig.loc
+                          "Signature mandates this to be a module";
+                        Logger.error v.loc
+                          "Found a signature in module implementation";
+                        exit 1
+                    | Abstract _ ->
+                        Logger.unreachable v.loc
+                          "Abstract signatures and modules are not implemented \
+                           yet";
+                        exit 1)
                 | Module nested_module ->
                     Location.fmap (fun m -> Module m)
                     @@ ascribe_signature nested_sig
@@ -370,7 +457,10 @@ let rec ascribe_signature
             Some { modules = hidden_comptimes; predicates = hidden_predicates };
         }
         module_loc
-  | Abstract _ -> failwith "TODO"
+  | Abstract _ ->
+      Logger.simply_unreachable
+        "Abstract signatures and modules are not implemented yet";
+      exit 1
 
 let rec compile ((body, compiler) : Ast.Clause.t list * t) : Form.t FT.t =
   let { output; header; _ } = compile_step (body, compiler) in
@@ -380,7 +470,8 @@ and compile_multi_declaration
     (({ name; arity }, first_clause, remaining_clauses) :
       Ast.Clause.head
       * Ast.Clause.decl Location.with_location
-      * Ast.Clause.decl Location.with_location list) (compiler : t) : t =
+      * Ast.Clause.decl Location.with_location list)
+    ({ env; _ } as compiler : t) : t =
   let declaration =
     let args = List.map string_of_int @@ BatList.range 0 `To (arity - 1) in
     Beam.Builder.single_function_declaration name
@@ -391,6 +482,11 @@ and compile_multi_declaration
   {
     compiler with
     output = FT.cons (FT.snoc compiler.output declaration) export;
+    env =
+      {
+        env with
+        predicates = PredicateMap.add { name; arity } () env.predicates;
+      };
   }
 
 and compile_signature (loc : Location.location) (body : Ast.Clause.t list)
@@ -697,15 +793,19 @@ and compile_directive (directive_loc : Location.location)
                 "There's already a module or signatures with the same name. \
                  Modules and signatures share their scope.";
               exit 1
-          | `Undefined _, `Ok { content = _signature; _ } ->
-              Logger.debug
-                "TODO: Deal with matching module implementation with provided \
-                 signature";
-              let compiled_module =
+          | `Undefined _, `Ok signature ->
+              let comptime =
                 ( ( compiler |> initialize_from_parent module_name |> fun c ->
                     compile_step (body, c) )
                 |> fun c -> c.env )
-                |> fun e -> Location.add_loc (Module e) directive_loc
+                |> fun e -> Location.add_loc e directive_loc
+              in
+              let compiled_module =
+                Location.fmap
+                  (fun v -> Module v)
+                  (ascribe_signature
+                     (Location.fmap (fun v -> PlainSignature v) signature)
+                     comptime)
               in
               {
                 compiler with
