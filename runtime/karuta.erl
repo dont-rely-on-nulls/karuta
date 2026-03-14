@@ -75,7 +75,8 @@ deref_all(State, Var) ->
 deref_query_var(State = #{query := Query}, VarName) when is_map_key(VarName, Query) ->
   deref_all(State, map_get(VarName, Query)).
 
-deref_query(State = #{query := Query}) -> deref_all(State, Query).
+deref_query(State = #{query := Query}) -> deref_all(State, Query);
+deref_query(State) -> deref_all(State, #{}).
 
 query_variable(Var, Name, Goal) ->
   fun (State) ->
@@ -167,10 +168,11 @@ eq(LHS, RHS) -> fun(State) -> unify(State, LHS, RHS) end.
 nat(N) ->
   fun (State) ->
     Deref_N = deref(State, N),
-    conj(
+    Goal = conj(
       eq(true, is_integer(Deref_N)),
       eq(true, 0 =< Deref_N)
-    )
+    ),
+    Goal(State)
   end.
 
 true(State) -> [State].
