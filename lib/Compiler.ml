@@ -48,6 +48,11 @@ and comptime = Module of compiled_module | Signature of compiled_signature
 
 type 'a env = 'a Location.with_location BatMap.String.t
 
+module Persist = struct
+  (* TODO: don't throw exceptions. Use a result for the return type. *)
+  type t = string -> forms -> unit
+end
+
 type t = {
   header : forms;
   output : forms;
@@ -55,6 +60,7 @@ type t = {
   module_name : string;
   parent : t option;
   env : compiled_module;
+  persist : Persist.t;
 }
 
 (*
@@ -69,7 +75,7 @@ type t = {
  * may choose to concatenate multiple files into a single module.
  *)
 
-let initialize_nested parent filename module_name : t =
+let initialize_nested persist parent filename module_name : t =
   {
     parent;
     filename;
@@ -88,19 +94,31 @@ let initialize_nested parent filename module_name : t =
         predicates = PredicateMap.empty;
         hidden = None;
       };
+    persist;
   }
 
+let module_name_separator = "."
+
+let flat_module_name (path : string list) =
+  let concat_segments l r = l ^ module_name_separator ^ r in
+  match path with
+  | [] -> ""
+  | head :: tail -> List.fold_left concat_segments head tail
+
 let initialize_from_parent module_name parent : t =
-  let inner_module_name = parent.module_name ^ "|" ^ module_name in
+  let inner_module_name =
+    parent.module_name ^ module_name_separator ^ module_name
+  in
   let inner_filename =
     (Filename.basename @@ Filename.chop_extension parent.filename)
     ^ "." ^ module_name ^ ".krt"
   in
-  initialize_nested (Some parent) inner_filename inner_module_name
+  initialize_nested parent.persist (Some parent) inner_filename
+    inner_module_name
 
-let initialize filename : t =
+let initialize persist filename : t =
   let module_name = Filename.basename @@ Filename.chop_extension filename in
-  initialize_nested None filename module_name
+  initialize_nested persist None filename module_name
 
 let rec compile_expr (expr : Ast.Expr.t) : Beam.Builder.Expr.t =
   let open Beam in
@@ -134,7 +152,7 @@ let all_atoms (args : Ast.Expr.t list) : unit =
       Logger.error loc "Expected atom.";
       exit 1
 
-let compile_declaration_bodies
+let compile_declaration_bodies module_name
     (clauses : Ast.Clause.decl Location.with_location list) =
   if List.is_empty clauses then (
     Logger.simply_unreachable "Predicates must have at least one body";
@@ -176,12 +194,18 @@ let compile_declaration_bodies
                     "Mismatch between arity and length of elements in builtin \
                      'nat'";
                   exit 1)
-          | _ ->
-              (* TODO: handle namespacing *)
+          | ([], _), _ ->
               Builder.call
                 (Builder.atom @@ Ast.Expr.extract_func_label call)
                 args
+          | ((_ :: _ as path), { content = fun_name; _ }), _ ->
+              Builder.call_with_module
+                (Builder.atom
+                @@ flat_module_name
+                     (module_name :: List.map Location.strip_loc path))
+                (Builder.atom fun_name) args
         in
+
         content.body |> List.map make_function |> Ukanren.conj
       in
       Set.fold call_with_fresh vars body
@@ -462,21 +486,20 @@ let rec ascribe_signature
         "Abstract signatures and modules are not implemented yet";
       exit 1
 
-let rec compile ((body, compiler) : Ast.Clause.t list * t) : Form.t FT.t =
-  let { output; header; _ } = compile_step (body, compiler) in
-  FT.append header output
-
-and compile_multi_declaration
+let rec compile_multi_declaration
     (({ name; arity }, first_clause, remaining_clauses) :
       Ast.Clause.head
       * Ast.Clause.decl Location.with_location
       * Ast.Clause.decl Location.with_location list)
-    ({ env; _ } as compiler : t) : t =
+    ({ env; module_name; _ } as compiler : t) : t =
   let declaration =
-    let args = List.map string_of_int @@ BatList.range 0 `To (arity - 1) in
+    let args =
+      if arity = 0 then []
+      else List.map string_of_int @@ BatList.range 0 `To (arity - 1)
+    in
     Beam.Builder.single_function_declaration name
       (List.map (fun v -> Beam.Builder.Pattern.Variable v) args)
-    @@ compile_declaration_bodies (first_clause :: remaining_clauses)
+    @@ compile_declaration_bodies module_name (first_clause :: remaining_clauses)
   in
   let export = Beam.Builder.Attribute.export [ (name, arity) ] in
   {
@@ -930,15 +953,13 @@ and compile_clause (clause : Ast.Clause.t) (compiler : t) : t =
 (* TODO: figure out the logistics of handling the runtime lib *)
 and compile_step : Ast.Clause.t list * t -> t = function
   | [], compiler ->
-      let list_forms = FT.to_list (FT.append compiler.header compiler.output) in
-      let open Beam.Serializer in
-      let forms =
-        "["
-        ^ (String.concat "," @@ List.map Attribute.to_string list_forms)
-        ^ "]"
-      in
-      print_endline forms;
+      compiler.persist compiler.filename
+        (FT.append compiler.header compiler.output);
       compiler
   | clause :: remaining, compiler ->
       (* TODO: We should save the intermediary outputs, due to this being a step by module *)
       compile_step (remaining, compile_clause clause compiler)
+
+let compile ((body, compiler) : Ast.Clause.t list * t) : unit =
+  let _ = compile_step (body, compiler) in
+  ()

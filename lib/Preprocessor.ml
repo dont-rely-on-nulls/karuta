@@ -197,7 +197,7 @@ let rec parser_to_compiler (clause : Ast.ParserClause.t) : Ast.Clause.t list =
           arity = S.cardinal variables;
         }
       in
-      let fake_decl = { ParserClause.head; body = calls } in
+      let fake_decl : ParserClause.decl = { head; body = calls } in
       let declaration =
         {
           content =
