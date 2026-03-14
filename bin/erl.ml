@@ -24,7 +24,7 @@ let spawn_compile_process program =
   [| "-noshell"; "-noinput"; "-eval"; program; "-s"; "erlang"; "halt" |]
   |> create_erl_process |> treat_pid
 
-let compile filepath forms =
+let compile prefix filepath forms =
   let open Filename in
   let open Beam.Serializer in
   let name = remove_extension @@ basename filepath in
@@ -34,7 +34,7 @@ let compile filepath forms =
   print_endline forms;
   let erlangProgram =
     "{ok, _, BeamByte} = compile:forms(" ^ forms ^ "), file:write_file(\""
-    ^ name ^ ".beam\", BeamByte)"
+    ^ prefix ^ "/" ^ name ^ ".beam\", BeamByte)"
   in
   Fun.const () @@ spawn_compile_process erlangProgram
 
