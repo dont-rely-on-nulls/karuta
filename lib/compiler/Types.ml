@@ -63,3 +63,29 @@ type t = {
   env : compiled_module;
   persist : Persist.t;
 }
+
+let initialize_nested persist parent filename module_name : t =
+  {
+    parent;
+    filename;
+    module_name;
+    header =
+      FT.of_list
+        [
+          Beam.Builder.Attribute.file filename 1;
+          (* TODO: this should be a proper atom *)
+          Beam.Builder.Attribute.module_ module_name;
+        ];
+    output = FT.empty;
+    env =
+      {
+        modules = BatMap.String.empty;
+        predicates = PredicateMap.empty;
+        hidden = None;
+      };
+    persist;
+  }
+
+let initialize persist filename : t =
+  let module_name = Filename.basename @@ Filename.chop_extension filename in
+  initialize_nested persist None filename module_name
