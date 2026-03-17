@@ -13,13 +13,13 @@ let preprocess (filepath : string) :
   | [] -> error @@ Error.CouldNotPreprocess filepath
   | decls_queries -> ok @@ Preprocessor.group_clauses decls_queries
 
-let compile' (compiler : Compiler.t) : Ast.Clause.t list -> unit attempt =
+let compile' (compiler : Compiler.Types.t) : Ast.Clause.t list -> unit attempt =
   function
   | [] ->
       Logger.simply_unreachable
         "Compiler error: unreachable when executing compile function.";
       exit 1
-  | decls_queries -> ok @@ Compiler.compile (decls_queries, compiler)
+  | decls_queries -> ok @@ Compile.compile (decls_queries, compiler)
 
 (* let eval ((compiler, computer) : Compiler.t * Machine.t) : *)
 (*     (Compiler.t * Machine.t) option = *)
@@ -32,9 +32,10 @@ let compile' (compiler : Compiler.t) : Ast.Clause.t list -> unit attempt =
 (*       in *)
 (*       Some (compiler, computer) *)
 
-let compile (persist : Compiler.Persist.t) (filepath : string) : unit attempt =
+let compile (persist : Compiler.Types.Persist.t) (filepath : string) :
+    unit attempt =
   filepath |> parse ||> preprocess filepath
-  ||> compile' (Compiler.initialize persist filepath)
+  ||> compile' (Compile.initialize persist filepath)
 
 (* let load' filter_fn (filepath : string) : Compiler.t * Machine.t = *)
 (*   filepath |> parse |> List.filter filter_fn |> compile *)
