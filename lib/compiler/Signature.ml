@@ -1,5 +1,152 @@
 open Types
 
+let rec ascribe_to_module
+    ({ Location.content = given_signature; loc = sig_loc } :
+      signature Location.with_location)
+    ({ Location.content = given_module; loc = module_loc } :
+      compiled_module Location.with_location) :
+    compiled_module Location.with_location =
+  match given_signature with
+  | ModuleSignature given_signature | PlainSignature given_signature ->
+      let public_predicates, hidden_predicates =
+        PredicateMap.partition
+          (fun pred_name _ -> BatSet.mem pred_name given_signature.predicates)
+          given_module.predicates
+      in
+      (* TODO: The functionality below can be separated into a function for both predicates and comptimes *)
+      (* TODO: We are using sets, which do not have order in consideration. However,
+         this matters for listing the missing ones. One would expect the order of reported
+         missing ones to be in order of declaration in the signature. You can either change
+         the type to be a finger tree OR include location into those predicate names.*)
+      let module_predicate_names =
+        BatSet.of_enum @@ PredicateMap.keys public_predicates
+      in
+      let missing_predicates =
+        BatSet.diff given_signature.predicates module_predicate_names
+      in
+      if not @@ BatSet.is_empty missing_predicates then (
+        let first, rest =
+          missing_predicates |> BatSet.to_seq |> Seq.uncons |> function
+          | Some elems -> elems
+          | None ->
+              Logger.simply_unreachable
+                "The above if is guarding against this case";
+              exit 1
+        in
+        let make_msg ({ name; arity } : predicate_name) : string =
+          name ^ "/" ^ string_of_int arity
+        in
+        let error_msg =
+          Seq.fold_left
+            (fun acc missing_predicate ->
+              acc ^ ", " ^ make_msg missing_predicate)
+            (make_msg first) rest
+        in
+        Logger.error module_loc
+          "Mismatch between signature and module: some required predicates are \
+           missing";
+        Logger.error sig_loc "Signature defined here";
+        Logger.simply_error
+        @@ "The following predicates are missing implementation: " ^ error_msg;
+        exit 1);
+      let public_comptimes, hidden_comptimes =
+        BatMap.String.partition
+          (fun comptime_name _ ->
+            BatMap.String.mem comptime_name given_signature.modules)
+          given_module.modules
+      in
+      let public_comptimes_set =
+        BatSet.of_enum @@ BatMap.String.keys public_comptimes
+      in
+      let signature_comptimes_set =
+        BatSet.of_enum @@ BatMap.String.keys given_signature.modules
+      in
+      let missing_comptimes =
+        BatSet.diff signature_comptimes_set public_comptimes_set
+      in
+      if not @@ BatSet.is_empty missing_comptimes then (
+        let first, rest =
+          missing_comptimes |> BatSet.to_seq |> Seq.uncons |> function
+          | Some elems -> elems
+          | None ->
+              Logger.simply_unreachable
+                "The above if is guarding against this case";
+              exit 1
+        in
+        let error_msg =
+          Seq.fold_left
+            (fun acc missing_comptime -> acc ^ ", " ^ missing_comptime)
+            first rest
+        in
+        Logger.error module_loc
+          "Mismatch between signature and module: some required modules or \
+           signatures are missing";
+        Logger.error sig_loc "Signature defined here";
+        Logger.simply_error @@ "The following are missing implementation: "
+        ^ error_msg;
+        exit 1);
+      let public_comptimes : comptime Location.with_location BatMap.String.t =
+        BatMap.String.mapi
+          (fun k (v : comptime Location.with_location) ->
+            match BatMap.String.find_opt k given_signature.modules with
+            | None ->
+                Logger.simply_unreachable
+                  "Every key in public_comptimes must be in \
+                   given_signature.modules at this point.";
+                exit 1
+            | Some nested_sig -> (
+                match v.content with
+                | Signature module_signature -> (
+                    match nested_sig.content with
+                    | PlainSignature compiled_signature ->
+                        (* TODO: You must check for predicates as well otherwise nested stuff won't be checked *)
+                        let module_keys =
+                          BatSet.of_enum
+                          @@ BatMap.String.keys module_signature.modules
+                        in
+                        let sig_keys =
+                          BatSet.of_enum
+                          @@ BatMap.String.keys compiled_signature.modules
+                        in
+                        if BatSet.equal module_keys sig_keys then v
+                        else (
+                          Logger.simply_warning
+                            "Signature subtyping is not implemented yet";
+                          Logger.error v.loc
+                            "Nested signatures cannot differ from implemented \
+                             ones";
+                          Logger.error nested_sig.loc "Signature here";
+                          exit 1)
+                    | ModuleSignature _ ->
+                        Logger.error nested_sig.loc
+                          "Signature mandates this to be a module";
+                        Logger.error v.loc
+                          "Found a signature in module implementation";
+                        exit 1
+                    | Abstract _ ->
+                        Logger.unreachable v.loc
+                          "Abstract signatures and modules are not implemented \
+                           yet";
+                        exit 1)
+                | Module nested_module ->
+                    Location.fmap (fun m -> Module m)
+                    @@ ascribe_to_module nested_sig
+                         (Location.add_loc nested_module v.loc)))
+          public_comptimes
+      in
+      Location.add_loc
+        {
+          modules = public_comptimes;
+          predicates = public_predicates;
+          hidden =
+            Some { modules = hidden_comptimes; predicates = hidden_predicates };
+        }
+        module_loc
+  | Abstract _ ->
+      Logger.simply_unreachable
+        "Abstract signatures and modules are not implemented yet";
+      exit 1
+
 let all_atoms (args : Ast.Expr.t list) : unit =
   match
     args
