@@ -1,5 +1,74 @@
 open Types
 
+module Diff : sig
+  val predicates :
+    predicate_name BatSet.t ->
+    predicate_name BatSet.t ->
+    Location.location ->
+    Location.location ->
+    unit
+
+  val comptimes :
+    comptime env -> sig_env -> Location.location -> Location.location -> unit
+end = struct
+  let get_first_rest (entities : 'a BatSet.t) : 'a * 'a Seq.t =
+    entities |> BatSet.to_seq |> Seq.uncons |> function
+    | Some elems -> elems
+    | None ->
+        Logger.simply_unreachable
+          "This is an invariant about missing either predicates or comptime \
+           entities";
+        exit 1
+
+  let predicates (provided : predicate_name BatSet.t)
+      (required : predicate_name BatSet.t) (module_loc : Location.location)
+      (sig_loc : Location.location) : unit =
+    let missing_names = BatSet.diff required provided in
+    if not @@ BatSet.is_empty missing_names then (
+      let first, rest = get_first_rest missing_names in
+      let make_msg ({ name; arity } : predicate_name) : string =
+        name ^ "/" ^ string_of_int arity
+      in
+      let error_msg =
+        Seq.fold_left
+          (fun acc missing_predicate -> acc ^ ", " ^ make_msg missing_predicate)
+          (make_msg first) rest
+      in
+      Logger.error module_loc
+        "Mismatch between signature and module: some required predicates are \
+         missing";
+      Logger.error sig_loc "Signature defined here";
+      Logger.simply_error
+      @@ "The following predicates are missing implementation: " ^ error_msg;
+      exit 1)
+
+  let comptimes (provided : comptime env) (required : sig_env)
+      (module_loc : Location.location) (sig_loc : Location.location) : unit =
+    let provided_comptimes_set =
+      BatSet.of_enum @@ BatMap.String.keys provided
+    in
+    let required_comptimes_set =
+      BatSet.of_enum @@ BatMap.String.keys required
+    in
+    let missing_comptimes =
+      BatSet.diff required_comptimes_set provided_comptimes_set
+    in
+    if not @@ BatSet.is_empty missing_comptimes then (
+      let first, rest = get_first_rest missing_comptimes in
+      let error_msg =
+        Seq.fold_left
+          (fun acc missing_comptime -> acc ^ ", " ^ missing_comptime)
+          first rest
+      in
+      Logger.error module_loc
+        "Mismatch between signature and module: some required modules or \
+         signatures are missing";
+      Logger.error sig_loc "Signature defined here";
+      Logger.simply_error @@ "The following are missing implementation: "
+      ^ error_msg;
+      exit 1)
+end
+
 let rec ascribe_to_module
     ({ Location.content = given_module; loc = module_loc } :
       compiled_module Location.with_location)
@@ -13,78 +82,22 @@ let rec ascribe_to_module
           (fun pred_name _ -> BatSet.mem pred_name given_signature.predicates)
           given_module.predicates
       in
-      (* TODO: The functionality below can be separated into a function for both predicates and comptimes *)
       (* TODO: We are using sets, which do not have order in consideration. However,
          this matters for listing the missing ones. One would expect the order of reported
          missing ones to be in order of declaration in the signature. You can either change
          the type to be a finger tree OR include location into those predicate names.*)
-      let module_predicate_names =
+      let public_predicates_names =
         BatSet.of_enum @@ PredicateMap.keys public_predicates
       in
-      let missing_predicates =
-        BatSet.diff given_signature.predicates module_predicate_names
-      in
-      if not @@ BatSet.is_empty missing_predicates then (
-        let first, rest =
-          missing_predicates |> BatSet.to_seq |> Seq.uncons |> function
-          | Some elems -> elems
-          | None ->
-              Logger.simply_unreachable
-                "The above if is guarding against this case";
-              exit 1
-        in
-        let make_msg ({ name; arity } : predicate_name) : string =
-          name ^ "/" ^ string_of_int arity
-        in
-        let error_msg =
-          Seq.fold_left
-            (fun acc missing_predicate ->
-              acc ^ ", " ^ make_msg missing_predicate)
-            (make_msg first) rest
-        in
-        Logger.error module_loc
-          "Mismatch between signature and module: some required predicates are \
-           missing";
-        Logger.error sig_loc "Signature defined here";
-        Logger.simply_error
-        @@ "The following predicates are missing implementation: " ^ error_msg;
-        exit 1);
+      Diff.predicates public_predicates_names given_signature.predicates
+        module_loc sig_loc;
       let public_comptimes, hidden_comptimes =
         BatMap.String.partition
           (fun comptime_name _ ->
             BatMap.String.mem comptime_name given_signature.modules)
           given_module.modules
       in
-      let public_comptimes_set =
-        BatSet.of_enum @@ BatMap.String.keys public_comptimes
-      in
-      let signature_comptimes_set =
-        BatSet.of_enum @@ BatMap.String.keys given_signature.modules
-      in
-      let missing_comptimes =
-        BatSet.diff signature_comptimes_set public_comptimes_set
-      in
-      if not @@ BatSet.is_empty missing_comptimes then (
-        let first, rest =
-          missing_comptimes |> BatSet.to_seq |> Seq.uncons |> function
-          | Some elems -> elems
-          | None ->
-              Logger.simply_unreachable
-                "The above if is guarding against this case";
-              exit 1
-        in
-        let error_msg =
-          Seq.fold_left
-            (fun acc missing_comptime -> acc ^ ", " ^ missing_comptime)
-            first rest
-        in
-        Logger.error module_loc
-          "Mismatch between signature and module: some required modules or \
-           signatures are missing";
-        Logger.error sig_loc "Signature defined here";
-        Logger.simply_error @@ "The following are missing implementation: "
-        ^ error_msg;
-        exit 1);
+      Diff.comptimes public_comptimes given_signature.modules module_loc sig_loc;
       let public_comptimes : comptime Location.with_location BatMap.String.t =
         BatMap.String.mapi
           (fun k (v : comptime Location.with_location) ->
@@ -99,7 +112,8 @@ let rec ascribe_to_module
                 | Signature module_signature -> (
                     match nested_sig.content with
                     | PlainSignature compiled_signature ->
-                        (* TODO: You must check for predicates as well otherwise nested stuff won't be checked *)
+                        Diff.predicates module_signature.predicates
+                          compiled_signature.predicates v.loc nested_sig.loc;
                         let module_keys =
                           BatSet.of_enum
                           @@ BatMap.String.keys module_signature.modules
