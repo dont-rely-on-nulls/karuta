@@ -399,7 +399,7 @@ let query :
   in
   list_of ~start_delim:space_comma ~separator:space_comma
     ~end_delim:(skip_whitespace_and_comments @&& question_mark)
-    func
+    (skip_whitespace_and_comments @&& func)
   @> replace @@ BatFingerTree.to_list @> List.cons first_element)
   @> replace
   @@ fun l -> Location.add_loc l first_element.loc
