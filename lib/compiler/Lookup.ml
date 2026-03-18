@@ -40,7 +40,7 @@ let rec lookup_mod_sig (envs : 'a env BatLazyList.t)
   in
   match names with
   | [] ->
-      Logger.simply_unreachable "";
+      Logger.simply_unreachable "There should be names in lookup_mod_sig";
       exit 1
   | first :: rest -> (
       match Lazy.force envs with

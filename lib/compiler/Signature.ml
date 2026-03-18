@@ -1,11 +1,11 @@
 open Types
 
 let rec ascribe_to_module
-    ({ Location.content = given_signature; loc = sig_loc } :
-      signature Location.with_location)
     ({ Location.content = given_module; loc = module_loc } :
-      compiled_module Location.with_location) :
-    compiled_module Location.with_location =
+      compiled_module Location.with_location)
+    ({ Location.content = given_signature; loc = sig_loc } :
+      signature Location.with_location) : compiled_module Location.with_location
+    =
   match given_signature with
   | ModuleSignature given_signature | PlainSignature given_signature ->
       let public_predicates, hidden_predicates =
@@ -130,8 +130,9 @@ let rec ascribe_to_module
                         exit 1)
                 | Module nested_module ->
                     Location.fmap (fun m -> Module m)
-                    @@ ascribe_to_module nested_sig
-                         (Location.add_loc nested_module v.loc)))
+                    @@ ascribe_to_module
+                         (Location.add_loc nested_module v.loc)
+                         nested_sig))
           public_comptimes
       in
       Location.add_loc
@@ -173,7 +174,6 @@ let rec compile_nested (loc : Location.location) (body : Ast.Clause.t list)
   in
   let step (acc : compiled_signature) (next : Ast.Clause.t) =
     let predicate_happy_case (head : predicate_name) =
-      print_endline @@ "Happy case: " ^ show_predicate_name head;
       { acc with predicates = Set.add head acc.predicates }
     in
     let signature_happy_case (comptime_name : string)

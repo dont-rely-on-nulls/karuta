@@ -19,7 +19,6 @@ let rec compile_clause (clause : Ast.Clause.t) (compiler : t) : t =
       Logger.error loc "Directives cannot be qualified";
       exit 1
   | Directive ({ content = header; loc }, body) ->
-      print_endline "Directives for some reason";
       Compiler.Directive.compile loc header body step compiler
   | MultiDeclaration (header, first, rest) ->
       let open Location in

@@ -15,7 +15,6 @@ let rec compile (directive_loc : Location.location)
     ({ elements; arity; _ } as f : Ast.Expr.func)
     (body : Ast.Clause.t list list) (step : Ast.Clause.t list * t -> t)
     ({ env = { modules; _ } as env; _ } as compiler : t) : t =
-  let _, _, _ = (elements, body, compiler) in
   match (Ast.Expr.extract_func_label f, arity, body) with
   | "module", 1, [ body ] -> (
       match elements with
@@ -41,10 +40,9 @@ let rec compile (directive_loc : Location.location)
               exit 1
           | `Undefined _ ->
               let compiled_module =
-                ( ( compiler |> initialize_from_parent module_name |> fun c ->
-                    step (body, c) )
-                |> fun c -> c.env )
-                |> fun e -> Location.add_loc (Module e) directive_loc
+                compiler |> initialize_from_parent module_name |> fun c ->
+                step (body, c) |> fun c ->
+                Location.add_loc (Module c.env) directive_loc
               in
               {
                 compiler with
@@ -91,17 +89,17 @@ let rec compile (directive_loc : Location.location)
                     env with
                     modules =
                       BatMap.String.add module_name
-                        (Location.fmap
-                           (fun m -> Module m)
-                           (Signature.ascribe_to_module
-                              (Location.fmap
-                                 (fun s -> PlainSignature s)
-                                 inline_sig)
-                              content))
+                        (inline_sig
+                        |> Location.fmap (fun s -> PlainSignature s)
+                        |> Signature.ascribe_to_module content
+                        |> Location.fmap (fun m -> Module m))
                         modules;
                   };
               }
-          | _ -> failwith "TODO")
+          | _ ->
+              Logger.simply_unreachable
+                "Take care of non-oks when doing lookups in modules";
+              exit 1)
       | _ ->
           Logger.unreachable directive_loc
             "Somehow there is a mismatch between the expected arity and the \
@@ -139,17 +137,14 @@ let rec compile (directive_loc : Location.location)
               exit 1
           | `Undefined _, `Ok signature ->
               let comptime =
-                ( ( compiler |> initialize_from_parent module_name |> fun c ->
-                    step (body, c) )
-                |> fun c -> c.env )
-                |> fun e -> Location.add_loc e directive_loc
+                compiler |> initialize_from_parent module_name |> fun c ->
+                step (body, c) |> fun c -> Location.add_loc c.env directive_loc
               in
               let compiled_module =
-                Location.fmap
-                  (fun v -> Module v)
-                  (Signature.ascribe_to_module
-                     (Location.fmap (fun v -> PlainSignature v) signature)
-                     comptime)
+                signature
+                |> Location.fmap (fun v -> PlainSignature v)
+                |> Signature.ascribe_to_module comptime
+                |> Location.fmap (fun v -> Module v)
               in
               {
                 compiler with
@@ -202,11 +197,9 @@ let rec compile (directive_loc : Location.location)
               exit 1
           | None ->
               let compiled_sig =
-                Signature.compile directive_loc body compiler
-              in
-              let compiled_sig =
-                Location.add_loc (Signature compiled_sig.content)
-                  compiled_sig.loc
+                compiler
+                |> Signature.compile directive_loc body
+                |> Location.fmap (fun cs -> Signature cs)
               in
               {
                 compiler with
