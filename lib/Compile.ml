@@ -44,12 +44,10 @@ let rec compile_clause (clause : Ast.Clause.t) (compiler : t) : t =
         output = FT.cons (FT.snoc compiler.output declaration) export;
       }
 
-(* TODO: figure out the logistics of handling the runtime lib *)
 and step : Ast.Clause.t list * t -> t = function
   | [], compiler ->
       compiler.persist compiler.filename
         (FT.append compiler.header compiler.output);
       compiler
   | clause :: remaining, compiler ->
-      (* TODO: We should save the intermediary outputs, due to this being a step by module *)
       step (remaining, compile_clause clause compiler)

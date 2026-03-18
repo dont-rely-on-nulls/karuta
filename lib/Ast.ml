@@ -18,7 +18,6 @@ module ClauseF (Expr : EXPR) = struct
   and base =
     | MultiDeclaration of multi_declaration
     | Query of { name : string; arity : int; args : string list }
-    (* TODO: we want to allow multiple bodies for each directive. *)
     | Directive of Expr.func Location.with_location * t list list
   [@@deriving show]
 
