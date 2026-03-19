@@ -6,7 +6,7 @@ let parse : string -> Ast.ParserClause.t list attempt = function
   | str ->
       In_channel.with_open_text str @@ fun inc ->
       if in_channel_length inc = 0 then error @@ Error.EmptyFile str
-      else ok @@ Parse.parse str (In_channel.input_all inc)
+      else ok @@ Parser.parse str (In_channel.input_all inc)
 
 let preprocess (filepath : string) :
     Ast.ParserClause.t list -> Ast.Clause.t list attempt = function
@@ -59,7 +59,7 @@ let compile (persist : Compiler.Types.Persist.t) (filepath : string) :
 (*       |> BatFingerTree.to_list |> compile |> Option.some *)
 
 (* let continue content compiler_and_computer : (Compiler.t * Machine.t) option = *)
-(*   match (Parse.parse content, compiler_and_computer) with *)
+(*   match (Parser.parse content, compiler_and_computer) with *)
 (*   | [], _ -> *)
 (*       print_endline ("Parser error. Incorrect definition: " ^ content); *)
 (*       None *)

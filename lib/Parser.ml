@@ -1,5 +1,4 @@
 (* TODO: Something is wrong with the locations due to the parser. Investigate that. *)
-(* TODO: Rename this to Parser. Parse only bothers Lemos *)
 
 type parser_state = { remaining : BatSubstring.t; loc : Location.t }
 type ('a, 'e) parser = parser_state -> ('a * parser_state, 'e) result
