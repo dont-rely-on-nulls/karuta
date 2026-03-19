@@ -1,0 +1,9 @@
+main[Out]?
+
+main[[A, B, C, colon]] :-
+    debug,
+  a:cons[1, [], A],
+  a:b:pluz[1, 2, B],
+  c:cons[1, nil, C].
+
+%% A = [1], B = 3, C = cons[1, nil].

@@ -19,8 +19,12 @@ let run : cmd -> unit = function
   (* TODO: Introduce multiple files to compile subcommand *)
   | Compile { file; run } ->
       check_extension ".krt" [ file ];
-      let* forms = Executor.compile file in
-      Erl.compile file @@ BatFingerTree.to_list forms;
+      let* _ =
+        Executor.compile
+          (fun name forms ->
+            Erl.compile "runtime" name @@ BatFingerTree.to_list forms)
+          file
+      in
       Option.iter (fun function_name -> Erl.run file function_name false) run
   | Run { file; function_name; should_repl } ->
       check_extension ".beam" [ file ];

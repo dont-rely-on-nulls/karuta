@@ -6,20 +6,21 @@ let parse : string -> Ast.ParserClause.t list attempt = function
   | str ->
       In_channel.with_open_text str @@ fun inc ->
       if in_channel_length inc = 0 then error @@ Error.EmptyFile str
-      else ok @@ Parse.parse str
+      else ok @@ Parser.parse str (In_channel.input_all inc)
 
 let preprocess (filepath : string) :
     Ast.ParserClause.t list -> Ast.Clause.t list attempt = function
   | [] -> error @@ Error.CouldNotPreprocess filepath
-  | decls_queries -> ok @@ fst @@ Preprocessor.group_clauses decls_queries
+  | decls_queries -> ok @@ Preprocessor.group_clauses decls_queries
 
-let compile' (compiler : Compiler.t) :
-    Ast.Clause.t list -> Form.t BatFingerTree.t attempt = function
+let compile' (compiler : Compiler.Types.t) : Ast.Clause.t list -> unit attempt =
+  function
   | [] ->
       Logger.simply_unreachable
         "Compiler error: unreachable when executing compile function.";
       exit 1
-  | decls_queries -> ok @@ Compiler.compile (decls_queries, compiler)
+  | decls_queries ->
+      Compile.step (decls_queries, compiler) |> Fun.const () |> ok
 
 (* let eval ((compiler, computer) : Compiler.t * Machine.t) : *)
 (*     (Compiler.t * Machine.t) option = *)
@@ -32,9 +33,10 @@ let compile' (compiler : Compiler.t) :
 (*       in *)
 (*       Some (compiler, computer) *)
 
-let compile (filepath : string) : Form.t BatFingerTree.t attempt =
+let compile (persist : Compiler.Types.Persist.t) (filepath : string) :
+    unit attempt =
   filepath |> parse ||> preprocess filepath
-  ||> compile' (Compiler.initialize filepath)
+  ||> compile' (Compiler.Types.initialize persist filepath)
 
 (* let load' filter_fn (filepath : string) : Compiler.t * Machine.t = *)
 (*   filepath |> parse |> List.filter filter_fn |> compile *)
@@ -57,7 +59,7 @@ let compile (filepath : string) : Form.t BatFingerTree.t attempt =
 (*       |> BatFingerTree.to_list |> compile |> Option.some *)
 
 (* let continue content compiler_and_computer : (Compiler.t * Machine.t) option = *)
-(*   match (Parse.parse content, compiler_and_computer) with *)
+(*   match (Parser.parse content, compiler_and_computer) with *)
 (*   | [], _ -> *)
 (*       print_endline ("Parser error. Incorrect definition: " ^ content); *)
 (*       None *)

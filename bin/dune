@@ -10,4 +10,5 @@
  (public_name karuta)
  (libraries lib cmdliner)
  (modes byte exe)
+ ; (flags -g)
  (package karuta))

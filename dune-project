@@ -1,6 +1,5 @@
 (lang dune 3.16)
 (map_workspace_root false)
-(using menhir 2.1)
 (name karuta)
 (license MIT-0)
 
@@ -18,6 +17,6 @@
 (package
  (name karuta)
  (synopsis "A compiler for a statically-typed relational programming language")
- (depends ocaml dune menhir (batteries (>= 3.8.0)) lwt lwt-exit sexplib)
+ (depends ocaml dune (batteries (>= 3.8.0)) lwt lwt-exit sexplib)
  (tags
   (prolog logic compiler relational warren)))
