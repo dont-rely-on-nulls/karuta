@@ -3,7 +3,7 @@
 
 #+html: <a href="https://builtwithnix.org"><img alt="built with nix" src="https://builtwithnix.org/badge.svg" /></a><br>
 
-#+html: <p align="center"><img src="images/logo.png" alt="The Karuta Logo" style="width: 25%;"></p>
+#+html: <p align="center"><img src="images/logo.png" alt="The Karuta Logo" style="width: 30%;"></p>
 
 * About
 This is a semi-toy, general-purpose relational (aiming to be constraint-based)
