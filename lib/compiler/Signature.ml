@@ -82,10 +82,7 @@ let rec ascribe_to_module
           (fun pred_name _ -> BatSet.mem pred_name given_signature.predicates)
           given_module.predicates
       in
-      (* TODO: We are using sets, which do not have order in consideration. However,
-         this matters for listing the missing ones. One would expect the order of reported
-         missing ones to be in order of declaration in the signature. You can either change
-         the type to be a finger tree OR include location into those predicate names.*)
+      (* TODO: https://github.com/dont-rely-on-nulls/karuta/issues/34 *)
       let public_predicates_names =
         BatSet.of_enum @@ PredicateMap.keys public_predicates
       in
