@@ -2,8 +2,8 @@
 
 -export([fresh/1, unify/3, discard/1, deref/2, is_variable/2, nat/1,
          call_with_fresh/1, eq/2, conj/1, disj/1, conj/2, disj/2, delay/1,
-         pull/1, start/1, true/1, false/1, take_all/1, deref_query_var/2,
-         deref_query/1, query_variable/3, merge_results/3, run_lazy/1]).
+         pull/1, start/2, true/1, false/1, take_all/1, deref_query_var/2,
+         deref_query/1, query_variable/3, bind_results/2, run_lazy/2]).
 
 %% TODO: Swap these with a series of unit tests
 %% test_pop() ->
@@ -154,7 +154,15 @@ pull([]) -> {error, no_result};
 pull([H | T]) -> {ok, H, T};
 pull(Stream) when is_function(Stream) -> pull(Stream()).
 
-start(Goal) -> Goal(#{}).
+start(#{db_port := Port, db_address := Address, db_timeouts := TimeoutMap}, Goal) ->
+    % TODO: get the current version of the database at this point.
+    ConnectTimeout = maps:get(connect, TimeoutMap, 60 * 1000),
+    SendTimeout = maps:get(send, TimeoutMap, 5 * 1000),
+    case gen_tcp:connect(Address, Port, [binary, {packet, 0}, {send_timeout, SendTimeout}], ConnectTimeout) of
+      {ok, Socket} -> Goal(#{db_config => #{socket => Socket, timeouts => TimeoutMap}});
+      {error, Error} -> error({bad_start, Error})
+    end;
+start(#{}, Goal) -> Goal(#{}).
 
 take_all(Stream) ->
   case pull(Stream) of
@@ -203,14 +211,15 @@ conj(Goals) ->
     fun true/1,
     Goals).
 
-merge_results(Stream, Pattern, Results) ->
-  fun() ->
+bind_results(Pattern, Results) ->
+  fun(State) ->
     case pull(Results) of
       {ok, Head, Tail} ->
-        mplus(
-          bind(Stream, eq(Pattern, Head)),
-          merge_results(Stream, Pattern, Tail)
-        );
+        MPlus =  mplus(
+          eq(Pattern, Head),
+          delay(bind_results(Pattern, Tail))
+        ),
+        MPlus(State);
       {error, no_result} -> []
     end
   end.
@@ -220,4 +229,4 @@ stream_map(F, [H | T]) -> [F(H) | stream_map(F, T)];
 stream_map(F, Stream) when is_function(Stream) ->
   fun () -> stream_map(F, Stream()) end.
 
-run_lazy(Goal) -> stream_map(fun deref_query/1, start(Goal)).
+run_lazy(Config, Goal) -> stream_map(fun deref_query/1, start(Config, Goal)).
