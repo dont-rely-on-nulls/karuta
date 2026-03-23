@@ -1,14 +1,8 @@
 open Cmdliner
 
 let conv =
-  Arg.enum
-    [
-      ("debug", Lib.Logger.Level.Debug);
-      ("unreachable", Lib.Logger.Level.Unreachable);
-      ("info", Lib.Logger.Level.Info);
-      ("warning", Lib.Logger.Level.Warning);
-      ("error", Lib.Logger.Level.Error);
-    ]
+  let open Lib.Logger.Level in
+  Arg.enum (List.map (fun l -> (String.lowercase_ascii (show l), l)) all)
 
 let term =
   let info =

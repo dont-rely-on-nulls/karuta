@@ -1,5 +1,6 @@
 module Level = struct
-  type t = Debug | Info | Warning | Error | Unreachable [@@deriving ord]
+  type t = Debug | Info | Warning | Error | Unreachable
+  [@@deriving ord, enumerate, show]
 
   let min_t : t ref = ref Debug
   let set_min_level level = min_t := level
