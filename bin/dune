@@ -9,6 +9,8 @@
  (name main)
  (public_name karuta)
  (libraries lib cmdliner)
+ (preprocess
+  (pps ppx_deriving.show ppx_enumerate))
  (modes byte exe)
  ; (flags -g)
  (package karuta))

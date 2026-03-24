@@ -17,7 +17,8 @@ let check_extension (ext : string) (files : string list) : unit =
 
 let run : cmd -> unit = function
   (* TODO: Introduce multiple files to compile subcommand *)
-  | Compile { file; run } ->
+  | Compile { file; run; log_level } ->
+      Logger.Level.set_min_level log_level;
       check_extension ".krt" [ file ];
       let* _ =
         Executor.compile
@@ -26,7 +27,8 @@ let run : cmd -> unit = function
           file
       in
       Option.iter (fun function_name -> Erl.run file function_name false) run
-  | Run { file; function_name; should_repl } ->
+  | Run { file; function_name; should_repl; log_level } ->
+      Logger.Level.set_min_level log_level;
       check_extension ".beam" [ file ];
       Erl.run file function_name should_repl
 

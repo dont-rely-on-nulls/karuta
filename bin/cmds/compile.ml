@@ -1,6 +1,6 @@
 open Cmdliner
 
-type t = { file : string; run : string option }
+type t = { file : string; run : string option; log_level : Lib.Logger.Level.t }
 
 let file_term =
   let info =
@@ -19,7 +19,7 @@ let run_term =
 
 let doc = "Compile a Karuta source file"
 let man = [ `S Manpage.s_description; `P "Compile a Karuta source file." ]
-let term combine = Term.(const combine $ file_term $ run_term)
+let term combine = Term.(const combine $ file_term $ run_term $ Log.term)
 
 let cmd combine =
   let info = Cmdliner.Cmd.info "compile" ~doc ~man in

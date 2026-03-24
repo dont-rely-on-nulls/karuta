@@ -1,6 +1,11 @@
 open Cmdliner
 
-type t = { file : string; function_name : string; should_repl : bool }
+type t = {
+  file : string;
+  function_name : string;
+  should_repl : bool;
+  log_level : Lib.Logger.Level.t;
+}
 
 let file_term =
   let info =
@@ -28,7 +33,8 @@ let doc = "Run a compiled BEAM source file"
 let man = [ `S Manpage.s_description; `P "Run a compiled BEAM source file." ]
 
 let term combine =
-  Term.(const combine $ file_term $ function_name_term $ should_repl_term)
+  Term.(
+    const combine $ file_term $ function_name_term $ should_repl_term $ Log.term)
 
 let cmd combine =
   let info = Cmdliner.Cmd.info "run" ~doc ~man in
