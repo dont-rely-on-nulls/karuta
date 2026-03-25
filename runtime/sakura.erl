@@ -33,7 +33,7 @@ serialize_map(Map, SerializeValue) ->
 
 serialize_list_of_symbols(ListOfSymbols) -> lists:map(fun serialize_symbol/1, ListOfSymbols).
 
-serialize(Query) -> 
+serialize_drl_body(Query) -> 
     case Query of
         {base, RelationName}     -> ["(Base ", serialize_symbol(RelationName), ")"];
         {const, Const}           -> ["(Const ", serialize_map(Const, fun serialize_value/1), " )"]; 
@@ -49,8 +49,35 @@ serialize(Query) ->
         {take, HowMany, Query1} -> ["(Take ", serialize_primitive(HowMany), " ", serialize(Query1), ")"]
     end.
 
+serialize_scl_body({'begin', Query}) ->
+    DrlSerializedBody = serialize_drl_body(Query),
+    ["(Begin (query ", DrlSerializedBody, ")", " (limit (0)))"].
+    
+serialize_sublanguage(Tag) ->
+    case Tag of 
+        drl -> {"drl", fun serialize_drl_body/1};
+        ddl -> {"ddl", fun serialize_drl_body/1};
+        dml -> {"dml", fun serialize_drl_body/1};
+        scl -> {"scl", fun serialize_scl_body/1};
+        Unsupported -> error(["We do not support the following sublanguage yet:", atom_to_list(Unsupported)])
+    end.
+             
+serialize({Tag, Query}) ->
+    {SerializedTag, SerializeBodyFun} = serialize_sublanguage(Tag),
+    {ok, ["(", SerializedTag, " ", SerializeBodyFun(Query), ")"]}.
+
 deserialize(Response) -> {ok, Response}. % TODO
-create_session(_Socket, _Query) -> {ok, dummy}. % TODO
+
+create_session(Socket, ReceiveTimeout, Query) -> 
+    maybe        
+        {ok, SessionCreationPayload} ?= serialize({scl, Query}),
+        ok ?= gen_tcp:send(Socket, SessionCreationPayload),
+        {ok, RawData} ?= gen_tcp:recv(Socket, 0, ReceiveTimeout),
+        % TODO: How do we identify that this receive is about the above send? We need to have some nonce about it.
+        deserialize({scl, RawData})
+    else
+        {error, Error} -> error(Error)
+    end.
 
 get_response(Socket, ReceiveTimeout, Session) ->
   maybe
@@ -69,8 +96,8 @@ ask(Pattern, RawQuery) ->
   fun(#{db_config := #{socket := Socket, timeouts := TimeoutMap}} = State) ->
     ReceiveTimeout = maps:get('receive', TimeoutMap, 5 * 1000),
     maybe
-      Query = serialize(RawQuery),
-      {ok, Session} ?= create_session(Socket, Query),
+      {ok, Query} ?= serialize({drl, RawQuery}),
+      {ok, Session} ?= create_session(Socket, ReceiveTimeout, Query),
       Results = karuta:bind_results(Pattern, fun () -> get_response(Socket, ReceiveTimeout, Session) end),
       Results(State)
     else
