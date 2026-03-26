@@ -3,12 +3,12 @@ open Cmdliner
 type cmd = Compile of Cmds.Compile.t | Run of Cmds.Run.t
 
 let compile runner =
-  let combine file run = Compile { file; run } |> runner in
+  let combine file run log_level = Compile { file; run; log_level } |> runner in
   Cmds.Compile.cmd combine
 
 let run runner =
-  let combine file function_name should_repl =
-    Run { file; function_name; should_repl } |> runner
+  let combine file function_name should_repl log_level =
+    Run { file; function_name; should_repl; log_level } |> runner
   in
   Cmds.Run.cmd combine
 

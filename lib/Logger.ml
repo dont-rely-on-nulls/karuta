@@ -1,3 +1,12 @@
+module Level = struct
+  type t = Debug | Info | Warning | Error | Unreachable
+  [@@deriving ord, enumerate, show]
+
+  let min_t : t ref = ref Debug
+  let set_min_level level = min_t := level
+  let should_log level = compare level !min_t >= 0
+end
+
 module type OUTPUT = sig
   val format_error_message :
     string -> Location.location option -> string -> string
@@ -16,7 +25,7 @@ module type OUTPUT = sig
 end
 
 module Make (Output : OUTPUT) = struct
-  type t = Warning | Info | Error | Unreachable | Debug
+  open Level
 
   let unreachable_suffix =
     "This is a compiler bug. Please report it in \
@@ -42,9 +51,10 @@ module Make (Output : OUTPUT) = struct
   and create_simply_msg level msg = format level None msg
 
   and internal level (locMay : Location.location option) (msg : string) : unit =
-    match locMay with
-    | None -> msg |> create_simply_msg level |> print_endline
-    | Some _ -> report level locMay msg
+    if should_log level then
+      match locMay with
+      | None -> msg |> create_simply_msg level |> print_endline
+      | Some _ -> report level locMay msg
 
   and unreachable (loc : Location.location) (msg : string) : unit =
     internal Unreachable (Some loc) msg
@@ -62,8 +72,9 @@ module Make (Output : OUTPUT) = struct
   let simply_info (msg : string) : unit = internal Info None msg
 
   let debug (msg : string) : unit =
-    let prefix = get_prefix Debug in
-    print_endline @@ Output.format_debug_message prefix msg
+    if should_log Debug then
+      let prefix = get_prefix Debug in
+      print_endline @@ Output.format_debug_message prefix msg
 end
 
 module Terminal = Make ((
