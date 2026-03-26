@@ -51,8 +51,10 @@ serialize_drl_body(Query) ->
 
 serialize_scl_body({'begin', Query}) ->
     DrlSerializedBody = serialize_drl_body(Query),
-    ["(Begin (query ", DrlSerializedBody, ")", " (limit (0)))"].
-    
+    ["(Begin (query ", DrlSerializedBody, ")", " (limit (0)))"];
+
+serialize_scl_body({fetch, Cursor}) -> ["(Fetch (cursor ", Cursor, ")", " (limit (1)))"].
+   
 serialize_sublanguage(Tag) ->
     case Tag of 
         drl -> {"drl", fun serialize_drl_body/1};
@@ -66,6 +68,13 @@ serialize({Tag, Query}) ->
     {SerializedTag, SerializeBodyFun} = serialize_sublanguage(Tag),
     {ok, ["(", SerializedTag, " ", SerializeBodyFun(Query), ")"]}.
 
+deserialize({drl, _Response}) -> 
+    error("TODO: Wait for the LFE migration");
+deserialize({scl, session, _Response}) -> 
+    error("TODO: Wait for the LFE migration");
+
+deserialize({scl, data, Response}) -> deserialize({drl, Response});
+
 deserialize(Response) -> {ok, Response}. % TODO
 
 create_session(Socket, ReceiveTimeout, Query) -> 
@@ -74,20 +83,27 @@ create_session(Socket, ReceiveTimeout, Query) ->
         ok ?= gen_tcp:send(Socket, SessionCreationPayload),
         {ok, RawData} ?= gen_tcp:recv(Socket, 0, ReceiveTimeout),
         % TODO: How do we identify that this receive is about the above send? We need to have some nonce about it.
-        deserialize({scl, RawData})
+        DeserializedSession ?= deserialize({scl, session, RawData}),
+        {ok, maps:get(DeserializedSession, cursor)}
     else
         {error, Error} -> error(Error)
     end.
 
-get_response(Socket, ReceiveTimeout, Session) ->
+get_response(Socket, ReceiveTimeout, SessionID) ->
   maybe
-    ok ?= gen_tcp:send(Socket, Session),
-    {ok, RawData} ?= gen_tcp:recv(Socket, 0, ReceiveTimeout),
-    {ok, Response} ?= deserialize(RawData),
-    case Response of
-      'end' -> [];
-      {more, Value} -> [Value | fun () -> get_response(Socket, ReceiveTimeout, Session) end]
-    end
+      {ok, SerializedFetch} ?= serialize({scl, {fetch, SessionID}}),
+      ok ?= gen_tcp:send(Socket, SerializedFetch),
+      {ok, RawData} ?= gen_tcp:recv(Socket, 0, ReceiveTimeout),
+      {ok, #{has_more := More, row := Rows}} ?= deserialize(RawData),
+      case Rows of
+          [] -> [];
+          [Row] -> 
+              case More of
+                  true -> [Row | fun () -> get_response(Socket, ReceiveTimeout, SessionID) end];
+                  false -> [Row]
+              end;
+          _ -> error("Unreachable: ask primitive should only fetch one piece of data at a time")
+      end
   else
     {error, Error} -> error(Error)
   end.
@@ -97,8 +113,8 @@ ask(Pattern, RawQuery) ->
     ReceiveTimeout = maps:get('receive', TimeoutMap, 5 * 1000),
     maybe
       {ok, Query} ?= serialize({drl, RawQuery}),
-      {ok, Session} ?= create_session(Socket, ReceiveTimeout, Query),
-      Results = karuta:bind_results(Pattern, fun () -> get_response(Socket, ReceiveTimeout, Session) end),
+      {ok, SessionID} ?= create_session(Socket, ReceiveTimeout, Query),
+      Results = karuta:bind_results(Pattern, fun () -> get_response(Socket, ReceiveTimeout, SessionID) end),
       Results(State)
     else
       {error, Error} -> error(Error)
