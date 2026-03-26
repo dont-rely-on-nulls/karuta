@@ -18,8 +18,8 @@ let conj (goals : Expr.t list) : Expr.t =
 let take_all (stream : Expr.t) : Expr.t =
   call_with_module (atom "karuta") (atom "take_all") [ stream ]
 
-let start (goal : Expr.t) : Expr.t =
-  call_with_module (atom "karuta") (atom "start") [ goal ]
+let start (config : Expr.t) (goal : Expr.t) : Expr.t =
+  call_with_module (atom "karuta") (atom "start") [ config; goal ]
 
 let query_variable var_name goal : Expr.t =
   call_with_module (atom "karuta") (atom "query_variable")
