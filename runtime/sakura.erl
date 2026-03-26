@@ -37,16 +37,16 @@ serialize_drl_body(Query) ->
     case Query of
         {base, RelationName}     -> ["(Base ", serialize_symbol(RelationName), ")"];
         {const, Const}           -> ["(Const ", serialize_map(Const, fun serialize_value/1), " )"]; 
-        {select, Query1, Query2} -> ["(Select ", serialize(Query1), " ", serialize(Query2), ")"];
+        {select, Query1, Query2} -> ["(Select ", serialize_drl_body(Query1), " ", serialize_drl_body(Query2), ")"];
         {join, ListOfSymbols, Query1, Query2} -> 
             ["(Join ", serialize_list_of_symbols(ListOfSymbols), " ", 
-             serialize(Query1), " ", serialize(Query2), ")"];
-        {cartesian, Query1, Query2} -> ["(Cartesian ", serialize(Query1), " ", serialize(Query2), ")"];
-        {project, ListOfSymbols, Query1} -> ["(Project ", serialize_list_of_symbols(ListOfSymbols), " ", serialize(Query1), ")"];
-        {rename, RenameMap, Query1} -> ["(Rename ", serialize_map(RenameMap, fun serialize_symbol/1), " ", serialize(Query1), " )"]; 
-        {union, Query1, Query2} -> ["(Union ", serialize(Query1), " ", serialize(Query2), ")"];
-        {diff, Query1, Query2} -> ["(Diff ", serialize(Query1), " ", serialize(Query2), ")"];
-        {take, HowMany, Query1} -> ["(Take ", serialize_primitive(HowMany), " ", serialize(Query1), ")"]
+             serialize_drl_body(Query1), " ", serialize_drl_body(Query2), ")"];
+        {cartesian, Query1, Query2} -> ["(Cartesian ", serialize_drl_body(Query1), " ", serialize_drl_body(Query2), ")"];
+        {project, ListOfSymbols, Query1} -> ["(Project ", serialize_list_of_symbols(ListOfSymbols), " ", serialize_drl_body(Query1), ")"];
+        {rename, RenameMap, Query1} -> ["(Rename ", serialize_map(RenameMap, fun serialize_symbol/1), " ", serialize_drl_body(Query1), " )"]; 
+        {union, Query1, Query2} -> ["(Union ", serialize_drl_body(Query1), " ", serialize_drl_body(Query2), ")"];
+        {diff, Query1, Query2} -> ["(Diff ", serialize_drl_body(Query1), " ", serialize_drl_body(Query2), ")"];
+        {take, HowMany, Query1} -> ["(Take ", serialize_primitive(HowMany), " ", serialize_drl_body(Query1), ")"]
     end.
 
 serialize_scl_body({'begin', Query}) ->
