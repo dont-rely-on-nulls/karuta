@@ -33,10 +33,17 @@ let compile' (compiler : Compiler.Types.t) : Ast.Clause.t list -> unit attempt =
 (*       in *)
 (*       Some (compiler, computer) *)
 
-let compile (persist : Compiler.Types.Persist.t) (filepath : string) :
+let compile (persist : Compiler.Types.Persist.t) (filepaths : string list) :
     unit attempt =
-  filepath |> parse ||> preprocess filepath
-  ||> compile' (Compiler.Types.initialize persist filepath)
+  let compile_one filepath =
+    filepath |> parse ||> preprocess filepath
+    ||> compile' (Compiler.Types.initialize persist filepath)
+  in
+  let rec compile_all = function
+    | [] -> Ok ()
+    | f :: files -> Result.bind (compile_one f) (fun () -> compile_all files)
+  in
+  compile_all filepaths
 
 (* let load' filter_fn (filepath : string) : Compiler.t * Machine.t = *)
 (*   filepath |> parse |> List.filter filter_fn |> compile *)

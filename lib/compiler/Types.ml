@@ -17,7 +17,6 @@ module Persist = struct
 end
 
 type functor_map = int PredicateMap.t
-type entry_point = { p_register : int }
 
 type sig_env = signature env
 
@@ -46,6 +45,7 @@ and compiled_module = {
 and comptime = Module of compiled_module | Signature of compiled_signature
 
 type t = {
+  sakura : bool;
   header : forms;
   output : forms;
   filename : string;
@@ -58,6 +58,8 @@ type t = {
 let initialize_nested persist parent filename module_name : t =
   {
     parent;
+    sakura =
+      Option.value ~default:false @@ Option.map (fun v -> v.sakura) parent;
     filename;
     module_name;
     header =
@@ -79,7 +81,11 @@ let initialize_nested persist parent filename module_name : t =
 
 let initialize persist filename : t =
   let module_name = Filename.basename @@ Filename.chop_extension filename in
-  initialize_nested persist None filename module_name
+  let extension = Filename.extension filename in
+  {
+    (initialize_nested persist None filename module_name) with
+    sakura = extension = ".skr";
+  }
 
 let show_functor_table (functors : functor_map) : string =
   let open PredicateMap in

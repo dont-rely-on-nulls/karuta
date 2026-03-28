@@ -1,12 +1,16 @@
 open Cmdliner
 
-type t = { file : string; run : string option; log_level : Lib.Logger.Level.t }
+type t = {
+  files : string list;
+  run : string option;
+  log_level : Lib.Logger.Level.t;
+}
 
-let file_term =
+let file_terms =
   let info =
-    Arg.info [] ~doc:"Mandatory Karuta source file." ~docv:"FILE.krt"
+    Arg.info [] ~doc:"Mandatory source files." ~docv:"FILE(.krt|.skr)"
   in
-  Arg.required (Arg.pos 0 (Arg.some Arg.file) None info)
+  Arg.non_empty (Arg.pos_all Arg.string [] info)
 
 let run_term =
   let info =
@@ -17,9 +21,9 @@ let run_term =
   in
   Arg.value (Arg.opt (Arg.some Arg.string) None info)
 
-let doc = "Compile a Karuta source file"
-let man = [ `S Manpage.s_description; `P "Compile a Karuta source file." ]
-let term combine = Term.(const combine $ file_term $ run_term $ Log.term)
+let doc = "Compile Karuta and Sakura source files"
+let man = [ `S Manpage.s_description; `P doc ]
+let term combine = Term.(const combine $ file_terms $ run_term $ Log.term)
 
 let cmd combine =
   let info = Cmdliner.Cmd.info "compile" ~doc ~man in

@@ -30,7 +30,7 @@ let should_repl_term =
   Arg.value (Arg.flag info)
 
 let doc = "Run a compiled BEAM source file"
-let man = [ `S Manpage.s_description; `P "Run a compiled BEAM source file." ]
+let man = [ `S Manpage.s_description; `P doc ]
 
 let term combine =
   Term.(
