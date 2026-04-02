@@ -23,8 +23,9 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         # Legacy packages that have not been converted to flakes
-        legacyPackages = nixpkgs.legacyPackages.${system};
+        legacyPackages = import nixpkgs { inherit system; };
         # OCaml packages available on nixpkgs
+        beamPackages = legacyPackages.beam.packages.erlang_27;
         ocamlPackages = legacyPackages.ocamlPackages;
         # Library functions from nixpkgs
         lib = legacyPackages.lib;
@@ -73,6 +74,8 @@
             src = sources.ocaml;
 
             buildInputs = [
+              ocamlPackages.num
+              ocamlPackages.findlib
               ocamlPackages.ppx_deriving
               ocamlPackages.ppx_enumerate
               ocamlPackages.ppxlib
@@ -180,9 +183,15 @@
         #
         devShells = {
           default = legacyPackages.mkShell {
+            # Unbreak LFE
+            shellHook = ''
+              export PATH="$PATH:${beamPackages.lfe}/src/bin"
+            '';
+
             # Development tools
             packages = [
-              legacyPackages.erlang_27
+              beamPackages.erlang
+              beamPackages.lfe
               # Source file formatting
               legacyPackages.nixpkgs-fmt
               legacyPackages.ocamlformat
@@ -190,6 +199,9 @@
               legacyPackages.fswatch
               # For `dune build @doc`
               ocamlPackages.odoc
+              # This is needed after the flake update
+              ocamlPackages.num
+              ocamlPackages.findlib
               # OCaml editor support
               ocamlPackages.ocaml-lsp
               # Nicely formatted types on hover
