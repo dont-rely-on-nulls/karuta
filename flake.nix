@@ -183,9 +183,10 @@
         #
         devShells = {
           default = legacyPackages.mkShell {
-            # Unbreak LFE
+            # Unbreak stuff
             shellHook = ''
               export PATH="$PATH:${beamPackages.lfe}/src/bin"
+              export CAML_LD_LIBRARY_PATH="$CAML_LD_LIBRARY_PATH:${ocamlPackages.num}/lib/ocaml/${legacyPackages.ocaml.version}/site-lib/num"
             '';
 
             # Development tools
