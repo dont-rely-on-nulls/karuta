@@ -7,24 +7,22 @@ let ( @> ) : 'a 'b 'c. ('a -> 'b) -> ('b -> 'c) -> 'a -> 'c =
  fun l r -> Fun.compose r l
 
 let ( @>> ) :
-      'a 'b 'c 'e.
-      ('a -> ('b, 'e) result) ->
-      ('b -> ('c, 'e) result) ->
-      'a ->
-      ('c, 'e) result =
+    'a 'b 'c 'e.
+    ('a -> ('b, 'e) result) -> ('b -> ('c, 'e) result) -> 'a -> ('c, 'e) result
+    =
  fun prefix suffix state -> Result.bind (prefix state) suffix
 
 let replace :
-      'a 's 'b 'e. ('a -> 'b) -> ('a * 's, 'e) result -> ('b * 's, 'e) result =
+    'a 's 'b 'e. ('a -> 'b) -> ('a * 's, 'e) result -> ('b * 's, 'e) result =
  fun f -> Result.map (fun (a, s) -> (f a, s))
 
 let ifte :
-      'a 'b 'c 'et 'ec.
-      ('a -> ('b, 'et) result) ->
-      ('b -> ('c, 'ec) result) ->
-      ('a -> ('c, 'ec) result) ->
-      'a ->
-      ('c, 'ec) result =
+    'a 'b 'c 'et 'ec.
+    ('a -> ('b, 'et) result) ->
+    ('b -> ('c, 'ec) result) ->
+    ('a -> ('c, 'ec) result) ->
+    'a ->
+    ('c, 'ec) result =
  fun test consequent alternative state ->
   state
   |> test @> Result.fold ~ok:consequent ~error:(fun _ -> alternative state)
@@ -35,10 +33,10 @@ let return : 'a 'e. 'a -> ('a, 'e) parser = fun v state -> Ok (v, state)
 let succeed : 'e. (unit, 'e) parser = return ()
 
 let is_not :
-      'a 'errin 'errout.
-      ('a, 'errin) parser ->
-      ('a -> Location.location -> 'errout) ->
-      (unit, 'errout) parser =
+    'a 'errin 'errout.
+    ('a, 'errin) parser ->
+    ('a -> Location.location -> 'errout) ->
+    (unit, 'errout) parser =
  fun p handler ({ loc = startl; _ } as state) ->
   ifte p
     (fun (r, { loc = endl; _ }) -> Error (handler r { startl; endl }))
@@ -54,10 +52,10 @@ let maybe : 'a 'el 'er. ('a, 'el) parser -> ('a option, 'er) parser =
  fun p -> ifte p (mapl Option.some @> Result.ok) (return None)
 
 let capture :
-      'a 'b 'e.
-      ('a -> ('b, 'e) parser) ->
-      'a * parser_state ->
-      ('b * parser_state, 'e) result =
+    'a 'b 'e.
+    ('a -> ('b, 'e) parser) ->
+    'a * parser_state ->
+    ('b * parser_state, 'e) result =
  fun f (result, state) -> f result state
 
 let star : 'a 'e 'none. ('a, 'e) parser -> ('a BatFingerTree.t, 'none) parser =
@@ -87,8 +85,8 @@ let some : 'e. (unit, ([> `UnexpectedEOF ] as 'e)) parser = function
           Ok ((), { remaining = triml 1 remaining; loc = Location.step 1 loc }))
 
 let horizontal_whitespace :
-      'e.
-      (unit, ([> `ExpectedHorizontalWhitespace of Location.t ] as 'e)) parser =
+    'e. (unit, ([> `ExpectedHorizontalWhitespace of Location.t ] as 'e)) parser
+    =
  fun { remaining = current; loc } ->
   let remaining = dropl (function ' ' | '\t' -> true | _ -> false) current in
   match stride current remaining with
@@ -108,10 +106,10 @@ let newline : 'e. (unit, ([> `ExpectedNewline of Location.t ] as 'e)) parser =
   | None -> Error (`ExpectedNewline loc)
 
 let horizontal :
-      'e.
-      ( unit,
-        ([> `UnexpectedEOF | `UnexpectedNewline of Location.t ] as 'e) )
-      parser =
+    'e.
+    ( unit,
+      ([> `UnexpectedEOF | `UnexpectedNewline of Location.t ] as 'e) )
+    parser =
  fun { remaining; loc } ->
   match first remaining with
   | None -> Error `UnexpectedEOF
@@ -168,21 +166,20 @@ let ident_like is_start is_character fallthrough { remaining = current; loc } =
   | Some _ -> Error (fallthrough loc)
 
 let atom :
-      'e.
-      ( string Location.with_location,
-        ([> `UnexpectedEOF | `ExpectedLowercase of Location.t ] as 'e) )
-      parser =
+    'e.
+    ( string Location.with_location,
+      ([> `UnexpectedEOF | `ExpectedLowercase of Location.t ] as 'e) )
+    parser =
   ident_like BatChar.is_lowercase
     (fun c -> BatChar.is_letter c || BatChar.is_digit c || c = '_' || c = '-')
     (fun loc -> `ExpectedLowercase loc)
 
 let variable :
-      'e.
-      ( string Location.with_location,
-        ([> `ExpectedUppercaseOrUnderscore of Location.t | `UnexpectedEOF ]
-         as
-         'e) )
-      parser =
+    'e.
+    ( string Location.with_location,
+      ([> `ExpectedUppercaseOrUnderscore of Location.t | `UnexpectedEOF ] as 'e)
+    )
+    parser =
   ident_like
     (function
       | '_' -> true | c when BatChar.is_uppercase c -> true | _ -> false)
@@ -190,10 +187,10 @@ let variable :
     (fun loc -> `ExpectedUppercaseOrUnderscore loc)
 
 let quoted_atom :
-      'e.
-      ( string Location.with_location,
-        ([> `UnexpectedEOF | `WrongCharacter of Location.t * char ] as 'e) )
-      parser =
+    'e.
+    ( string Location.with_location,
+      ([> `UnexpectedEOF | `WrongCharacter of Location.t * char ] as 'e) )
+    parser =
  fun { remaining = current; loc } ->
   match getc current with
   | Some ('\'', remaining) ->
@@ -210,10 +207,10 @@ let quoted_atom :
   | Some _ | None -> Error (`WrongCharacter (loc, '\''))
 
 let integer :
-      'e.
-      ( int Location.with_location,
-        ([> `NotADigit of Location.t | `UnexpectedEOF ] as 'e) )
-      parser =
+    'e.
+    ( int Location.with_location,
+      ([> `NotADigit of Location.t | `UnexpectedEOF ] as 'e) )
+    parser =
  fun ({ remaining = current; loc } as state) ->
   let positive_integer ((), { remaining = current; loc = after_minus }) =
     match size current with
@@ -242,13 +239,13 @@ let integer :
   | None -> Error `UnexpectedEOF
 
 let list_of :
-      'a 'e.
-      ?allow_trailing:bool ->
-      start_delim:(unit, 'e) parser ->
-      separator:(unit, 'e) parser ->
-      end_delim:(unit, 'e) parser ->
-      ('a, 'e) parser ->
-      ('a BatFingerTree.t, 'e) parser =
+    'a 'e.
+    ?allow_trailing:bool ->
+    start_delim:(unit, 'e) parser ->
+    separator:(unit, 'e) parser ->
+    end_delim:(unit, 'e) parser ->
+    ('a, 'e) parser ->
+    ('a BatFingerTree.t, 'e) parser =
  fun ?(allow_trailing = false) ~start_delim ~separator ~end_delim item ->
   let open BatFingerTree in
   let trailing =
@@ -268,14 +265,14 @@ let list_of :
   loop
 
 let func_label :
-      'e.
-      ( Ast.Expr.func_label Location.with_location,
-        ([> `UnexpectedEOF
-         | `ExpectedLowercase of Location.t
-         | `WrongCharacter of Location.t * char ]
-         as
-         'e) )
-      parser =
+    'e.
+    ( Ast.Expr.func_label Location.with_location,
+      ([> `UnexpectedEOF
+       | `ExpectedLowercase of Location.t
+       | `WrongCharacter of Location.t * char ]
+       as
+       'e) )
+    parser =
  fun ({ loc = startl; _ } as state) ->
   state
   |> star (atom @>> capture @@ fun a -> colon @&& return a)
@@ -350,8 +347,8 @@ and list : 'e. (Ast.Expr.t, ([> expr_errors ] as 'e)) parser =
           Ok (build_cons startl endl prefix tail, state)
 
 and func :
-      'e.
-      (Ast.Expr.func Location.with_location, ([> expr_errors ] as 'e)) parser =
+    'e. (Ast.Expr.func Location.with_location, ([> expr_errors ] as 'e)) parser
+    =
  fun ({ loc = startl; _ } as state) ->
   let single_element = skip_whitespace_and_comments @&& expr in
   let karuta_elements =
@@ -385,11 +382,11 @@ and func :
    the entire text, not just the first element *)
 
 let query :
-      'e.
-      Ast.Expr.func Location.with_location ->
-      ( Ast.Expr.func Location.with_location list Location.with_location,
-        ([> expr_errors ] as 'e) )
-      parser =
+    'e.
+    Ast.Expr.func Location.with_location ->
+    ( Ast.Expr.func Location.with_location list Location.with_location,
+      ([> expr_errors ] as 'e) )
+    parser =
  fun first_element ->
   (ifte question_mark (snd @> return [ first_element ])
   @@
@@ -404,11 +401,11 @@ let query :
   @@ fun l -> Location.add_loc l first_element.loc
 
 let declaration :
-      'e.
-      Ast.Expr.func Location.with_location ->
-      ( Ast.ParserClause.decl Location.with_location,
-        ([> expr_errors ] as 'e) )
-      parser =
+    'e.
+    Ast.Expr.func Location.with_location ->
+    ( Ast.ParserClause.decl Location.with_location,
+      ([> expr_errors ] as 'e) )
+    parser =
  fun { Location.content = head; loc } ->
   (list_of ~start_delim:holds
      ~separator:(skip_whitespace_and_comments @&& comma)
@@ -419,7 +416,7 @@ let declaration :
   @> fun body -> Location.add_loc { Ast.ParserClause.head; body } loc
 
 let rec parser_clause :
-      'e. (Ast.ParserClause.t, ([> expr_errors ] as 'e)) parser =
+    'e. (Ast.ParserClause.t, ([> expr_errors ] as 'e)) parser =
  fun state ->
   state
   |> (ifte holds
@@ -436,11 +433,11 @@ let rec parser_clause :
      @@ fun ret -> skip_whitespace_and_comments @&& return ret
 
 and directive :
-      'e.
-      ( (Ast.Expr.func Location.with_location * Ast.ParserClause.t list list)
-        Location.with_location,
-        ([> expr_errors ] as 'e) )
-      parser =
+    'e.
+    ( (Ast.Expr.func Location.with_location * Ast.ParserClause.t list list)
+      Location.with_location,
+      ([> expr_errors ] as 'e) )
+    parser =
  fun state ->
   state
   |> func @>> fun (header, state) ->

@@ -39,7 +39,7 @@ let compile_declaration_bodies module_name
         |> List.map (Fun.compose find_variables Location.strip_loc)
         |> List.fold_left Set.union Set.empty
         |> Set.filter (fun name ->
-               Str.string_match (Str.regexp "^[A-Z]") name 0)
+            Str.string_match (Str.regexp "^[A-Z]") name 0)
       in
       let open Location in
       let body =

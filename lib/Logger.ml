@@ -77,7 +77,7 @@ module Make (Output : OUTPUT) = struct
       print_endline @@ Output.format_debug_message prefix msg
 end
 
-module Terminal = Make ((
+module Terminal = Make (
   struct
     open Format
 
@@ -170,7 +170,7 @@ module Terminal = Make ((
       let prefix = prefix |> make_bold |> add_color color in
       prefix ^ msg
   end :
-    OUTPUT))
+    OUTPUT)
 
 type kind = Terminal | Server
 
