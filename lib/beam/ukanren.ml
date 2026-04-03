@@ -7,7 +7,7 @@ let nat (n : Expr.t) : Expr.t =
   call_with_module (atom "karuta") (atom "nat") [ n ]
 
 let call_with_fresh (f : Expr.func) : Expr.t =
-  call_with_module (atom "karuta") (atom "call_with_fresh") [ Expr.Fun f ]
+  call_with_module (atom "karuta") (atom "call-with-fresh") [ Expr.Fun f ]
 
 let disj (goals : Expr.t list) : Expr.t =
   call_with_module (atom "karuta") (atom "disj") [ list_expr goals ]
@@ -16,14 +16,16 @@ let conj (goals : Expr.t list) : Expr.t =
   call_with_module (atom "karuta") (atom "conj") [ list_expr goals ]
 
 let take_all (stream : Expr.t) : Expr.t =
-  call_with_module (atom "karuta") (atom "take_all") [ stream ]
+  call_with_module (atom "karuta") (atom "take-all") [ stream ]
 
 let start (config : Expr.t) (goal : Expr.t) : Expr.t =
   call_with_module (atom "karuta") (atom "start") [ config; goal ]
 
 let query_variable var_name goal : Expr.t =
-  call_with_module (atom "karuta") (atom "query_variable")
+  call_with_module (atom "karuta") (atom "query-variable")
     [ var var_name; atom var_name; goal ]
 
 let run_lazy (goal : Expr.t) : Expr.t =
-  call_with_module (atom "karuta") (atom "run_lazy") [ goal ]
+  call_with_module (atom "karuta") (atom "run-lazy")
+    (* TODO: receive the config as an argument *)
+    [ Expr.Map (Expr.Creation []); goal ]

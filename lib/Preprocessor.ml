@@ -126,12 +126,12 @@ let rec remove_comments (clause : Ast.ParserClause.t) :
       filtered_queries
       |> List.concat_map Option.to_list
       |> List.map (function
-           | { content = Ast.ParserClause.QueryConjunction [ func ]; _ } -> func
-           | _ ->
-               Logger.simply_unreachable
-                 "The conjunctions we constructed are guaranteed not to have \
-                  this form.";
-               exit 1)
+        | { content = Ast.ParserClause.QueryConjunction [ func ]; _ } -> func
+        | _ ->
+            Logger.simply_unreachable
+              "The conjunctions we constructed are guaranteed not to have this \
+               form.";
+            exit 1)
       |> fun funcs ->
       if List.is_empty funcs then None
       else Some { content = Ast.ParserClause.QueryConjunction funcs; loc }
