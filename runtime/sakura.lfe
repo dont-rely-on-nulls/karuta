@@ -1,7 +1,7 @@
 (defmodule sakura
   (export (ask 2)))
 
-(include-lib "sakura.hrl")
+(include-lib "types.lfe")
 
 (defun serialize (term) (lfe_io_pretty:term term))
 (defun deserialize (str) (lfe_io:read_string str))
