@@ -5,6 +5,7 @@ module Set = BatSet
 type predicate_name = Ast.Clause.head [@@deriving show, ord]
 type forms = Form.t FT.t
 type 'a env = 'a Location.with_location BatMap.String.t
+type 'a nested_env = 'a env BatLazyList.t
 
 module PredicateMap = BatMap.Make (struct
   type t = predicate_name [@@deriving show, ord]
@@ -44,10 +45,11 @@ and compiled_module = {
 
 and comptime = Module of compiled_module | Signature of compiled_signature
 
+type scope = comptime nested_env
+type sig_scope = signature nested_env
+
 module type LookupS = sig
   type t
-  type sig_scope
-  type scope
 
   val empty_signature : sig_scope
   val sig_env_to_sig_scope : sig_env -> sig_scope

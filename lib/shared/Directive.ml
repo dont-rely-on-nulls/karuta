@@ -1,8 +1,8 @@
-open Types
+open Compiler.Types
 
 let initialize_from_parent module_name initialize_nested parent : t =
   let inner_module_name =
-    parent.module_name ^ Common.module_name_separator ^ module_name
+    parent.module_name ^ Compiler.Common.module_name_separator ^ module_name
   in
   let inner_filename =
     (Filename.basename @@ Filename.chop_extension parent.filename)
@@ -15,7 +15,8 @@ let rec compile (directive_loc : Location.location)
     ({ elements; arity; _ } as f : Ast.Expr.func)
     (body : Ast.Clause.t list list) (step : Ast.Clause.t list * t -> t)
     ({ env = { modules; _ } as env; _ } as compiler : t)
-    (initialize_nested : Types.initialize_nested) : t =
+    (initialize_nested : Compiler.Types.initialize_nested) : t =
+  let module Lookup = (val compiler.lookup) in
   match (Ast.Expr.extract_func_label f, arity, body) with
   | "module", 1, [ body ] -> (
       match elements with
