@@ -44,8 +44,50 @@ and compiled_module = {
 
 and comptime = Module of compiled_module | Signature of compiled_signature
 
+module type LookupS = sig
+  type t
+  type sig_scope
+  type scope
+
+  val empty_signature : sig_scope
+  val sig_env_to_sig_scope : sig_env -> sig_scope
+  val sig_cons : sig_scope -> sig_env -> sig_scope
+  val ancestors_of_compiler : t -> scope
+
+  val signature :
+    scope ->
+    Ast.Expr.func_label ->
+    [> `Ok of compiled_signature Location.with_location
+    | `Undefined of string Location.with_location
+    | `UnexpectedModule of compiled_module Location.with_location
+    | `UnexpectedSignature of Location.location ]
+
+  val m0dule :
+    scope ->
+    Ast.Expr.func_label ->
+    [> `Ok of compiled_module Location.with_location
+    | `Undefined of string Location.with_location
+    | `UnexpectedSignature of Location.location ]
+
+  val nested_signature :
+    sig_scope ->
+    scope ->
+    Ast.Expr.func_label ->
+    [> `Ok of signature Location.with_location
+    | `Undefined of string Location.with_location
+    | `UnexpectedModule of compiled_module Location.with_location
+    | `UnexpectedSignature of Location.location ]
+
+  val predicate :
+    scope ->
+    Ast.Expr.func_label ->
+    int ->
+    [> `Ok of unit
+    | `Undefined of string Location.with_location
+    | `UnexpectedSignature of Location.location ]
+end
+
 type t = {
-  sakura : bool;
   header : forms;
   output : forms;
   filename : string;
@@ -53,39 +95,65 @@ type t = {
   parent : t option;
   env : compiled_module;
   persist : Persist.t;
+  lookup : (module LookupS with type t = t);
 }
 
-let initialize_nested persist parent filename module_name : t =
-  {
-    parent;
-    sakura =
-      Option.value ~default:false @@ Option.map (fun v -> v.sakura) parent;
-    filename;
-    module_name;
-    header =
-      FT.of_list
-        [
-          Beam.Builder.Attribute.file filename 1;
-          (* TODO: this should be a proper atom *)
-          Beam.Builder.Attribute.module_ module_name;
-        ];
-    output = FT.empty;
-    env =
-      {
-        modules = BatMap.String.empty;
-        predicates = PredicateMap.empty;
-        hidden = None;
-      };
-    persist;
-  }
+type initialize_nested = Persist.t -> t option -> string -> string -> t
 
-let initialize persist filename : t =
-  let module_name = Filename.basename @@ Filename.chop_extension filename in
-  let extension = Filename.extension filename in
-  {
-    (initialize_nested persist None filename module_name) with
-    sakura = extension = ".skr";
-  }
+type runner = {
+  step : Ast.Clause.t list * t -> t;
+  initialize_nested : initialize_nested;
+}
+
+module type COMPILER_CONFIG = sig
+  val compile_clause : runner -> Ast.Clause.t -> t -> t
+
+  module Lookup : LookupS with type t = t
+end
+
+module type COMPILER = sig
+  val step : Ast.Clause.t list * t -> t
+  val initialize : Persist.t -> string -> t
+end
+
+module Make (Config : COMPILER_CONFIG) : COMPILER = struct
+  let initialize_nested persist parent filename module_name : t =
+    {
+      parent;
+      filename;
+      module_name;
+      header =
+        FT.of_list
+          [
+            Beam.Builder.Attribute.file filename 1;
+            (* TODO: this should be a proper atom *)
+            Beam.Builder.Attribute.module_ module_name;
+          ];
+      output = FT.empty;
+      env =
+        {
+          modules = BatMap.String.empty;
+          predicates = PredicateMap.empty;
+          hidden = None;
+        };
+      persist;
+      lookup = (module Config.Lookup);
+    }
+
+  let initialize persist filename : t =
+    let module_name = Filename.basename @@ Filename.chop_extension filename in
+    initialize_nested persist None filename module_name
+
+  let rec step : Ast.Clause.t list * t -> t = function
+    | [], compiler ->
+        compiler.persist compiler.filename
+          (FT.append compiler.header compiler.output);
+        compiler
+    | clause :: remaining, compiler ->
+        step
+          ( remaining,
+            Config.compile_clause { initialize_nested; step } clause compiler )
+end
 
 let show_functor_table (functors : functor_map) : string =
   let open PredicateMap in

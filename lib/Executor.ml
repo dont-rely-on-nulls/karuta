@@ -13,14 +13,13 @@ let preprocess (filepath : string) :
   | [] -> error @@ Error.CouldNotPreprocess filepath
   | decls_queries -> ok @@ Preprocessor.group_clauses decls_queries
 
-let compile' (compiler : Compiler.Types.t) : Ast.Clause.t list -> unit attempt =
-  function
+let compile' (step : Ast.Clause.t list * Compiler.Types.t -> Compiler.Types.t)
+    (compiler : Compiler.Types.t) : Ast.Clause.t list -> unit attempt = function
   | [] ->
       Logger.simply_unreachable
         "Compiler error: unreachable when executing compile function.";
       exit 1
-  | decls_queries ->
-      Compile.step (decls_queries, compiler) |> Fun.const () |> ok
+  | decls_queries -> step (decls_queries, compiler) |> Fun.const () |> ok
 
 (* let eval ((compiler, computer) : Compiler.t * Machine.t) : *)
 (*     (Compiler.t * Machine.t) option = *)
@@ -33,15 +32,35 @@ let compile' (compiler : Compiler.Types.t) : Ast.Clause.t list -> unit attempt =
 (*       in *)
 (*       Some (compiler, computer) *)
 
+module Karuta = struct
+  let compile_clause = Karuta.compile_clause
+
+  module Lookup = Compiler.Lookup
+end
+
+module Sakura = struct
+  let compile_clause = Sakura.compile_clause
+
+  module Lookup = Compiler.Lookup
+end
+
 let compile (persist : Compiler.Types.Persist.t) (filepaths : string list) :
     unit attempt =
-  let compile_one filepath =
+  let compile_one_file filepath =
+    let extension = Filename.extension filepath in
+    let compiler_config =
+      if extension = ".skr" then
+        (module Sakura : Compiler.Types.COMPILER_CONFIG)
+      else (module Karuta : Compiler.Types.COMPILER_CONFIG)
+    in
+    let module Target = Compiler.Types.Make ((val compiler_config)) in
     filepath |> parse ||> preprocess filepath
-    ||> compile' (Compiler.Types.initialize persist filepath)
+    ||> compile' Target.step (Target.initialize persist filepath)
   in
   let rec compile_all = function
     | [] -> Ok ()
-    | f :: files -> Result.bind (compile_one f) (fun () -> compile_all files)
+    | f :: files ->
+        Result.bind (compile_one_file f) (fun () -> compile_all files)
   in
   compile_all filepaths
 

@@ -1,6 +1,6 @@
 open Types
 
-let initialize_from_parent module_name parent : t =
+let initialize_from_parent module_name initialize_nested parent : t =
   let inner_module_name =
     parent.module_name ^ Common.module_name_separator ^ module_name
   in
@@ -14,7 +14,8 @@ let initialize_from_parent module_name parent : t =
 let rec compile (directive_loc : Location.location)
     ({ elements; arity; _ } as f : Ast.Expr.func)
     (body : Ast.Clause.t list list) (step : Ast.Clause.t list * t -> t)
-    ({ env = { modules; _ } as env; _ } as compiler : t) : t =
+    ({ env = { modules; _ } as env; _ } as compiler : t)
+    (initialize_nested : Types.initialize_nested) : t =
   match (Ast.Expr.extract_func_label f, arity, body) with
   | "module", 1, [ body ] -> (
       match elements with
@@ -40,7 +41,8 @@ let rec compile (directive_loc : Location.location)
               exit 1
           | `Undefined _ ->
               let compiled_module =
-                compiler |> initialize_from_parent module_name |> fun c ->
+                compiler |> initialize_from_parent module_name initialize_nested
+                |> fun c ->
                 step (body, c) |> fun c ->
                 Location.add_loc (Module c.env) directive_loc
               in
@@ -64,7 +66,7 @@ let rec compile (directive_loc : Location.location)
         Signature.compile directive_loc signature_body compiler
       in
       let ({ env = { modules; _ } as env; _ } as compiler) =
-        compile directive_loc f [ body ] step compiler
+        compile directive_loc f [ body ] step compiler initialize_nested
       in
       match elements with
       | [
@@ -137,7 +139,8 @@ let rec compile (directive_loc : Location.location)
               exit 1
           | `Undefined _, `Ok signature ->
               let comptime =
-                compiler |> initialize_from_parent module_name |> fun c ->
+                compiler |> initialize_from_parent module_name initialize_nested
+                |> fun c ->
                 step (body, c) |> fun c -> Location.add_loc c.env directive_loc
               in
               let compiled_module =

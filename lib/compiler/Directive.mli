@@ -4,4 +4,5 @@ val compile :
   Ast.Clause.t list list ->
   (Ast.Clause.t list * Types.t -> Types.t) ->
   Types.t ->
+  Types.initialize_nested ->
   Types.t
