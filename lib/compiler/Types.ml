@@ -90,6 +90,7 @@ module type LookupS = sig
 end
 
 type t = {
+  externals : compiled_module BatMap.String.t;
   header : forms;
   output : forms;
   filename : string;
@@ -122,6 +123,10 @@ module Make (Config : COMPILER_CONFIG) : COMPILER = struct
   let initialize_nested persist parent filename module_name : t =
     {
       parent;
+      externals =
+        Option.fold ~none:BatMap.String.empty
+          ~some:(fun v -> v.externals)
+          parent;
       filename;
       module_name;
       header =

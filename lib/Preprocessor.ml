@@ -27,7 +27,14 @@ let compare_clauses (c1 : Ast.ParserClause.t) (c2 : Ast.ParserClause.t) : int =
 let canonical_order (l : Ast.Clause.t) (r : Ast.Clause.t) : int =
   let open Ast.Clause in
   match (Location.strip_loc l, Location.strip_loc r) with
-  | Directive _, Directive _ -> 0
+  | Directive ({ content = d1; _ }, _), Directive ({ content = d2; _ }, _) -> (
+      match (d1, d2) with
+      | ( { name = [], { content = "external"; _ }; _ },
+          { name = [], { content = "external"; _ }; _ } ) ->
+          0
+      | { name = [], { content = "external"; _ }; _ }, _ -> -1
+      | _, { name = [], { content = "external"; _ }; _ } -> 1
+      | _, _ -> 0)
   | Directive _, _ -> -1
   | _, Directive _ -> 1
   | _ -> 0
@@ -166,20 +173,73 @@ let rec find_variables (element : Ast.Expr.base) : variable_set =
         S.empty more_elements
   | _ -> S.empty
 
-let rec parser_to_compiler (clause : Ast.ParserClause.t) : Ast.Clause.t list =
+type dependency_graph = BatSet.String.t BatMap.String.t
+type t = { filename : string; dependencies : dependency_graph }
+
+let initialize filename : t = { filename; dependencies = BatMap.String.empty }
+
+type output = {
+  dependencies : dependency_graph;
+  clauses : Ast.Clause.t BatFingerTree.t;
+}
+
+let map_clauses f o = { o with clauses = f o.clauses }
+
+let merge_deps =
+  BatMap.String.merge (fun _ l r ->
+      match (l, r) with
+      | None, None -> None
+      | v, None | None, v -> v
+      | Some lset, Some rset -> Some (BatSet.String.union lset rset))
+
+let merge (l : output) (r : output) : output =
+  {
+    dependencies = merge_deps l.dependencies r.dependencies;
+    clauses = BatFingerTree.append l.clauses r.clauses;
+  }
+
+let fold_map (dependencies : dependency_graph)
+    (f : Ast.ParserClause.t list -> output)
+    (grouped_clauses : Ast.ParserClause.t list list) : output =
+  List.fold_left
+    (fun acc elem -> merge acc @@ f elem)
+    { dependencies; clauses = BatFingerTree.empty }
+    grouped_clauses
+
+let rec parser_to_compiler ({ dependencies; _ } as preprocessor : t)
+    (clause : Ast.ParserClause.t) : output =
   let open Location in
   let open Ast in
   match clause with
   | { content = Directive (head, body); loc } ->
-      [ { content = Directive (head, List.map group_clauses body); loc } ]
+      let grouped_body = List.map (group_clauses preprocessor) body in
+      let dependencies, grouped_clauses =
+        List.fold_right
+          (fun { dependencies; clauses } (deps_acc, clauses_acc) ->
+            ( merge_deps dependencies deps_acc,
+              BatFingerTree.to_list clauses :: clauses_acc ))
+          grouped_body (dependencies, [])
+      in
+      {
+        dependencies;
+        clauses =
+          BatFingerTree.of_list
+            [ { content = Ast.Clause.Directive (head, grouped_clauses); loc } ];
+      }
   | { content = Declaration decl; loc } ->
-      [
-        {
-          content =
-            MultiDeclaration (decl_header decl, rename_declaration decl, []);
-          loc;
-        };
-      ]
+      {
+        dependencies;
+        clauses =
+          BatFingerTree.of_list
+            [
+              {
+                content =
+                  Ast.Clause.MultiDeclaration
+                    (decl_header decl, rename_declaration decl, []);
+                loc;
+              };
+            ];
+      }
   | { content = QueryConjunction calls; loc } ->
       let folder set call =
         S.union set (find_variables @@ Expr.Functor (strip_loc call))
@@ -214,23 +274,29 @@ let rec parser_to_compiler (clause : Ast.ParserClause.t) : Ast.Clause.t list =
           loc;
         }
       in
-      [ declaration; query ]
+      { dependencies; clauses = BatFingerTree.of_list [ declaration; query ] }
 
-and group_clauses (clauses : Ast.ParserClause.t list) : Ast.Clause.t list =
-  let multi_mapper (group : Ast.ParserClause.t list) : Ast.Clause.t list =
+and group_clauses ({ dependencies; _ } as preprocessor : t)
+    (clauses : Ast.ParserClause.t list) : output =
+  let multi_mapper (group : Ast.ParserClause.t list) : output =
     match group with
-    | [ x ] -> parser_to_compiler x
+    | [ x ] -> parser_to_compiler preprocessor x
     | { content = Declaration first; loc } :: many ->
-        [
-          {
-            content =
-              Ast.Clause.MultiDeclaration
-                ( decl_header first,
-                  rename_declaration first,
-                  List.map from_declaration many );
-            loc;
-          };
-        ]
+        {
+          dependencies;
+          clauses =
+            BatFingerTree.of_list
+              [
+                {
+                  Location.content =
+                    Ast.Clause.MultiDeclaration
+                      ( decl_header first,
+                        rename_declaration first,
+                        List.map from_declaration many );
+                  loc;
+                };
+              ];
+        }
     | _ ->
         Logger.simply_unreachable "unreachable group";
         exit 1
@@ -239,5 +305,7 @@ and group_clauses (clauses : Ast.ParserClause.t list) : Ast.Clause.t list =
   clauses
   |> List.filter_map remove_comments
   |> List.map check_empty_heads |> List.group compare_clauses
-  |> List.concat_map multi_mapper
-  |> List.sort canonical_order
+  |> fold_map preprocessor.dependencies multi_mapper
+  |> map_clauses (fun v ->
+      v |> BatFingerTree.to_list |> List.sort canonical_order
+      |> BatFingerTree.of_list)
