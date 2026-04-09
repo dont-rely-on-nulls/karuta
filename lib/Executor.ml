@@ -8,18 +8,19 @@ let parse : string -> Ast.ParserClause.t list attempt = function
       if in_channel_length inc = 0 then error @@ Error.EmptyFile str
       else ok @@ Parser.parse str (In_channel.input_all inc)
 
-let preprocess (filepath : string) :
-    Ast.ParserClause.t list -> Ast.Clause.t list attempt = function
-  | [] -> error @@ Error.CouldNotPreprocess filepath
-  | decls_queries -> ok @@ Preprocessor.group_clauses decls_queries
+let preprocess (preprocessor : Preprocessor.t) :
+    Ast.ParserClause.t list -> Preprocessor.output attempt = function
+  | [] -> error @@ Error.CouldNotPreprocess preprocessor.filename
+  | decls_queries -> ok @@ Preprocessor.group_clauses preprocessor decls_queries
 
 let compile' (step : Ast.Clause.t list * Compiler.Types.t -> Compiler.Types.t)
-    (compiler : Compiler.Types.t) : Ast.Clause.t list -> unit attempt = function
+    (compiler : Compiler.Types.t) :
+    Ast.Clause.t list -> Compiler.Types.t attempt = function
   | [] ->
       Logger.simply_unreachable
         "Compiler error: unreachable when executing compile function.";
       exit 1
-  | decls_queries -> step (decls_queries, compiler) |> Fun.const () |> ok
+  | decls_queries -> step (decls_queries, compiler) |> ok
 
 (* let eval ((compiler, computer) : Compiler.t * Machine.t) : *)
 (*     (Compiler.t * Machine.t) option = *)
@@ -44,9 +45,10 @@ module Sakura = struct
   module Lookup = Compiler.Lookup
 end
 
+(* FIXME: hook up dependency information and sort the file list before compiling *)
 let compile (persist : Compiler.Types.Persist.t) (filepaths : string list) :
     unit attempt =
-  let compile_one_file filepath =
+  let compile_one_file (preprocessed : Preprocessor.output) filepath =
     let extension = Filename.extension filepath in
     let compiler_config =
       if extension = ".skr" then
@@ -54,9 +56,22 @@ let compile (persist : Compiler.Types.Persist.t) (filepaths : string list) :
       else (module Karuta : Compiler.Types.COMPILER_CONFIG)
     in
     let module Target = Compiler.Types.Make ((val compiler_config)) in
-    filepath |> parse ||> preprocess filepath
-    ||> compile' Target.step (Target.initialize persist filepath)
+    () ||> compile' Target.step (Target.initialize persist filepath)
   in
+  let preprocess_one
+      ((dependencies, preprocessed) :
+        Preprocessor.dependency_graph
+        * Ast.Clause.t BatFingerTree.t BatMap.String.t) filepath =
+    let open Error in
+    let preprocessor =
+      { (Preprocessor.initialize filepath) with dependencies }
+    in
+    let* { dependencies; clauses } =
+      filepath |> parse ||> preprocess preprocessor filepath
+    in
+    ()
+  in
+  let rec preprocessed = List.fold_left () () filepaths in
   let rec compile_all = function
     | [] -> Ok ()
     | f :: files ->
