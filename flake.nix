@@ -12,200 +12,122 @@
   #     $ nix flake lock --update-input <input> ... --commit-lockfile
   #
   inputs = {
-    # Convenience functions for writing flakes
-    flake-utils.url = "github:numtide/flake-utils";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+
+    flake-parts.url = "github:hercules-ci/flake-parts";
+
     # Precisely filter files copied to the nix store
     nix-filter.url = "github:numtide/nix-filter";
+
+    treefmt-nix = {
+      url = "github:numtide/treefmt-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs, flake-utils, nix-filter }:
-    # Construct an output set that supports a number of default systems
-    flake-utils.lib.eachDefaultSystem (system:
-      let
-        # Legacy packages that have not been converted to flakes
-        legacyPackages = import nixpkgs { inherit system; };
-        # OCaml packages available on nixpkgs
-        beamPackages = legacyPackages.beam.packages.erlang_27;
-        ocamlPackages = legacyPackages.ocamlPackages;
-        # Library functions from nixpkgs
-        lib = legacyPackages.lib;
+  outputs = inputs@{ self, nixpkgs, flake-parts, nix-filter, treefmt-nix }:
+    flake-parts.lib.mkFlake { inherit inputs; } {
+      systems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
 
-        # Filtered sources (prevents unecessary rebuilds)
-        sources = {
-          ocaml = nix-filter.lib {
-            root = ./.;
-            include = [
-              ".ocamlformat"
-              "dune-project"
-              (nix-filter.lib.inDirectory "bin")
-              (nix-filter.lib.inDirectory "lib")
-              (nix-filter.lib.inDirectory "test")
-              (nix-filter.lib.inDirectory "examples")
-            ];
+      imports = [
+        treefmt-nix.flakeModule
+      ];
+
+      perSystem = { config, self', inputs', pkgs, system, ... }:
+        let
+          # I'm setting OCaml to 5.4, but we must change this from
+          # time to time.
+          ocamlPackages = pkgs.ocaml-ng.ocamlPackages_5_4;
+          # Setting OTP to version 27, since LFE is not supported
+          # on 28 yet.
+          beamPackages = pkgs.beam27Packages;
+
+          # Filtered sources (prevents unecessary rebuilds)
+          sources = {
+            ocaml = nix-filter.lib {
+              root = ./.;
+              include = [
+                ".ocamlformat"
+                "dune-project"
+                (nix-filter.lib.inDirectory "bin")
+                (nix-filter.lib.inDirectory "lib")
+                (nix-filter.lib.inDirectory "test")
+                (nix-filter.lib.inDirectory "examples")
+              ];
+            };
+
+            nix = nix-filter.lib {
+              root = ./.;
+              include = [
+                (nix-filter.lib.matchExt "nix")
+              ];
+            };
           };
 
-          nix = nix-filter.lib {
-            root = ./.;
-            include = [
-              (nix-filter.lib.matchExt "nix")
-            ];
+          pname = "karuta";
+          version = "0.1.0";
+        in
+        {
+          treefmt = {
+            projectRootFile = "flake.nix";
+            programs = {
+              ocamlformat.enable = true;
+              nixpkgs-fmt.enable = true;
+            };
           };
-        };
-      in
-      {
-        # Exposed packages that can be built or run with `nix build` or
-        # `nix run` respectively:
-        #
-        #     $ nix build .#<name>
-        #     $ nix run .#<name> -- <args?>
-        #
-        packages = {
-          # The package that will be built or run by default. For example:
-          #
-          #     $ nix build
-          #     $ nix run -- <args?>
-          #
-          default = self.packages.${system}.karuta;
 
-          karuta = ocamlPackages.buildDunePackage {
-            pname = "karuta";
-            version = "0.1.0";
-            duneVersion = "3";
+          packages.default = ocamlPackages.buildDunePackage {
+            inherit pname version;
             src = sources.ocaml;
-
+            duneVersion = "3";
             buildInputs = [
-              ocamlPackages.num
+              # Ocaml package dependencies needed to build go here.
+              ocamlPackages.alcotest
+              ocamlPackages.batteries
+              ocamlPackages.cmdliner
+              ocamlPackages.earlybird
               ocamlPackages.findlib
+              ocamlPackages.lambda-term
+              ocamlPackages.lwt
+              ocamlPackages.lwt-exit
+              ocamlPackages.num
               ocamlPackages.ppx_deriving
               ocamlPackages.ppx_enumerate
               ocamlPackages.ppxlib
-              ocamlPackages.batteries
-              ocamlPackages.earlybird
               ocamlPackages.ppx_sexp_conv
               ocamlPackages.sexplib
-              ocamlPackages.lwt
-              ocamlPackages.lwt-exit
-              ocamlPackages.lambda-term
               ocamlPackages.textutils
-              ocamlPackages.cmdliner
-              ocamlPackages.alcotest
-              # Ocaml package dependencies needed to build go here.
             ];
-
-            strictDeps = true;
-
-            preBuild = ''
-              dune build karuta.opam
-            '';
           };
-        };
 
-        # Flake checks
-        #
-        #     $ nix flake check
-        #
-        checks = {
-          # Run tests for the `karuta` package
-          karuta =
-            let
-              # Patches calls to dune commands to produce log-friendly output
-              # when using `nix ... --print-build-log`. Ideally there would be
-              # support for one or more of the following:
-              #
-              # In Dune:
-              #
-              # - have workspace-specific dune configuration files
-              #
-              # In NixPkgs:
-              #
-              # - allow dune flags to be set in in `ocamlPackages.buildDunePackage`
-              # - alter `ocamlPackages.buildDunePackage` to use `--display=short`
-              # - alter `ocamlPackages.buildDunePackage` to allow `--config-file=FILE` to be set
-              patchDuneCommand =
-                let
-                  subcmds = [ "build" "test" "runtest" "install" ];
-                in
-                lib.replaceStrings
-                  (lib.lists.map (subcmd: "dune ${subcmd}") subcmds)
-                  (lib.lists.map (subcmd: "dune ${subcmd} --display=short") subcmds);
-            in
+          # nix run
+          apps.default = {
+            type = "app";
+            program = "${self'.packages.default}/bin/karuta";
+          };
 
-            self.packages.${system}.karuta.overrideAttrs
-              (oldAttrs: {
-                name = "check-${oldAttrs.name}";
-                doCheck = true;
-                buildPhase = patchDuneCommand oldAttrs.buildPhase;
-                checkPhase = patchDuneCommand oldAttrs.checkPhase;
-                # skip installation (this will be tested in the `karuta-app` check)
-                installPhase = "touch $out";
-              });
+          # Development Shell
+          devShells.default = pkgs.mkShell {
+            # Inherits build inputs from the package itself
+            inputsFrom = [ self'.packages.default ];
 
-          # Check Dune and OCaml formatting
-          dune-fmt = legacyPackages.runCommand "check-dune-fmt"
-            {
-              nativeBuildInputs = [
-                ocamlPackages.dune_3
-                ocamlPackages.ocaml
-                legacyPackages.ocamlformat
-              ];
-            }
-            ''
-              echo "checking dune and ocaml formatting"
-              dune build \
-                --display=short \
-                --no-print-directory \
-                --root="${sources.ocaml}" \
-                --build-dir="$(pwd)/_build" \
-                @fmt
-              touch $out
-            '';
-
-          # Check Nix formatting
-          nixpkgs-fmt = legacyPackages.runCommand "check-nixpkgs-fmt"
-            { nativeBuildInputs = [ legacyPackages.nixpkgs-fmt ]; }
-            ''
-              echo "checking nix formatting"
-              nixpkgs-fmt --check ${sources.nix}
-              touch $out
-            '';
-        };
-
-        # Development shells
-        #
-        #    $ nix develop .#<name>
-        #    $ nix develop .#<name> --command dune build @test
-        #
-        # [Direnv](https://direnv.net/) is recommended for automatically loading
-        # development environments in your shell. For example:
-        #
-        #    $ echo "use flake" > .envrc && direnv allow
-        #    $ dune build @test
-        #
-        devShells = {
-          default = legacyPackages.mkShell {
-            # Unbreak stuff
-            shellHook = ''
-              export PATH="$PATH:${beamPackages.lfe}/src/bin"
-              export CAML_LD_LIBRARY_PATH="$CAML_LD_LIBRARY_PATH:${ocamlPackages.num}/lib/ocaml/${legacyPackages.ocaml.version}/site-lib/num"
-            '';
-
-            # Development tools
-            packages = [
+            nativeBuildInputs = [
+              # BEAM dependencies
               beamPackages.erlang
               beamPackages.lfe
-              # Source file formatting
-              legacyPackages.nixpkgs-fmt
-              legacyPackages.ocamlformat
-              # For `dune build --watch ...`
-              legacyPackages.fswatch
+
+              # OCaml dependencies
+              pkgs.ocaml
+              pkgs.dune_3
+
               # For `dune build @doc`
               ocamlPackages.odoc
               # This is needed after the flake update
-              ocamlPackages.num
               ocamlPackages.findlib
               # OCaml editor support
               ocamlPackages.ocaml-lsp
               # Nicely formatted types on hover
+              ocamlPackages.ocamlformat
               ocamlPackages.ocamlformat-rpc-lib
               # Fancy REPL thing
               ocamlPackages.utop
@@ -222,11 +144,20 @@
               ocamlPackages.alcotest
             ];
 
-            # Tools from packages
-            inputsFrom = [
-              self.packages.${system}.karuta
-            ];
+            shellHook = ''
+              echo "Welcome to the Karuta development shell!";
+              echo "Run 'nix build' to build the project, and 'dune test' to run tests.";
+              # Makes dune use as many cores as possible
+              export DUNE_JOBS=$(nproc)
+              # lfe installs its binary under lib/, not bin/
+              export PATH="${beamPackages.lfe}/src/bin:$PATH"
+            '';
+          };
+
+          # treefmt-nix handles the formatting check automatically.
+          checks = {
+            default = config.treefmt.build.check self;
           };
         };
-      });
+    };
 }
