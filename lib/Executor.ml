@@ -45,12 +45,13 @@ module Sakura = struct
   module Lookup = Compiler.Lookup
 end
 
-type preprocessed_result = Preprocessor.DependencyGraph.t * Ast.Clause.t BatFingerTree.t BatMap.String.t
+type preprocessed_files = Ast.Clause.t BatFingerTree.t BatMap.String.t
+type preprocessed_result = Preprocessor.DependencyGraph.t * preprocessed_files
 
 (* FIXME: hook up dependency information and sort the file list before compiling *)
 let compile (persist : Compiler.Types.Persist.t) (filepaths : string list) :
     unit attempt =
-  let compile_one_file (preprocessed : preprocessed_result) filepath =
+  let compile_one_file (preprocessed : preprocessed_files) filepath =
     let extension = Filename.extension filepath in
     let compiler_config =
       if extension = ".skr" then
@@ -58,12 +59,17 @@ let compile (persist : Compiler.Types.Persist.t) (filepaths : string list) :
       else (module Karuta : Compiler.Types.COMPILER_CONFIG)
     in
     let module Target = Compiler.Types.Make ((val compiler_config)) in
-    compile' Target.step (Target.initialize persist filepath) []
+    match BatMap.String.find_opt filepath preprocessed with
+    | None ->
+        Logger.simply_unreachable "We hit a file that doesn't exist";
+        exit 1
+    | Some body ->
+        compile' Target.step (Target.initialize persist filepath)
+        @@ BatFingerTree.to_list body
   in
-  let preprocess_one
-      (acc : preprocessed_result attempt) filepath =
+  let preprocess_one (acc : preprocessed_result attempt) filepath =
     let open Error in
-    let* (dependencies, preprocessed) = acc in
+    let* dependencies, preprocessed = acc in
     let preprocessor =
       { (Preprocessor.initialize filepath) with dependencies }
     in
@@ -72,13 +78,22 @@ let compile (persist : Compiler.Types.Persist.t) (filepaths : string list) :
     in
     ok (dependencies, BatMap.String.add filepath clauses preprocessed)
   in
-  let* preprocessed = List.fold_left preprocess_one (ok (Preprocessor.DependencyGraph.empty, BatMap.String.empty)) filepaths in
+  let* dependency_graph, preprocessed_files =
+    List.fold_left preprocess_one
+      (ok (Preprocessor.DependencyGraph.empty, BatMap.String.empty))
+      filepaths
+  in
+  let* expanded_graph = Preprocessor.DependencyGraph.expand dependency_graph in
+  let sorted_file_paths =
+    Preprocessor.DependencyGraph.sort expanded_graph filepaths
+  in
   let rec compile_all = function
     | [] -> Ok ()
     | f :: files ->
-        Result.bind (compile_one_file preprocessed f) (fun _ -> compile_all files)
+        Result.bind (compile_one_file preprocessed_files f) (fun _ ->
+            compile_all files)
   in
-  compile_all filepaths
+  compile_all sorted_file_paths
 
 (* let load' filter_fn (filepath : string) : Compiler.t * Machine.t = *)
 (*   filepath |> parse |> List.filter filter_fn |> compile *)
