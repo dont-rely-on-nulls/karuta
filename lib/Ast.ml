@@ -82,10 +82,13 @@ module Expr = struct
         exit 1
 
   let extract_unqualified_atom : t -> string = function
-    | { content = Functor { name = [], unqualified_name; _ }; _ } ->
+    | { content = Functor { name = [], unqualified_name; elements = []; arity = 0 }; _ } ->
         unqualified_name.content
+    | { content = Functor { name = [], _; _ }; loc } ->
+        Logger.error loc "Expected unqualified atom and it has arguments";
+        exit 1
     | { content = Functor { name = _ :: _, _; _ }; loc } ->
-        Logger.error loc "Expected unqualified atom (and it is qualified)";
+        Logger.error loc "Expected unqualified atom and it is qualified";
         exit 1
     | { loc; _ } ->
         Logger.error loc "Expected unqualified atom";

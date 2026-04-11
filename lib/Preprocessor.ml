@@ -173,32 +173,40 @@ let rec find_variables (element : Ast.Expr.base) : variable_set =
         S.empty more_elements
   | _ -> S.empty
 
-type dependency_graph = BatSet.String.t BatMap.String.t
-type t = { filename : string; dependencies : dependency_graph }
-
-let initialize filename : t = { filename; dependencies = BatMap.String.empty }
-
-type output = {
-  dependencies : dependency_graph;
-  clauses : Ast.Clause.t BatFingerTree.t;
-}
-
-let map_clauses f o = { o with clauses = f o.clauses }
-
-let merge_deps =
+module DependencyGraph = struct
+  type t = BatSet.String.t BatMap.String.t
+  let empty = BatMap.String.empty
+  let merge =
   BatMap.String.merge (fun _ l r ->
       match (l, r) with
       | None, None -> None
       | v, None | None, v -> v
       | Some lset, Some rset -> Some (BatSet.String.union lset rset))
+  let add key value graph =
+    let open BatMap.String in 
+    match find_opt key graph with
+    | None -> add key (BatSet.String.singleton value) graph
+    | Some set -> add key (BatSet.String.add value set) graph
+end
+
+type t = { filename : string; dependencies : DependencyGraph.t }
+
+let initialize filename : t = { filename; dependencies = BatMap.String.empty }
+
+type output = {
+  dependencies : DependencyGraph.t;
+  clauses : Ast.Clause.t BatFingerTree.t;
+}
+
+let map_clauses f o = { o with clauses = f o.clauses }
 
 let merge (l : output) (r : output) : output =
   {
-    dependencies = merge_deps l.dependencies r.dependencies;
+    dependencies = DependencyGraph.merge l.dependencies r.dependencies;
     clauses = BatFingerTree.append l.clauses r.clauses;
   }
 
-let fold_map (dependencies : dependency_graph)
+let fold_map (dependencies : DependencyGraph.t)
     (f : Ast.ParserClause.t list -> output)
     (grouped_clauses : Ast.ParserClause.t list list) : output =
   List.fold_left
@@ -206,7 +214,12 @@ let fold_map (dependencies : dependency_graph)
     { dependencies; clauses = BatFingerTree.empty }
     grouped_clauses
 
-let rec parser_to_compiler ({ dependencies; _ } as preprocessor : t)
+module BatFingerTree = struct
+  include BatFingerTree
+  let sort f v = v |> BatFingerTree.to_list |> List.sort f |> BatFingerTree.of_list
+end
+
+let rec parser_to_compiler ({ dependencies; filename } as preprocessor : t)
     (clause : Ast.ParserClause.t) : output =
   let open Location in
   let open Ast in
@@ -216,9 +229,27 @@ let rec parser_to_compiler ({ dependencies; _ } as preprocessor : t)
       let dependencies, grouped_clauses =
         List.fold_right
           (fun { dependencies; clauses } (deps_acc, clauses_acc) ->
-            ( merge_deps dependencies deps_acc,
+            ( DependencyGraph.merge dependencies deps_acc,
               BatFingerTree.to_list clauses :: clauses_acc ))
           grouped_body (dependencies, [])
+      in
+      let dependencies =
+        match (Ast.Expr.extract_func_label head.content, body) with
+        | "external", [] -> (
+           match head.content.elements with
+           | [singleton] ->
+              let external_dep = Ast.Expr.extract_unqualified_atom singleton in
+              DependencyGraph.add filename external_dep dependencies
+           | [] ->
+              Logger.error head.loc "Directive 'external' cannot be an empty functor";
+              exit 1
+           | _ ->
+              Logger.error head.loc "Directive 'external' cannot have multiple expressions within";
+              exit 1)
+        | "external", _ ->
+           Logger.error head.loc "Directive 'external' cannot have a body";
+           exit 1
+        | _ -> dependencies
       in
       {
         dependencies;
@@ -306,6 +337,4 @@ and group_clauses ({ dependencies; _ } as preprocessor : t)
   |> List.filter_map remove_comments
   |> List.map check_empty_heads |> List.group compare_clauses
   |> fold_map preprocessor.dependencies multi_mapper
-  |> map_clauses (fun v ->
-      v |> BatFingerTree.to_list |> List.sort canonical_order
-      |> BatFingerTree.of_list)
+  |> map_clauses (BatFingerTree.sort canonical_order)

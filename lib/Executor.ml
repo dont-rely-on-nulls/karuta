@@ -45,10 +45,12 @@ module Sakura = struct
   module Lookup = Compiler.Lookup
 end
 
+type preprocessed_result = Preprocessor.DependencyGraph.t * Ast.Clause.t BatFingerTree.t BatMap.String.t
+
 (* FIXME: hook up dependency information and sort the file list before compiling *)
 let compile (persist : Compiler.Types.Persist.t) (filepaths : string list) :
     unit attempt =
-  let compile_one_file (preprocessed : Preprocessor.output) filepath =
+  let compile_one_file (preprocessed : preprocessed_result) filepath =
     let extension = Filename.extension filepath in
     let compiler_config =
       if extension = ".skr" then
@@ -56,26 +58,25 @@ let compile (persist : Compiler.Types.Persist.t) (filepaths : string list) :
       else (module Karuta : Compiler.Types.COMPILER_CONFIG)
     in
     let module Target = Compiler.Types.Make ((val compiler_config)) in
-    () ||> compile' Target.step (Target.initialize persist filepath)
+    compile' Target.step (Target.initialize persist filepath) []
   in
   let preprocess_one
-      ((dependencies, preprocessed) :
-        Preprocessor.dependency_graph
-        * Ast.Clause.t BatFingerTree.t BatMap.String.t) filepath =
+      (acc : preprocessed_result attempt) filepath =
     let open Error in
+    let* (dependencies, preprocessed) = acc in
     let preprocessor =
       { (Preprocessor.initialize filepath) with dependencies }
     in
     let* { dependencies; clauses } =
-      filepath |> parse ||> preprocess preprocessor filepath
+      filepath |> parse ||> preprocess preprocessor
     in
-    ()
+    ok (dependencies, BatMap.String.add filepath clauses preprocessed)
   in
-  let rec preprocessed = List.fold_left () () filepaths in
+  let* preprocessed = List.fold_left preprocess_one (ok (Preprocessor.DependencyGraph.empty, BatMap.String.empty)) filepaths in
   let rec compile_all = function
     | [] -> Ok ()
     | f :: files ->
-        Result.bind (compile_one_file f) (fun () -> compile_all files)
+        Result.bind (compile_one_file preprocessed f) (fun _ -> compile_all files)
   in
   compile_all filepaths
 
