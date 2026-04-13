@@ -1,0 +1,33 @@
+name: "[Nix] Check, Build & Test"
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build:
+    name: "[Karuta] Check, Build and Test"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: "[Nix] Run treefmt to check OCaml / Erlang / LFE / Nix"
+        run: |
+          nix flake check
+
+      - name: "[Karuta] Pure Build"
+        run: |
+          nix build --print-build-logs
+
+      - name: "[Karuta] Run Tests"
+        run: |
+          nix develop --command dune runtest

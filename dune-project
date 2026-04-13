@@ -1,5 +1,4 @@
-(lang dune 3.16)
-(map_workspace_root false)
+(lang dune 3.21)
 (name karuta)
 (license MIT-0)
 

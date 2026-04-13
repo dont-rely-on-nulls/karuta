@@ -11,6 +11,6 @@
  (libraries lib cmdliner num)
  (preprocess
   (pps ppx_deriving.show ppx_enumerate))
- (modes byte exe)
+ (modes exe)
  ; (flags -g)
  (package karuta))
