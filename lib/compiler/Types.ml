@@ -90,7 +90,8 @@ module type LookupS = sig
 end
 
 type t = {
-  externals : compiled_module BatMap.String.t;
+  externals : comptime env;
+  imports : BatSet.String.t;
   header : forms;
   output : forms;
   filename : string;
@@ -101,7 +102,14 @@ type t = {
   lookup : (module LookupS with type t = t);
 }
 
-type initialize_nested = Persist.t -> t option -> string -> string -> t
+type initialization = {
+  persist : Persist.t;
+  filename : string;
+  externals : comptime env;
+}
+
+type initialize_nested =
+  initialization -> BatSet.String.t -> t option -> string -> t
 
 type runner = {
   step : Ast.Clause.t list * t -> t;
@@ -116,17 +124,16 @@ end
 
 module type COMPILER = sig
   val step : Ast.Clause.t list * t -> t
-  val initialize : Persist.t -> string -> t
+  val initialize : initialization -> t
 end
 
 module Make (Config : COMPILER_CONFIG) : COMPILER = struct
-  let initialize_nested persist parent filename module_name : t =
+  let initialize_nested { persist; filename; externals } imports parent
+      module_name : t =
     {
       parent;
-      externals =
-        Option.fold ~none:BatMap.String.empty
-          ~some:(fun v -> v.externals)
-          parent;
+      imports;
+      externals;
       filename;
       module_name;
       header =
@@ -147,15 +154,32 @@ module Make (Config : COMPILER_CONFIG) : COMPILER = struct
       lookup = (module Config.Lookup);
     }
 
-  let initialize persist filename : t =
+  let initialize ({ filename; _ } as init) : t =
     let module_name = Filename.basename @@ Filename.chop_extension filename in
-    initialize_nested persist None filename module_name
+    initialize_nested init BatSet.String.empty None module_name
 
   let rec step : Ast.Clause.t list * t -> t = function
     | [], compiler ->
         compiler.persist compiler.filename
           (FT.append compiler.header compiler.output);
-        compiler
+        if Option.is_none compiler.parent then
+          {
+            compiler with
+            externals =
+              BatMap.String.add compiler.module_name
+                (let open Location in
+                 add_loc (Module compiler.env)
+                 @@ double
+                      (* TODO: make the endl actually point to the end of the file *)
+                      {
+                        pos_fname = compiler.filename;
+                        pos_lnum = 1;
+                        pos_bol = 0;
+                        pos_cnum = 1;
+                      })
+                compiler.externals;
+          }
+        else compiler
     | clause :: remaining, compiler ->
         step
           ( remaining,

@@ -49,9 +49,10 @@ type preprocessed_files = Ast.Clause.t BatFingerTree.t BatMap.String.t
 type preprocessed_result = Preprocessor.DependencyGraph.t * preprocessed_files
 
 (* FIXME: hook up dependency information and sort the file list before compiling *)
+(* TODO: compilation cache *)
 let compile (persist : Compiler.Types.Persist.t) (filepaths : string list) :
     unit attempt =
-  let compile_one_file (preprocessed : preprocessed_files) filepath =
+  let compile_one_file (preprocessed : preprocessed_files) filepath externals =
     let extension = Filename.extension filepath in
     let compiler_config =
       if extension = ".skr" then
@@ -64,7 +65,8 @@ let compile (persist : Compiler.Types.Persist.t) (filepaths : string list) :
         Logger.simply_unreachable "We hit a file that doesn't exist";
         exit 1
     | Some body ->
-        compile' Target.step (Target.initialize persist filepath)
+        compile' Target.step
+          (Target.initialize { persist; filename = filepath; externals })
         @@ BatFingerTree.to_list body
   in
   let preprocess_one (acc : preprocessed_result attempt) filepath =
@@ -87,13 +89,17 @@ let compile (persist : Compiler.Types.Persist.t) (filepaths : string list) :
   let sorted_file_paths =
     Preprocessor.DependencyGraph.sort expanded_graph filepaths
   in
-  let rec compile_all = function
+  List.iter print_endline sorted_file_paths;
+  let rec compile_all imports = function
     | [] -> Ok ()
     | f :: files ->
-        Result.bind (compile_one_file preprocessed_files f) (fun _ ->
-            compile_all files)
+        Result.bind (compile_one_file preprocessed_files f imports)
+          (fun result ->
+            Logger.debug @@ "Adding: " ^ string_of_int
+            @@ BatMap.String.cardinal result.externals;
+            compile_all result.externals files)
   in
-  compile_all sorted_file_paths
+  compile_all BatMap.String.empty sorted_file_paths
 
 (* let load' filter_fn (filepath : string) : Compiler.t * Machine.t = *)
 (*   filepath |> parse |> List.filter filter_fn |> compile *)

@@ -1,6 +1,7 @@
 open Compiler.Types
 
-let initialize_from_parent module_name initialize_nested parent : t =
+let initialize_from_parent module_name (initialize_nested : initialize_nested)
+    parent : t =
   let inner_module_name =
     parent.module_name ^ Compiler.Common.module_name_separator ^ module_name
   in
@@ -8,8 +9,13 @@ let initialize_from_parent module_name initialize_nested parent : t =
     (Filename.basename @@ Filename.chop_extension parent.filename)
     ^ "." ^ module_name ^ ".krt"
   in
-  initialize_nested parent.persist (Some parent) inner_filename
-    inner_module_name
+  initialize_nested
+    {
+      externals = parent.externals;
+      persist = parent.persist;
+      filename = inner_filename;
+    }
+    parent.imports (Some parent) inner_module_name
 
 let rec compile (directive_loc : Location.location)
     ({ elements; arity; _ } as f : Ast.Expr.func)
@@ -227,6 +233,9 @@ let rec compile (directive_loc : Location.location)
   | "signature", n, _ when 1 < n ->
       Logger.error directive_loc
         "Signature directives must have only a name and a body.";
+      exit 1
+  | "import", 1, [] ->
+      Logger.simply_unreachable "TODO: import";
       exit 1
   | "project", 0, _ ->
       Logger.simply_unreachable "TODO";
