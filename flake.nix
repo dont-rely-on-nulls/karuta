@@ -149,8 +149,6 @@
               echo "Run 'nix build' to build the project, and 'dune test' to run tests.";
               # Makes dune use as many cores as possible
               export DUNE_JOBS=$(nproc)
-              # lfe installs its binary under lib/, not bin/
-              export PATH="${beamPackages.lfe}/src/bin:$PATH"
             '';
           };
 
