@@ -1,4 +1,4 @@
-open Types
+open Compiler.Types
 
 module Diff : sig
   val predicates :
@@ -175,14 +175,15 @@ let all_atoms (args : Ast.Expr.t list) : unit =
       exit 1
 
 let rec compile_nested (loc : Location.location) (body : Ast.Clause.t list)
-    ({ env = { modules; _ }; _ } as compiler : t) (sig_scope : Lookup.sig_scope)
-    =
+    ({ env = { modules; _ }; _ } as compiler : t)
+    (sig_scope : Compiler.Types.sig_scope) =
   let all_underscores : Ast.Expr.t list -> bool =
     List.for_all
     @@ Fun.compose
          (function Ast.Expr.Variable "_" -> true | _ -> false)
          Location.strip_loc
   in
+  let module Lookup = (val compiler.lookup) in
   let step (acc : compiled_signature) (next : Ast.Clause.t) =
     let predicate_happy_case (head : predicate_name) =
       { acc with predicates = Set.add head acc.predicates }
@@ -248,10 +249,11 @@ let rec compile_nested (loc : Location.location) (body : Ast.Clause.t list)
         let module_of_plain payload =
           Location.add_loc (ModuleSignature payload) next.loc
         in
-
         match Location.strip_loc module_signature with
         | Functor { name = label; _ } -> (
-            let scope : Lookup.scope = Lookup.ancestors_of_compiler compiler in
+            let scope : Compiler.Types.scope =
+              Lookup.ancestors_of_compiler compiler
+            in
             match
               Lookup.nested_signature
                 (Lookup.sig_env_to_sig_scope acc.modules)
@@ -347,4 +349,5 @@ let rec compile_nested (loc : Location.location) (body : Ast.Clause.t list)
 
 and compile (loc : Location.location) (body : Ast.Clause.t list) (compiler : t)
     : compiled_signature Location.with_location =
+  let module Lookup = (val compiler.lookup) in
   compile_nested loc body compiler Lookup.empty_signature

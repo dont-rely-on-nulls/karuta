@@ -8,19 +8,19 @@ let parse : string -> Ast.ParserClause.t list attempt = function
       if in_channel_length inc = 0 then error @@ Error.EmptyFile str
       else ok @@ Parser.parse str (In_channel.input_all inc)
 
-let preprocess (filepath : string) :
-    Ast.ParserClause.t list -> Ast.Clause.t list attempt = function
-  | [] -> error @@ Error.CouldNotPreprocess filepath
-  | decls_queries -> ok @@ Preprocessor.group_clauses decls_queries
+let preprocess (preprocessor : Preprocessor.t) :
+    Ast.ParserClause.t list -> Preprocessor.output attempt = function
+  | [] -> error @@ Error.CouldNotPreprocess preprocessor.filename
+  | decls_queries -> ok @@ Preprocessor.group_clauses preprocessor decls_queries
 
-let compile' (compiler : Compiler.Types.t) : Ast.Clause.t list -> unit attempt =
-  function
+let compile' (step : Ast.Clause.t list * Compiler.Types.t -> Compiler.Types.t)
+    (compiler : Compiler.Types.t) :
+    Ast.Clause.t list -> Compiler.Types.t attempt = function
   | [] ->
       Logger.simply_unreachable
         "Compiler error: unreachable when executing compile function.";
       exit 1
-  | decls_queries ->
-      Compile.step (decls_queries, compiler) |> Fun.const () |> ok
+  | decls_queries -> step (decls_queries, compiler) |> ok
 
 (* let eval ((compiler, computer) : Compiler.t * Machine.t) : *)
 (*     (Compiler.t * Machine.t) option = *)
@@ -33,10 +33,69 @@ let compile' (compiler : Compiler.Types.t) : Ast.Clause.t list -> unit attempt =
 (*       in *)
 (*       Some (compiler, computer) *)
 
-let compile (persist : Compiler.Types.Persist.t) (filepath : string) :
+module Karuta = struct
+  let compile_clause = Karuta.compile_clause
+
+  module Lookup = Compiler.Lookup
+end
+
+module Sakura = struct
+  let compile_clause = Sakura.compile_clause
+
+  module Lookup = Compiler.Lookup
+end
+
+type preprocessed_files = Ast.Clause.t BatFingerTree.t BatMap.String.t
+type preprocessed_result = Preprocessor.DependencyGraph.t * preprocessed_files
+
+(* FIXME: hook up dependency information and sort the file list before compiling *)
+(* TODO: compilation cache *)
+let compile (persist : Compiler.Types.Persist.t) (filepaths : string list) :
     unit attempt =
-  filepath |> parse ||> preprocess filepath
-  ||> compile' (Compiler.Types.initialize persist filepath)
+  let compile_one_file (preprocessed : preprocessed_files) filepath externals =
+    let extension = Filename.extension filepath in
+    let compiler_config =
+      if extension = ".skr" then
+        (module Sakura : Compiler.Types.COMPILER_CONFIG)
+      else (module Karuta : Compiler.Types.COMPILER_CONFIG)
+    in
+    let module Target = Compiler.Types.Make ((val compiler_config)) in
+    match BatMap.String.find_opt filepath preprocessed with
+    | None ->
+        Logger.simply_unreachable "We hit a file that doesn't exist";
+        exit 1
+    | Some body ->
+        compile' Target.step
+          (Target.initialize { persist; filename = filepath; externals })
+        @@ BatFingerTree.to_list body
+  in
+  let preprocess_one (acc : preprocessed_result attempt) filepath =
+    let open Error in
+    let* dependencies, preprocessed = acc in
+    let preprocessor =
+      { (Preprocessor.initialize filepath) with dependencies }
+    in
+    let* { dependencies; clauses } =
+      filepath |> parse ||> preprocess preprocessor
+    in
+    ok (dependencies, BatMap.String.add filepath clauses preprocessed)
+  in
+  let* dependency_graph, preprocessed_files =
+    List.fold_left preprocess_one
+      (ok (Preprocessor.DependencyGraph.empty, BatMap.String.empty))
+      filepaths
+  in
+  let* expanded_graph = Preprocessor.DependencyGraph.expand dependency_graph in
+  let sorted_file_paths =
+    Preprocessor.DependencyGraph.sort expanded_graph filepaths
+  in
+  let rec compile_all imports = function
+    | [] -> Ok ()
+    | f :: files ->
+        Result.bind (compile_one_file preprocessed_files f imports)
+          (fun result -> compile_all result.externals files)
+  in
+  compile_all BatMap.String.empty sorted_file_paths
 
 (* let load' filter_fn (filepath : string) : Compiler.t * Machine.t = *)
 (*   filepath |> parse |> List.filter filter_fn |> compile *)

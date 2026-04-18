@@ -1,20 +1,27 @@
-open Types
+open Compiler.Types
 
-let initialize_from_parent module_name parent : t =
+let initialize_from_parent module_name (initialize_nested : initialize_nested)
+    parent : t =
   let inner_module_name =
-    parent.module_name ^ Common.module_name_separator ^ module_name
+    parent.module_name ^ ModuleName.separator ^ module_name
   in
   let inner_filename =
-    (Filename.basename @@ Filename.chop_extension parent.filename)
-    ^ "." ^ module_name ^ ".krt"
+    ModuleName.of_filepath parent.filename ^ "." ^ module_name ^ ".krt"
   in
-  initialize_nested parent.persist (Some parent) inner_filename
-    inner_module_name
+  initialize_nested
+    {
+      externals = parent.externals;
+      persist = parent.persist;
+      filename = inner_filename;
+    }
+    parent.imports (Some parent) inner_module_name
 
 let rec compile (directive_loc : Location.location)
     ({ elements; arity; _ } as f : Ast.Expr.func)
     (body : Ast.Clause.t list list) (step : Ast.Clause.t list * t -> t)
-    ({ env = { modules; _ } as env; _ } as compiler : t) : t =
+    ({ env = { modules; _ } as env; _ } as compiler : t)
+    (initialize_nested : Compiler.Types.initialize_nested) : t =
+  let module Lookup = (val compiler.lookup) in
   match (Ast.Expr.extract_func_label f, arity, body) with
   | "module", 1, [ body ] -> (
       match elements with
@@ -40,7 +47,8 @@ let rec compile (directive_loc : Location.location)
               exit 1
           | `Undefined _ ->
               let compiled_module =
-                compiler |> initialize_from_parent module_name |> fun c ->
+                compiler |> initialize_from_parent module_name initialize_nested
+                |> fun c ->
                 step (body, c) |> fun c ->
                 Location.add_loc (Module c.env) directive_loc
               in
@@ -64,7 +72,7 @@ let rec compile (directive_loc : Location.location)
         Signature.compile directive_loc signature_body compiler
       in
       let ({ env = { modules; _ } as env; _ } as compiler) =
-        compile directive_loc f [ body ] step compiler
+        compile directive_loc f [ body ] step compiler initialize_nested
       in
       match elements with
       | [
@@ -137,7 +145,8 @@ let rec compile (directive_loc : Location.location)
               exit 1
           | `Undefined _, `Ok signature ->
               let comptime =
-                compiler |> initialize_from_parent module_name |> fun c ->
+                compiler |> initialize_from_parent module_name initialize_nested
+                |> fun c ->
                 step (body, c) |> fun c -> Location.add_loc c.env directive_loc
               in
               let compiled_module =
@@ -223,6 +232,36 @@ let rec compile (directive_loc : Location.location)
   | "signature", n, _ when 1 < n ->
       Logger.error directive_loc
         "Signature directives must have only a name and a body.";
+      exit 1
+  | "import", 1, [] -> (
+      match elements with
+      | [
+       {
+         content =
+           Functor
+             { name = [], { content = mod_name; _ }; elements = []; arity = 0 };
+         _;
+       };
+      ] ->
+          {
+            compiler with
+            imports = BatSet.String.add mod_name compiler.imports;
+          }
+      | [ { loc; _ } ] ->
+          Logger.error loc "Import argument must be an atom";
+          exit 1
+      | _ ->
+          Logger.unreachable directive_loc
+            "Mismatch between arity of import directive and actual number of \
+             arguments";
+          exit 1)
+  | "import", 1, _ :: _ ->
+      Logger.unreachable directive_loc
+        "The preprocessor is supposed to have errored out earlier";
+      exit 1
+  | "import", n, _ when n <> 1 ->
+      Logger.unreachable directive_loc
+        "The preprocessor is supposed to have errored out earlier";
       exit 1
   | "project", 0, _ ->
       Logger.simply_unreachable "TODO";
