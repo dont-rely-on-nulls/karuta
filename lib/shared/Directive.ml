@@ -233,8 +233,35 @@ let rec compile (directive_loc : Location.location)
       Logger.error directive_loc
         "Signature directives must have only a name and a body.";
       exit 1
-  | "import", 1, [] ->
-      Logger.simply_unreachable "TODO: import";
+  | "import", 1, [] -> (
+      match elements with
+      | [
+       {
+         content =
+           Functor
+             { name = [], { content = mod_name; _ }; elements = []; arity = 0 };
+         _;
+       };
+      ] ->
+          {
+            compiler with
+            imports = BatSet.String.add mod_name compiler.imports;
+          }
+      | [ { loc; _ } ] ->
+          Logger.error loc "Import argument must be an atom";
+          exit 1
+      | _ ->
+          Logger.unreachable directive_loc
+            "Mismatch between arity of import directive and actual number of \
+             arguments";
+          exit 1)
+  | "import", 1, _ :: _ ->
+      Logger.unreachable directive_loc
+        "The preprocessor is supposed to have errored out earlier";
+      exit 1
+  | "import", n, _ when n <> 1 ->
+      Logger.unreachable directive_loc
+        "The preprocessor is supposed to have errored out earlier";
       exit 1
   | "project", 0, _ ->
       Logger.simply_unreachable "TODO";
