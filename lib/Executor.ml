@@ -89,15 +89,11 @@ let compile (persist : Compiler.Types.Persist.t) (filepaths : string list) :
   let sorted_file_paths =
     Preprocessor.DependencyGraph.sort expanded_graph filepaths
   in
-  List.iter print_endline sorted_file_paths;
   let rec compile_all imports = function
     | [] -> Ok ()
     | f :: files ->
         Result.bind (compile_one_file preprocessed_files f imports)
-          (fun result ->
-            Logger.debug @@ "Adding: " ^ string_of_int
-            @@ BatMap.String.cardinal result.externals;
-            compile_all result.externals files)
+          (fun result -> compile_all result.externals files)
   in
   compile_all BatMap.String.empty sorted_file_paths
 
