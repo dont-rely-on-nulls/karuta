@@ -6,8 +6,7 @@ let initialize_from_parent module_name (initialize_nested : initialize_nested)
     parent.module_name ^ ModuleName.separator ^ module_name
   in
   let inner_filename =
-    (ModuleName.of_filepath parent.filename)
-    ^ "." ^ module_name ^ ".krt"
+    ModuleName.of_filepath parent.filename ^ "." ^ module_name ^ ".krt"
   in
   initialize_nested
     {
