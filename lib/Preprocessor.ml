@@ -257,10 +257,9 @@ module DependencyGraph = struct
                    })
       | None -> Ok { visited; forward; next; backward }
     in
-    let open Error in
     Error.map (fun { forward; _ } -> forward)
     @@ go
-    @@ ok
+    @@ Error.ok
          {
            visited = BatSet.String.empty;
            forward = graph;
