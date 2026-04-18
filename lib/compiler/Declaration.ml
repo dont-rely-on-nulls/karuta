@@ -1,7 +1,7 @@
 open Types
 
 let flat_module_name (path : string list) =
-  let concat_segments l r = l ^ Common.module_name_separator ^ r in
+  let concat_segments l r = l ^ ModuleName.separator ^ r in
   match path with
   | [] -> ""
   | head :: tail -> List.fold_left concat_segments head tail

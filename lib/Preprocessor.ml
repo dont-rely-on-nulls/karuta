@@ -273,21 +273,17 @@ module DependencyGraph = struct
   let depends expanded_graph l r =
     match BatMap.String.find_opt l expanded_graph with
     | None -> false
-    | Some deps -> BatSet.String.mem r deps
+    | Some deps -> BatSet.String.mem (ModuleName.of_filepath r) deps
 
   let sort (expanded_graph : t) (files : string list) =
-    (* FIXME *)
-    Logger.debug "Sorting";
     let files_with_dependencies = BatMap.String.keys expanded_graph in
     let has_dependencies = BatSet.String.of_enum files_with_dependencies in
     let compare_files l r =
-      Logger.debug "Comparing files";
       if depends expanded_graph l r then 1
       else if depends expanded_graph r l then -1
       else 0
     in
     let sorted = List.sort compare_files files in
-    Logger.debug "Sorted";
     List.iter Logger.debug sorted;
     let _ =
       List.append

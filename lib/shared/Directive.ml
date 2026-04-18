@@ -3,10 +3,10 @@ open Compiler.Types
 let initialize_from_parent module_name (initialize_nested : initialize_nested)
     parent : t =
   let inner_module_name =
-    parent.module_name ^ Compiler.Common.module_name_separator ^ module_name
+    parent.module_name ^ ModuleName.separator ^ module_name
   in
   let inner_filename =
-    (Filename.basename @@ Filename.chop_extension parent.filename)
+    (ModuleName.of_filepath parent.filename)
     ^ "." ^ module_name ^ ".krt"
   in
   initialize_nested

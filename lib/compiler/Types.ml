@@ -155,7 +155,7 @@ module Make (Config : COMPILER_CONFIG) : COMPILER = struct
     }
 
   let initialize ({ filename; _ } as init) : t =
-    let module_name = Filename.basename @@ Filename.chop_extension filename in
+    let module_name = ModuleName.of_filepath filename in
     initialize_nested init BatSet.String.empty None module_name
 
   let rec step : Ast.Clause.t list * t -> t = function
