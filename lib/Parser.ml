@@ -196,7 +196,7 @@ let quoted_atom :
   | Some ('\'', remaining) ->
       let atom_name, remaining =
         splitl
-          (function '\'' -> true | c when c <> '\n' -> true | _ -> false)
+          (function '\'' -> false | c when c <> '\n' -> true | _ -> false)
           remaining
       in
       let next_loc = Location.step (stride current remaining) loc in
