@@ -195,9 +195,7 @@ let quoted_atom :
   match getc current with
   | Some ('\'', remaining) ->
       let atom_name, remaining =
-        splitl
-          (function '\'' -> false | c when c <> '\n' -> true | _ -> false)
-          remaining
+        splitl (function '\'' | '\n' -> false | _ -> true) remaining
       in
       let next_loc = Location.step (stride current remaining) loc in
       { remaining; loc = next_loc }
