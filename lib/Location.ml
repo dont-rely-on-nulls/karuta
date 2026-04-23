@@ -15,6 +15,16 @@ type 'a with_location = { content : 'a; loc : location } [@@deriving show, ord]
 
 let step n loc = { loc with pos_cnum = loc.pos_cnum + n }
 let jump loc = { loc with pos_bol = loc.pos_cnum; pos_lnum = loc.pos_lnum + 1 }
+
+let jump_n n loc =
+  if n = 0 then loc
+  else { loc with pos_bol = loc.pos_cnum; pos_lnum = loc.pos_lnum + n }
+
+let plus_str str loc =
+  step (String.length str) loc
+  |> jump_n
+       (String.fold_left (fun n -> function '\n' -> n + 1 | _ -> n) 0 str)
+
 let fmap f { content = a; loc } = { content = f a; loc }
 let add p1 p2 v = { content = v; loc = { startl = to_t p1; endl = to_t p2 } }
 let strip_loc (v : 'a with_location) : 'a = v.content
