@@ -10,5 +10,5 @@
  }.
 
  % For the future
- :- module[w] import[whatever].
+ % :- module[w] import[whatever].
 }.
