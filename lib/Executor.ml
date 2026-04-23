@@ -9,18 +9,14 @@ let parse : string -> Ast.ParserClause.t list attempt = function
       else ok @@ Parser.parse str (In_channel.input_all inc)
 
 let preprocess (preprocessor : Preprocessor.t) :
-    Ast.ParserClause.t list -> Preprocessor.output attempt = function
-  | [] -> error @@ Error.CouldNotPreprocess preprocessor.filename
-  | decls_queries -> ok @@ Preprocessor.group_clauses preprocessor decls_queries
+    Ast.ParserClause.t list -> Preprocessor.output attempt =
+ fun decls_queries ->
+  ok @@ Preprocessor.group_clauses preprocessor decls_queries
 
 let compile' (step : Ast.Clause.t list * Compiler.Types.t -> Compiler.Types.t)
     (compiler : Compiler.Types.t) :
-    Ast.Clause.t list -> Compiler.Types.t attempt = function
-  | [] ->
-      Logger.simply_unreachable
-        "Compiler error: unreachable when executing compile function.";
-      exit 1
-  | decls_queries -> step (decls_queries, compiler) |> ok
+    Ast.Clause.t list -> Compiler.Types.t attempt =
+ fun decls_queries -> step (decls_queries, compiler) |> ok
 
 (* let eval ((compiler, computer) : Compiler.t * Machine.t) : *)
 (*     (Compiler.t * Machine.t) option = *)

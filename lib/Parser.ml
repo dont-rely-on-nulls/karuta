@@ -450,7 +450,10 @@ and directive :
 and top_level : 'e. (Ast.ParserClause.t list, ([> expr_errors ] as 'e)) parser =
  fun state ->
   state
-  |> plus (skip_whitespace_and_comments @&& parser_clause)
+  |> skip_whitespace_and_comments
+     @&& star
+           (parser_clause @>> capture
+           @@ fun result -> skip_whitespace_and_comments @&& return result)
      @> replace @@ BatFingerTree.to_list
 
 let parse (filepath : string) (source : string) =
