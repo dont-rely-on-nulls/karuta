@@ -1,6 +1,6 @@
 :- import[plus].
 
 minus[InL, InR, Out] :-
-    plus:pluz[Out, InL, InR].
+    plus:pluz[InR, Out, InL].
 
 minus[succ[succ[succ[succ[0]]]], succ[0], Out]?
