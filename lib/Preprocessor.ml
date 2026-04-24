@@ -223,6 +223,8 @@ module DependencyGraph = struct
     | Some deps -> BatSet.String.mem (ModuleName.of_filepath r) deps
 
   let no_cycles graph =
+    (* TODO: explicitly say which files participate in each cycle instead
+       of just saying each file depends on itself. *)
     let module Map = BatMap.String in
     if
       BatEnum.fold
