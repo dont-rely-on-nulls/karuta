@@ -160,8 +160,9 @@ module Make (Config : COMPILER_CONFIG) : COMPILER = struct
 
   let rec step : Ast.Clause.t list * t -> t = function
     | [], compiler ->
-        compiler.persist compiler.filename
-          (FT.append compiler.header compiler.output);
+        if not @@ FT.is_empty compiler.output then
+          compiler.persist compiler.filename
+            (FT.append compiler.header compiler.output);
         if Option.is_none compiler.parent then
           {
             compiler with
