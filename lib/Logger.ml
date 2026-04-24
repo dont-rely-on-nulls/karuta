@@ -114,30 +114,34 @@ module Terminal = Make (
       let filepath = loc.startl.pos_fname in
       let begin_characters = get_column loc.startl in
       let end_characters = get_column loc.endl in
-      (* TODO: double-check inclusivity/off-by-one issues *)
+      let separator = " | " in
       let how_many_characters = end_characters - begin_characters in
       let line_number = loc.startl.pos_lnum in
       let line_digits : int = line_number |> string_of_int |> String.length in
-      let spaces = String.make (line_digits + begin_characters) ' ' in
+      let spaces =
+        String.make
+          (line_digits + begin_characters + String.length separator)
+          ' '
+      in
       let markers =
         make_bold @@ add_color color
         @@ String.make (max how_many_characters 1) '^'
       in
       if how_many_characters = 0 then
         sprintf
-          "@[<1>%sFile \"%s\", line %d, character %d:@]@.@[<1>%d | \
-           %s@]@.@[<1>%s%s@]@."
+          "@[<1>%sFile \"%s\", line %d, character \
+           %d:@]@.@[<1>%d%s%s@]@.@[<1>%s%s@]@."
           (add_color color prefix) filepath line_number end_characters
-          line_number
+          line_number separator
           (get_line filepath (loc.startl.pos_cnum - begin_characters))
           spaces
           (markers ^ " " ^ msg)
       else
         sprintf
-          "@[<1>%sFile \"%s\", line %d, characters %d-%d:@]@.@[<1>%d | \
-           %s@]@.@[<1>%s%s@]@."
+          "@[<1>%sFile \"%s\", line %d, characters \
+           %d-%d:@]@.@[<1>%d%s%s@]@.@[<1>%s%s@]@."
           (add_color color prefix) filepath line_number (begin_characters + 1)
-          end_characters line_number
+          end_characters line_number separator
           (get_line filepath (loc.startl.pos_cnum - begin_characters))
           spaces
           (markers ^ " " ^ msg)

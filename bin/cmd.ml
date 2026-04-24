@@ -3,7 +3,9 @@ open Cmdliner
 type cmd = Compile of Cmds.Compile.t | Run of Cmds.Run.t
 
 let compile runner =
-  let combine file run log_level = Compile { file; run; log_level } |> runner in
+  let combine files run log_level =
+    Compile { files; run; log_level } |> runner
+  in
   Cmds.Compile.cmd combine
 
 let run runner =
