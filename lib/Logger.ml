@@ -127,7 +127,7 @@ module Terminal = Make (
         make_bold @@ add_color color
         @@ String.make (max how_many_characters 1) '^'
       in
-      if how_many_characters = 0 then
+      if how_many_characters = 1 then
         sprintf
           "@[<1>%sFile \"%s\", line %d, character \
            %d:@]@.@[<1>%d%s%s@]@.@[<1>%s%s@]@."
