@@ -26,8 +26,10 @@ let run : cmd -> unit = function
   | Compile { files; run; log_level } ->
       Logger.Level.set_min_level log_level;
       check_extensions (BatSet.String.of_list [ ".krt"; ".skr"; ".pl" ]) files;
+      (* TODO: Make sakura module name as an available CLI option with db being the default *)
+      let cli : Compiler.Types.cli = { sakura_module_name = "db" } in
       let* _ =
-        Executor.compile
+        Executor.compile cli
           (fun name forms ->
             Erl.compile "runtime" name @@ BatFingerTree.to_list forms)
           files

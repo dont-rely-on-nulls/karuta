@@ -89,6 +89,8 @@ module type LookupS = sig
     | `UnexpectedSignature of Location.location ]
 end
 
+type cli = { sakura_module_name : string }
+
 type t = {
   externals : comptime env;
   imports : BatSet.String.t;

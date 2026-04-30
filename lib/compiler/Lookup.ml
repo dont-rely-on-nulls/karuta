@@ -1,6 +1,5 @@
-open Types
+include Types
 
-type t = Types.t
 type 'a nested_env = 'a env BatLazyList.t
 type scope = comptime nested_env
 type sig_scope = signature nested_env
@@ -61,7 +60,7 @@ let empty_signature : sig_scope = BatLazyList.nil
 let sig_env_to_sig_scope (env : signature env) : sig_scope =
   BatLazyList.of_list [ env ]
 
-let sig_cons (scope : sig_scope) (env : Types.sig_env) : sig_scope =
+let sig_cons (scope : sig_scope) (env : sig_env) : sig_scope =
   BatLazyList.cons env scope
 
 let ancestors_of_compiler (compiler : t) : scope =

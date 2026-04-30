@@ -456,6 +456,7 @@ and top_level : 'e. (Ast.ParserClause.t list, ([> expr_errors ] as 'e)) parser =
            @@ fun result -> skip_whitespace_and_comments @&& return result)
      @> replace @@ BatFingerTree.to_list
 
+(* TODO: Change output type of this to be a fingertree *)
 let parse (filepath : string) (source : string) =
   match
     {

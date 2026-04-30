@@ -38,7 +38,7 @@ end
 module Sakura = struct
   let compile_clause = Sakura.compile_clause
 
-  module Lookup = Compiler.Lookup
+  module Lookup = Database.Lookup
 end
 
 type preprocessed_files = Ast.Clause.t BatFingerTree.t BatMap.String.t
@@ -46,12 +46,21 @@ type preprocessed_result = Preprocessor.DependencyGraph.t * preprocessed_files
 
 (* FIXME: hook up dependency information and sort the file list before compiling *)
 (* TODO: compilation cache *)
-let compile (persist : Compiler.Types.Persist.t) (filepaths : string list) :
+let compile ({ sakura_module_name } : Compiler.Types.cli)
+    (persist : Compiler.Types.Persist.t) (filepaths : string list) :
     unit attempt =
+  let is_sakura_file filepath = Filename.extension filepath = ".skr" in
+  let sakura_filename = sakura_module_name ^ ".skr" in
+  let sakura_files, karuta_files = BatList.partition is_sakura_file filepaths in
+  let* sakura_output =
+    sakura_files
+    |> Error.fold (fun parsed filepath ->
+        parse filepath |> Error.map (List.append parsed))
+    ||> preprocess (Preprocessor.initialize sakura_filename)
+  in
   let compile_one_file (preprocessed : preprocessed_files) filepath externals =
-    let extension = Filename.extension filepath in
     let compiler_config =
-      if extension = ".skr" then
+      if is_sakura_file filepath then
         (module Sakura : Compiler.Types.COMPILER_CONFIG)
       else (module Karuta : Compiler.Types.COMPILER_CONFIG)
     in
@@ -78,18 +87,20 @@ let compile (persist : Compiler.Types.Persist.t) (filepaths : string list) :
   in
   let* dependency_graph, preprocessed_files =
     List.fold_left preprocess_one
-      (ok (Preprocessor.DependencyGraph.empty, BatMap.String.empty))
+      (ok
+         ( sakura_output.dependencies,
+           BatMap.String.singleton sakura_filename sakura_output.clauses ))
       filepaths
   in
   let* expanded_graph = Preprocessor.DependencyGraph.expand dependency_graph in
   let sorted_file_paths =
-    Preprocessor.DependencyGraph.sort expanded_graph filepaths
+    Preprocessor.DependencyGraph.sort expanded_graph karuta_files
   in
   let rec compile_all imports = function
     | [] -> Ok ()
     | f :: files ->
-        Result.bind (compile_one_file preprocessed_files f imports)
-          (fun result -> compile_all result.externals files)
+        let* result = compile_one_file preprocessed_files f imports in
+        compile_all result.externals files
   in
   compile_all BatMap.String.empty sorted_file_paths
 
