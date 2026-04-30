@@ -24,18 +24,6 @@ let compile' (step : Ast.Clause.t list * Compiler.Types.t -> Compiler.Types.t)
 (*       in *)
 (*       Some (compiler, computer) *)
 
-module Karuta = struct
-  let compile_clause = Karuta.compile_clause
-
-  module Lookup = Compiler.Lookup
-end
-
-module Sakura = struct
-  let compile_clause = Sakura.compile_clause
-
-  module Lookup = Database.Lookup
-end
-
 type preprocessed_files = Ast.Clause.t BatFingerTree.t BatMap.String.t
 type preprocessed_result = Preprocessor.DependencyGraph.t * preprocessed_files
 
@@ -58,10 +46,9 @@ let compile ({ sakura_module_name } : Compiler.Types.cli)
     |> preprocess sakura_filename
   in
   let compile_one_file (preprocessed : preprocessed_files) filepath externals =
-    let compiler_config =
-      if Preprocessor.is_sakura_file filepath then
-        (module Sakura : Compiler.Types.COMPILER_CONFIG)
-      else (module Karuta : Compiler.Types.COMPILER_CONFIG)
+    let compiler_config : (module Compiler.Types.COMPILER_CONFIG) =
+      if Preprocessor.is_sakura_file filepath then (module Sakura)
+      else (module Karuta)
     in
     let module Target = Compiler.Types.Make ((val compiler_config)) in
     match BatMap.String.find_opt filepath preprocessed with

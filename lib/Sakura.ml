@@ -1,4 +1,5 @@
 open Compiler.Types
+module Lookup = Database.Lookup
 
 let compile_clause ({ step; initialize_nested } : Compiler.Types.runner)
     (clause : Ast.Clause.t) (compiler : t) : t =
