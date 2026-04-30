@@ -7,9 +7,13 @@ let compile (directive_loc : Location.location)
     (initialize_nested : Compiler.Types.initialize_nested) : t =
   let module Lookup = (val compiler.lookup) in
   match (Ast.Expr.extract_func_label func, arity, body) with
-  | "module", _, _ | "signature", _, _ ->
+  | "module", _, _ ->
       Shared.Directive.compile directive_loc func body step compiler
         initialize_nested
+  | "signature", _, _ ->
+      Logger.error directive_loc
+        "TODO: Sakura has special treatment for signatures";
+      exit 1
   | "project", 0, _ ->
       Logger.error directive_loc "Sakura does not support project directive";
       exit 1

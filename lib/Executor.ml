@@ -8,11 +8,6 @@ let parse : string -> Ast.ParserClause.t list attempt = function
       if in_channel_length inc = 0 then error @@ Error.EmptyFile str
       else ok @@ Parser.parse str (In_channel.input_all inc)
 
-let preprocess (preprocessor : Preprocessor.t) :
-    Ast.ParserClause.t list -> Preprocessor.output attempt =
- fun decls_queries ->
-  ok @@ Preprocessor.group_clauses preprocessor decls_queries
-
 let compile' (step : Ast.Clause.t list * Compiler.Types.t -> Compiler.Types.t)
     (compiler : Compiler.Types.t) :
     Ast.Clause.t list -> Compiler.Types.t attempt =
@@ -44,23 +39,27 @@ end
 type preprocessed_files = Ast.Clause.t BatFingerTree.t BatMap.String.t
 type preprocessed_result = Preprocessor.DependencyGraph.t * preprocessed_files
 
+let preprocess filepath =
+  Error.map @@ Preprocessor.run (Preprocessor.initialize filepath)
+
 (* FIXME: hook up dependency information and sort the file list before compiling *)
 (* TODO: compilation cache *)
 let compile ({ sakura_module_name } : Compiler.Types.cli)
     (persist : Compiler.Types.Persist.t) (filepaths : string list) :
     unit attempt =
-  let is_sakura_file filepath = Filename.extension filepath = ".skr" in
   let sakura_filename = sakura_module_name ^ ".skr" in
-  let sakura_files, karuta_files = BatList.partition is_sakura_file filepaths in
+  let sakura_files, karuta_files =
+    BatList.partition Preprocessor.is_sakura_file filepaths
+  in
   let* sakura_output =
     sakura_files
     |> Error.fold (fun parsed filepath ->
         parse filepath |> Error.map (List.append parsed))
-    ||> preprocess (Preprocessor.initialize sakura_filename)
+    |> preprocess sakura_filename
   in
   let compile_one_file (preprocessed : preprocessed_files) filepath externals =
     let compiler_config =
-      if is_sakura_file filepath then
+      if Preprocessor.is_sakura_file filepath then
         (module Sakura : Compiler.Types.COMPILER_CONFIG)
       else (module Karuta : Compiler.Types.COMPILER_CONFIG)
     in
@@ -81,7 +80,7 @@ let compile ({ sakura_module_name } : Compiler.Types.cli)
       { (Preprocessor.initialize filepath) with dependencies }
     in
     let* { dependencies; clauses } =
-      filepath |> parse ||> preprocess preprocessor
+      filepath |> parse |> Error.map @@ Preprocessor.run preprocessor
     in
     ok (dependencies, BatMap.String.add filepath clauses preprocessed)
   in

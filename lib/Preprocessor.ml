@@ -462,3 +462,26 @@ and group_clauses ({ dependencies; _ } as preprocessor : t)
   |> List.map check_empty_heads |> List.group compare_clauses
   |> fold_map preprocessor.dependencies multi_mapper
   |> map_clauses (BatFingerTree.sort canonical_order)
+
+let is_sakura_file filepath = Filename.extension filepath = ".skr"
+
+let validate_top_level (clauses : Ast.ParserClause.t list) :
+    Ast.ParserClause.t list =
+  let open Ast.ParserClause in
+  let open Location in
+  let is_not_directive = function
+    | { content = Declaration _; _ } -> true
+    | { content = QueryConjunction _; _ } -> true
+    | { content = Directive _; _ } -> false
+  in
+  match List.find_opt is_not_directive clauses with
+  | None -> clauses
+  | Some { loc; _ } ->
+      Logger.error loc "Found a non-directive in a Sakura file";
+      exit 1
+
+let run ({ filename; _ } as preprocessor : t)
+    (clauses : Ast.ParserClause.t list) : output =
+  if is_sakura_file filename then
+    validate_top_level clauses |> group_clauses preprocessor
+  else group_clauses preprocessor clauses
