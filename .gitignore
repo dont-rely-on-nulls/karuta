@@ -6,3 +6,5 @@ result
 *.cmo
 .direnv
 *.beam
+*.S
+*.core

@@ -1,7 +1,7 @@
 open Types
 
 let flat_module_name (path : string list) =
-  let concat_segments l r = l ^ Common.module_name_separator ^ r in
+  let concat_segments l r = l ^ ModuleName.separator ^ r in
   match path with
   | [] -> ""
   | head :: tail -> List.fold_left concat_segments head tail
@@ -23,7 +23,7 @@ let call_with_fresh (name : string) expr =
   let open Beam in
   Ukanren.call_with_fresh @@ Builder.lambda name expr
 
-let compile_declaration_bodies module_name
+let compile_declaration_bodies { module_name; imports; _ }
     (clauses : Ast.Clause.decl Location.with_location list) =
   if List.is_empty clauses then (
     Logger.simply_unreachable "Predicates must have at least one body";
@@ -69,11 +69,13 @@ let compile_declaration_bodies module_name
               Builder.call
                 (Builder.atom @@ Ast.Expr.extract_func_label call)
                 args
-          | ((_ :: _ as path), { content = fun_name; _ }), _ ->
+          | ((head :: _ as path), { content = fun_name; _ }), _ ->
               Builder.call_with_module
                 (Builder.atom
                 @@ flat_module_name
-                     (module_name :: List.map Location.strip_loc path))
+                     (let suffix = List.map Location.strip_loc path in
+                      if BatSet.String.mem head.content imports then suffix
+                      else module_name :: suffix))
                 (Builder.atom fun_name) args
         in
 
@@ -88,7 +90,7 @@ let compile_multi
       Ast.Clause.head
       * Ast.Clause.decl Location.with_location
       * Ast.Clause.decl Location.with_location list)
-    ({ env; module_name; _ } as compiler : t) : t =
+    ({ env; _ } as compiler : t) : t =
   let declaration =
     let args =
       if arity = 0 then []
@@ -96,7 +98,7 @@ let compile_multi
     in
     Beam.Builder.single_function_declaration name
       (List.map (fun v -> Beam.Builder.Pattern.Variable v) args)
-    @@ compile_declaration_bodies module_name (first_clause :: remaining_clauses)
+    @@ compile_declaration_bodies compiler (first_clause :: remaining_clauses)
   in
   let export = Beam.Builder.Attribute.export [ (name, arity) ] in
   {

@@ -66,10 +66,20 @@ module Expr = struct
         Logger.simply_error "Trying to extract a variable wrongly";
         exit 1
 
+  let extract_qualified_func_label :
+      func -> string Location.with_location * string Location.with_location =
+    function
+    | { name = [], name; _ } ->
+        Logger.error name.loc "Expected functor to have an unqualified label";
+        exit 1
+    | { name = [ qualifier ], name; _ } -> (qualifier, name)
+    | { name = qualifier :: _, _; _ } ->
+        Logger.error qualifier.loc "Expected functor to have a single qualifier";
+        exit 1
+
   let extract_func_label : func -> string = function
     | { name = [], name; _ } -> name.content
     | { name = first_segment :: _, _; _ } ->
-        Logger.simply_error first_segment.content;
         Logger.error first_segment.loc
           "Expected functor to have an unqualified label";
         exit 1
@@ -82,10 +92,17 @@ module Expr = struct
         exit 1
 
   let extract_unqualified_atom : t -> string = function
-    | { content = Functor { name = [], unqualified_name; _ }; _ } ->
+    | {
+        content =
+          Functor { name = [], unqualified_name; elements = []; arity = 0 };
+        _;
+      } ->
         unqualified_name.content
+    | { content = Functor { name = [], _; _ }; loc } ->
+        Logger.error loc "Expected unqualified atom and it has arguments";
+        exit 1
     | { content = Functor { name = _ :: _, _; _ }; loc } ->
-        Logger.error loc "Expected unqualified atom (and it is qualified)";
+        Logger.error loc "Expected unqualified atom and it is qualified";
         exit 1
     | { loc; _ } ->
         Logger.error loc "Expected unqualified atom";

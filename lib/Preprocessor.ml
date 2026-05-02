@@ -27,7 +27,14 @@ let compare_clauses (c1 : Ast.ParserClause.t) (c2 : Ast.ParserClause.t) : int =
 let canonical_order (l : Ast.Clause.t) (r : Ast.Clause.t) : int =
   let open Ast.Clause in
   match (Location.strip_loc l, Location.strip_loc r) with
-  | Directive _, Directive _ -> 0
+  | Directive ({ content = d1; _ }, _), Directive ({ content = d2; _ }, _) -> (
+      match (d1, d2) with
+      | ( { name = [], { content = "import"; _ }; _ },
+          { name = [], { content = "import"; _ }; _ } ) ->
+          0
+      | { name = [], { content = "import"; _ }; _ }, _ -> -1
+      | _, { name = [], { content = "import"; _ }; _ } -> 1
+      | _, _ -> 0)
   | Directive _, _ -> -1
   | _, Directive _ -> 1
   | _ -> 0
@@ -166,20 +173,228 @@ let rec find_variables (element : Ast.Expr.base) : variable_set =
         S.empty more_elements
   | _ -> S.empty
 
-let rec parser_to_compiler (clause : Ast.ParserClause.t) : Ast.Clause.t list =
+module DependencyGraph = struct
+  type t = BatSet.String.t BatMap.String.t
+
+  let empty = BatMap.String.empty
+
+  let merge =
+    BatMap.String.merge (fun _ l r ->
+        match (l, r) with
+        | None, None -> None
+        | v, None | None, v -> v
+        | Some lset, Some rset -> Some (BatSet.String.union lset rset))
+
+  let add key value graph =
+    let open BatMap.String in
+    match find_opt key graph with
+    | None -> add key (BatSet.String.singleton value) graph
+    | Some set -> add key (BatSet.String.add value set) graph
+
+  let invert graph =
+    let invert_one node children acc =
+      BatSet.String.fold (fun child acc -> add child node acc) children acc
+    in
+    BatMap.String.fold invert_one graph BatMap.String.empty
+
+  (* a <- b
+     b <- c d
+     d <- e *)
+
+  (* Each node:
+      * Append grandchildren to dependency set
+      * Schedule a walk over grandchildren
+      * Register that we already went over  *)
+
+  type expansion_state = {
+    forward : t;
+    backward : t;
+    visited : BatSet.String.t;
+    next : string BatFingerTree.t;
+  }
+
+  type expansion_result = expansion_state Error.attempt
+
+  (** Returns true if l depends on r in the given fully expanded graph, false
+      otherwise *)
+  let depends expanded_graph l r =
+    match BatMap.String.find_opt l expanded_graph with
+    | None -> false
+    | Some deps -> BatSet.String.mem (ModuleName.of_filepath r) deps
+
+  let no_cycles graph =
+    (* TODO: explicitly say which files participate in each cycle instead
+       of just saying each file depends on itself. *)
+    let module Map = BatMap.String in
+    if
+      BatEnum.fold
+        (fun has_cycle k ->
+          if depends graph k k then (
+            Logger.simply_error @@ "File " ^ k ^ " depends on itself";
+            true)
+          else has_cycle)
+        false
+      @@ Map.keys graph
+    then exit 1;
+    graph
+
+  let expand graph : t Error.attempt =
+    let module FT = BatFingerTree in
+    let module Set = BatSet.String in
+    let module Map = BatMap.String in
+    let atom_to_filepath =
+      Map.of_enum
+      @@ BatEnum.map (fun k -> (ModuleName.of_filepath k, k))
+      @@ Map.keys graph
+    in
+    let bridge_ancestor relatives node graph =
+      if Set.is_empty relatives then graph
+      else Map.modify_def Set.empty node (Set.union relatives) graph
+    in
+    let rec go (acc : expansion_result) : expansion_result =
+      let open Error in
+      let* { visited; forward; next; backward } = acc in
+      match FT.front next with
+      | Some (more, current) when Set.mem current visited ->
+          go @@ ok { visited; forward; next = more; backward }
+      | Some (more, current) -> (
+          let visited = Set.add current visited in
+          match
+            Map.find_opt
+              (Map.find_default current current atom_to_filepath)
+              forward
+          with
+          | None -> go @@ ok { visited; forward; next = more; backward }
+          | Some children ->
+              let parents =
+                Option.value ~default:Set.empty @@ Map.find_opt current backward
+              in
+              let forward =
+                Set.fold (bridge_ancestor children) parents forward
+              in
+              let backward =
+                Set.fold (bridge_ancestor parents) children backward
+              in
+              go
+              @@ ok
+                   {
+                     visited;
+                     forward;
+                     next =
+                       children |> Set.enum
+                       |> BatEnum.filter (fun c -> not @@ Set.mem c visited)
+                       |> BatEnum.fold FT.snoc more;
+                     backward;
+                   })
+      | None -> Ok { visited; forward; next; backward }
+    in
+    Error.map (fun { forward; _ } -> no_cycles forward)
+    @@ go
+    @@ Error.ok
+         {
+           visited = BatSet.String.empty;
+           forward = graph;
+           backward = invert graph;
+           next = BatFingerTree.of_enum (BatMap.String.keys graph);
+         }
+
+  let sort (expanded_graph : t) (files : string list) =
+    let compare_files l r =
+      if depends expanded_graph l r then 1
+      else if depends expanded_graph r l then -1
+      else 0
+    in
+    List.sort compare_files files
+end
+
+type t = { filename : string; dependencies : DependencyGraph.t }
+
+let initialize filename : t = { filename; dependencies = BatMap.String.empty }
+
+type output = {
+  dependencies : DependencyGraph.t;
+  clauses : Ast.Clause.t BatFingerTree.t;
+}
+
+let map_clauses f o = { o with clauses = f o.clauses }
+
+let merge (l : output) (r : output) : output =
+  {
+    dependencies = DependencyGraph.merge l.dependencies r.dependencies;
+    clauses = BatFingerTree.append l.clauses r.clauses;
+  }
+
+let fold_map (dependencies : DependencyGraph.t)
+    (f : Ast.ParserClause.t list -> output)
+    (grouped_clauses : Ast.ParserClause.t list list) : output =
+  List.fold_left
+    (fun acc elem -> merge acc @@ f elem)
+    { dependencies; clauses = BatFingerTree.empty }
+    grouped_clauses
+
+module BatFingerTree = struct
+  include BatFingerTree
+
+  let sort f v =
+    v |> BatFingerTree.to_list |> List.sort f |> BatFingerTree.of_list
+end
+
+let rec parser_to_compiler ({ dependencies; filename } as preprocessor : t)
+    (clause : Ast.ParserClause.t) : output =
   let open Location in
   let open Ast in
   match clause with
   | { content = Directive (head, body); loc } ->
-      [ { content = Directive (head, List.map group_clauses body); loc } ]
+      let grouped_body = List.map (group_clauses preprocessor) body in
+      let dependencies, grouped_clauses =
+        List.fold_right
+          (fun { dependencies; clauses } (deps_acc, clauses_acc) ->
+            ( DependencyGraph.merge dependencies deps_acc,
+              BatFingerTree.to_list clauses :: clauses_acc ))
+          grouped_body (dependencies, [])
+      in
+      let dependencies =
+        match (Ast.Expr.extract_func_label head.content, body) with
+        | "import", [] -> (
+            match head.content.elements with
+            | [ singleton ] ->
+                let external_dep =
+                  Ast.Expr.extract_unqualified_atom singleton
+                in
+                DependencyGraph.add filename external_dep dependencies
+            | [] ->
+                Logger.error head.loc
+                  "Directive 'import' cannot be an empty functor";
+                exit 1
+            | _ ->
+                Logger.error head.loc
+                  "Directive 'import' cannot have multiple expressions within";
+                exit 1)
+        | "import", _ ->
+            Logger.error head.loc "Directive 'import' cannot have a body";
+            exit 1
+        | _ -> dependencies
+      in
+      {
+        dependencies;
+        clauses =
+          BatFingerTree.of_list
+            [ { content = Ast.Clause.Directive (head, grouped_clauses); loc } ];
+      }
   | { content = Declaration decl; loc } ->
-      [
-        {
-          content =
-            MultiDeclaration (decl_header decl, rename_declaration decl, []);
-          loc;
-        };
-      ]
+      {
+        dependencies;
+        clauses =
+          BatFingerTree.of_list
+            [
+              {
+                content =
+                  Ast.Clause.MultiDeclaration
+                    (decl_header decl, rename_declaration decl, []);
+                loc;
+              };
+            ];
+      }
   | { content = QueryConjunction calls; loc } ->
       let folder set call =
         S.union set (find_variables @@ Expr.Functor (strip_loc call))
@@ -214,23 +429,29 @@ let rec parser_to_compiler (clause : Ast.ParserClause.t) : Ast.Clause.t list =
           loc;
         }
       in
-      [ declaration; query ]
+      { dependencies; clauses = BatFingerTree.of_list [ declaration; query ] }
 
-and group_clauses (clauses : Ast.ParserClause.t list) : Ast.Clause.t list =
-  let multi_mapper (group : Ast.ParserClause.t list) : Ast.Clause.t list =
+and group_clauses ({ dependencies; _ } as preprocessor : t)
+    (clauses : Ast.ParserClause.t list) : output =
+  let multi_mapper (group : Ast.ParserClause.t list) : output =
     match group with
-    | [ x ] -> parser_to_compiler x
+    | [ x ] -> parser_to_compiler preprocessor x
     | { content = Declaration first; loc } :: many ->
-        [
-          {
-            content =
-              Ast.Clause.MultiDeclaration
-                ( decl_header first,
-                  rename_declaration first,
-                  List.map from_declaration many );
-            loc;
-          };
-        ]
+        {
+          dependencies;
+          clauses =
+            BatFingerTree.of_list
+              [
+                {
+                  Location.content =
+                    Ast.Clause.MultiDeclaration
+                      ( decl_header first,
+                        rename_declaration first,
+                        List.map from_declaration many );
+                  loc;
+                };
+              ];
+        }
     | _ ->
         Logger.simply_unreachable "unreachable group";
         exit 1
@@ -239,5 +460,28 @@ and group_clauses (clauses : Ast.ParserClause.t list) : Ast.Clause.t list =
   clauses
   |> List.filter_map remove_comments
   |> List.map check_empty_heads |> List.group compare_clauses
-  |> List.concat_map multi_mapper
-  |> List.sort canonical_order
+  |> fold_map preprocessor.dependencies multi_mapper
+  |> map_clauses (BatFingerTree.sort canonical_order)
+
+let is_sakura_file filepath = Filename.extension filepath = ".skr"
+
+let validate_top_level (clauses : Ast.ParserClause.t list) :
+    Ast.ParserClause.t list =
+  let open Ast.ParserClause in
+  let open Location in
+  let is_not_directive = function
+    | { content = Declaration _; _ } -> true
+    | { content = QueryConjunction _; _ } -> true
+    | { content = Directive _; _ } -> false
+  in
+  match List.find_opt is_not_directive clauses with
+  | None -> clauses
+  | Some { loc; _ } ->
+      Logger.error loc "Found a non-directive in a Sakura file";
+      exit 1
+
+let run ({ filename; _ } as preprocessor : t)
+    (clauses : Ast.ParserClause.t list) : output =
+  if is_sakura_file filename then
+    validate_top_level clauses |> group_clauses preprocessor
+  else group_clauses preprocessor clauses

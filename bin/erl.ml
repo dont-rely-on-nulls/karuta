@@ -25,9 +25,8 @@ let spawn_compile_process program =
   |> create_erl_process |> treat_pid
 
 let compile prefix filepath forms =
-  let open Filename in
   let open Beam.Serializer in
-  let name = remove_extension @@ basename filepath in
+  let name = Lib.ModuleName.of_filepath filepath in
   let forms =
     "[" ^ (String.concat "," @@ List.map Attribute.to_string forms) ^ "]"
   in
@@ -39,8 +38,7 @@ let compile prefix filepath forms =
   Fun.const () @@ spawn_compile_process erlangProgram
 
 let spawn_run_process filepath function_name should_repl =
-  let open Filename in
-  let name = remove_extension @@ basename filepath in
+  let name = Lib.ModuleName.of_filepath filepath in
   let args =
     if should_repl then [| "-noinput"; "-s"; name; function_name |]
     else

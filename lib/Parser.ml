@@ -117,34 +117,31 @@ let horizontal :
   | Some _ ->
       Ok ((), { remaining = triml 1 remaining; loc = Location.step 1 loc })
 
-let one c { remaining; loc } =
-  match first remaining with
-  | None -> Error `UnexpectedEOF
-  | Some found when found = c ->
-      Ok
-        ( (),
-          {
-            remaining = triml 1 remaining;
-            loc =
-              (Location.step 1 loc |> if c = '\n' then Location.jump else Fun.id);
-          } )
-  | Some _ -> Error (`WrongCharacter (loc, c))
+let literal l { remaining; loc } =
+  if BatSubstring.is_prefix l remaining then
+    Ok
+      ( (),
+        {
+          remaining = triml (String.length l) remaining;
+          loc = Location.plus_str l loc;
+        } )
+  else Error (`WrongPrefix (loc, l))
 
-let colon = one ':'
-let percent = one '%'
-let hash = one '#'
-let single_quote = one '\''
-let comma = one ','
-let period = one '.'
-let pipe = one '|'
-let question_mark = one '?'
-let left_paren = one '('
-let right_paren = one ')'
-let left_bracket = one '['
-let right_bracket = one ']'
-let left_curly_brace = one '{'
-let right_curly_brace = one '}'
-let holds = one ':' @&& one '-'
+let colon = literal ":"
+let percent = literal "%"
+let hash = literal "#"
+let single_quote = literal "'"
+let comma = literal ","
+let period = literal "."
+let pipe = literal "|"
+let question_mark = literal "?"
+let left_paren = literal "("
+let right_paren = literal ")"
+let left_bracket = literal "["
+let right_bracket = literal "]"
+let left_curly_brace = literal "{"
+let right_curly_brace = literal "}"
+let holds = literal ":-"
 
 let rec skip_line : 'e. (unit, 'e) parser =
  fun state -> state |> newline @|| ifte some (snd @> skip_line) succeed
@@ -189,22 +186,20 @@ let variable :
 let quoted_atom :
     'e.
     ( string Location.with_location,
-      ([> `UnexpectedEOF | `WrongCharacter of Location.t * char ] as 'e) )
+      ([> `UnexpectedEOF | `WrongPrefix of Location.t * string ] as 'e) )
     parser =
  fun { remaining = current; loc } ->
   match getc current with
   | Some ('\'', remaining) ->
       let atom_name, remaining =
-        splitl
-          (function '\'' -> true | c when c <> '\n' -> true | _ -> false)
-          remaining
+        splitl (function '\'' | '\n' -> false | _ -> true) remaining
       in
       let next_loc = Location.step (stride current remaining) loc in
       { remaining; loc = next_loc }
       |> single_quote @>> fun ((), ({ loc = endl; _ } as state)) ->
          Ok
            (Location.add_loc (to_string atom_name) { startl = loc; endl }, state)
-  | Some _ | None -> Error (`WrongCharacter (loc, '\''))
+  | Some _ | None -> Error (`WrongPrefix (loc, "\'"))
 
 let integer :
     'e.
@@ -269,7 +264,7 @@ let func_label :
     ( Ast.Expr.func_label Location.with_location,
       ([> `UnexpectedEOF
        | `ExpectedLowercase of Location.t
-       | `WrongCharacter of Location.t * char ]
+       | `WrongPrefix of Location.t * string ]
        as
        'e) )
     parser =
@@ -286,7 +281,7 @@ let func_label :
 type expr_errors =
   [ `ExpectedLowercase of Location.t
   | `UnexpectedEOF
-  | `WrongCharacter of Location.t * char ]
+  | `WrongPrefix of Location.t * string ]
 
 let rec expr : 'e. (Ast.Expr.t, ([> expr_errors ] as 'e)) parser =
  fun state ->
@@ -455,9 +450,13 @@ and directive :
 and top_level : 'e. (Ast.ParserClause.t list, ([> expr_errors ] as 'e)) parser =
  fun state ->
   state
-  |> plus (skip_whitespace_and_comments @&& parser_clause)
+  |> skip_whitespace_and_comments
+     @&& star
+           (parser_clause @>> capture
+           @@ fun result -> skip_whitespace_and_comments @&& return result)
      @> replace @@ BatFingerTree.to_list
 
+(* TODO: Change output type of this to be a fingertree *)
 let parse (filepath : string) (source : string) =
   match
     {
@@ -478,8 +477,10 @@ let parse (filepath : string) (source : string) =
             "Expected a lower case letter, but got something else"
       | `UnexpectedEOF ->
           Logger.simply_error "File ended, but we expected it to continue"
-      | `WrongCharacter (loc, expected_char) ->
-          Logger.error (Location.double loc)
-          @@ "We were expecting a " ^ Char.escaped expected_char
-          ^ ", but got this instead.");
+      | `WrongPrefix (loc, expected_prefix) ->
+          Logger.error
+            { startl = loc; endl = Location.plus_str expected_prefix loc }
+          @@ "We were expecting a '"
+          ^ String.escaped expected_prefix
+          ^ "', but got this instead.");
       exit 1

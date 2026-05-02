@@ -1,25 +1,15 @@
 open Compiler.Types
+module Lookup = Compiler.Lookup
 
-(*
- * Strategy:
- *
- * A file is not necessarily a module.
- *
- * The build procedure must allow you to specify how the files relate
- * to the module system.
- *
- * By default, each file will be wrapped in a module, but the build system
- * may choose to concatenate multiple files into a single module.
- *)
-
-let rec compile_clause (clause : Ast.Clause.t) (compiler : t) : t =
+let compile_clause ({ step; initialize_nested } : Compiler.Types.runner)
+    (clause : Ast.Clause.t) (compiler : t) : t =
   (* TODO: handle location *)
   match clause.content with
   | Directive ({ loc; content = { name = _ :: _, _; _ } }, _) ->
       Logger.error loc "Directives cannot be qualified";
       exit 1
   | Directive ({ content = header; loc }, body) ->
-      Compiler.Directive.compile loc header body step compiler
+      Shared.Directive.compile loc header body step compiler initialize_nested
   | MultiDeclaration (header, first, rest) ->
       let open Location in
       Compiler.Declaration.compile_multi
@@ -43,11 +33,3 @@ let rec compile_clause (clause : Ast.Clause.t) (compiler : t) : t =
         compiler with
         output = FT.cons (FT.snoc compiler.output declaration) export;
       }
-
-and step : Ast.Clause.t list * t -> t = function
-  | [], compiler ->
-      compiler.persist compiler.filename
-        (FT.append compiler.header compiler.output);
-      compiler
-  | clause :: remaining, compiler ->
-      step (remaining, compile_clause clause compiler)
