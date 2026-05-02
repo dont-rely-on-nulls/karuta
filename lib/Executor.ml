@@ -60,7 +60,7 @@ let compile ({ sakura_module_name } : Compiler.Types.cli)
           (Target.initialize { persist; filename = filepath; externals })
         @@ BatFingerTree.to_list body
   in
-  let preprocess_one (acc : preprocessed_result attempt) filepath =
+  let preprocess_one_karuta (acc : preprocessed_result attempt) filepath =
     let open Error in
     let* dependencies, preprocessed = acc in
     let preprocessor =
@@ -72,11 +72,11 @@ let compile ({ sakura_module_name } : Compiler.Types.cli)
     ok (dependencies, BatMap.String.add filepath clauses preprocessed)
   in
   let* dependency_graph, preprocessed_files =
-    List.fold_left preprocess_one
+    List.fold_left preprocess_one_karuta
       (ok
          ( sakura_output.dependencies,
            BatMap.String.singleton sakura_filename sakura_output.clauses ))
-      filepaths
+      karuta_files
   in
   let* expanded_graph = Preprocessor.DependencyGraph.expand dependency_graph in
   let sorted_file_paths =
