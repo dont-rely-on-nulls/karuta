@@ -15,12 +15,6 @@ let compile' : type a.
     a Compiler.Types.t attempt =
  fun step compiler decls_queries -> step (decls_queries, compiler) |> ok
 
-(*  let compile' (type a)
-    (step : Ast.Clause.t list * a Compiler.Types.t -> a Compiler.Types.t)
-    (compiler : a Compiler.Types.t) :
-    Ast.Clause.t list -> a Compiler.Types.t attempt =
- fun decls_queries -> step (decls_queries, compiler) |> ok
-*)
 (* let eval ((compiler, computer) : Compiler.t * Machine.t) : *)
 (*     (Compiler.t * Machine.t) option = *)
 (*   match compiler.entry_point with *)
@@ -53,12 +47,7 @@ let compile ({ sakura_module_name } : Compiler.Types.cli)
         parse filepath |> Error.map (List.append parsed))
     |> preprocess sakura_filename
   in
-  let compile_one_file : type state.
-      preprocessed_files ->
-      string ->
-      Compiler.Types.comptime Compiler.Types.env ->
-      state Compiler.Types.t attempt =
-   fun preprocessed filepath externals ->
+  let compile_one_file (preprocessed : preprocessed_files) filepath externals =
     let compiler_config : (module Compiler.Types.COMPILER_CONFIG) =
       if Preprocessor.is_sakura_file filepath then (module Sakura)
       else (module Karuta)
@@ -69,9 +58,10 @@ let compile ({ sakura_module_name } : Compiler.Types.cli)
         Logger.simply_unreachable "We hit a file that doesn't exist";
         exit 1
     | Some body ->
-        compile' Target.step
-          (Target.initialize { persist; filename = filepath; externals })
-        @@ BatFingerTree.to_list body
+        body |> BatFingerTree.to_list
+        |> compile' Target.step
+             (Target.initialize { persist; filename = filepath; externals })
+        ||> fun c -> ok @@ c.externals
   in
   let preprocess_one_karuta (acc : preprocessed_result attempt) filepath =
     let open Error in
@@ -98,8 +88,8 @@ let compile ({ sakura_module_name } : Compiler.Types.cli)
   let rec compile_all imports = function
     | [] -> Ok ()
     | f :: files ->
-        let* result = compile_one_file preprocessed_files f imports in
-        compile_all result.externals files
+        let* externals = compile_one_file preprocessed_files f imports in
+        compile_all externals files
   in
   compile_all BatMap.String.empty sorted_file_paths
 
