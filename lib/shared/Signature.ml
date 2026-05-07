@@ -174,9 +174,13 @@ let all_atoms (args : Ast.Expr.t list) : unit =
       Logger.error loc "Expected atom.";
       exit 1
 
-let rec compile_nested (loc : Location.location) (body : Ast.Clause.t list)
-    ({ env = { modules; _ }; _ } as compiler : t)
-    (sig_scope : Compiler.Types.sig_scope) =
+let rec compile_nested : type a.
+    Location.location ->
+    Ast.Clause.t list ->
+    a t ->
+    Compiler.Types.sig_scope ->
+    compiled_signature Location.with_location =
+ fun loc body ({ env = { modules; _ }; _ } as compiler) sig_scope ->
   let all_underscores : Ast.Expr.t list -> bool =
     List.for_all
     @@ Fun.compose
@@ -347,7 +351,11 @@ let rec compile_nested (loc : Location.location) (body : Ast.Clause.t list)
   in
   Location.add_loc compiled_sig loc
 
-and compile (loc : Location.location) (body : Ast.Clause.t list) (compiler : t)
-    : compiled_signature Location.with_location =
+and compile : type a.
+    Location.location ->
+    Ast.Clause.t list ->
+    a t ->
+    compiled_signature Location.with_location =
+ fun loc body compiler ->
   let module Lookup = (val compiler.lookup) in
   compile_nested loc body compiler Lookup.empty_signature

@@ -1,7 +1,7 @@
 open Compiler.Types
 
-let initialize_from_parent module_name (initialize_nested : initialize_nested)
-    parent : t =
+let initialize_from_parent (type a) module_name
+    (initialize_nested : a initialize_nested) parent : a t =
   let inner_module_name =
     parent.module_name ^ ModuleName.separator ^ module_name
   in
@@ -16,11 +16,16 @@ let initialize_from_parent module_name (initialize_nested : initialize_nested)
     }
     parent.imports (Some parent) inner_module_name
 
-let rec compile (directive_loc : Location.location)
-    ({ elements; arity; _ } as f : Ast.Expr.func)
-    (body : Ast.Clause.t list list) (step : Ast.Clause.t list * t -> t)
-    ({ env = { modules; _ } as env; _ } as compiler : t)
-    (initialize_nested : Compiler.Types.initialize_nested) : t =
+let rec compile : type a.
+    Location.location ->
+    Ast.Expr.func ->
+    Ast.Clause.t list list ->
+    (Ast.Clause.t list * a t -> a t) ->
+    a t ->
+    a Compiler.Types.initialize_nested ->
+    a t =
+ fun directive_loc ({ elements; arity; _ } as f) body step
+     ({ env = { modules; _ } as env; _ } as compiler) initialize_nested ->
   let module Lookup = (val compiler.lookup) in
   match (Ast.Expr.extract_func_label f, arity, body) with
   | "module", 1, [ body ] -> (

@@ -1,8 +1,9 @@
 open Compiler.Types
 module Lookup = Database.Lookup
+include Database.Types
 
-let compile_clause ({ step; initialize_nested } : Compiler.Types.runner)
-    (clause : Ast.Clause.t) (compiler : t) : t =
+let compile_clause ({ step; initialize_nested } : state Compiler.Types.runner)
+    (clause : Ast.Clause.t) (compiler : state t) : state t =
   match clause.content with
   | Directive ({ loc; content = { name = _ :: _, _; _ } }, _) ->
       Logger.error loc "Directives cannot be qualified";

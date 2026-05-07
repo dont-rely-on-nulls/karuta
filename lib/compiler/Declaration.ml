@@ -90,7 +90,7 @@ let compile_multi
       Ast.Clause.head
       * Ast.Clause.decl Location.with_location
       * Ast.Clause.decl Location.with_location list)
-    ({ env; _ } as compiler : t) : t =
+    ({ env; _ } as compiler : unit t) : unit t =
   let declaration =
     let args =
       if arity = 0 then []

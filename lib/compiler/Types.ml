@@ -91,17 +91,18 @@ end
 
 type cli = { sakura_module_name : string }
 
-type t = {
+type 'state t = {
+  state : 'state;
   externals : comptime env;
   imports : BatSet.String.t;
   header : forms;
   output : forms;
   filename : string;
   module_name : string;
-  parent : t option;
+  parent : 'state t option;
   env : compiled_module;
   persist : Persist.t;
-  lookup : (module LookupS with type t = t);
+  lookup : (module LookupS with type t = 'state t);
 }
 
 type initialization = {
@@ -110,29 +111,38 @@ type initialization = {
   externals : comptime env;
 }
 
-type initialize_nested =
-  initialization -> BatSet.String.t -> t option -> string -> t
+type 'a initialize_nested =
+  initialization -> BatSet.String.t -> 'a t option -> string -> 'a t
 
-type runner = {
-  step : Ast.Clause.t list * t -> t;
-  initialize_nested : initialize_nested;
+type 'a runner = {
+  step : Ast.Clause.t list * 'a t -> 'a t;
+  initialize_nested : 'a initialize_nested;
 }
 
 module type COMPILER_CONFIG = sig
-  val compile_clause : runner -> Ast.Clause.t -> t -> t
+  type state
 
-  module Lookup : LookupS with type t = t
+  val initial_state : state
+  val compile_clause : state runner -> Ast.Clause.t -> state t -> state t
+
+  module Lookup : LookupS with type t = state t
 end
 
 module type COMPILER = sig
-  val step : Ast.Clause.t list * t -> t
-  val initialize : initialization -> t
+  type state
+
+  val step : Ast.Clause.t list * state t -> state t
+  val initialize : initialization -> state t
 end
 
-module Make (Config : COMPILER_CONFIG) : COMPILER = struct
-  let initialize_nested { persist; filename; externals } imports parent
-      module_name : t =
+module Make (Config : COMPILER_CONFIG) :
+  COMPILER with type state = Config.state = struct
+  include Config
+
+  let initialize_nested ({ persist; filename; externals } : initialization)
+      imports parent module_name : state t =
     {
+      state = Option.fold ~none:initial_state ~some:(fun p -> p.state) parent;
       parent;
       imports;
       externals;
@@ -156,11 +166,11 @@ module Make (Config : COMPILER_CONFIG) : COMPILER = struct
       lookup = (module Config.Lookup);
     }
 
-  let initialize ({ filename; _ } as init) : t =
+  let initialize ({ filename; _ } as init : initialization) : state t =
     let module_name = ModuleName.of_filepath filename in
     initialize_nested init BatSet.String.empty None module_name
 
-  let rec step : Ast.Clause.t list * t -> t = function
+  let rec step : Ast.Clause.t list * state t -> state t = function
     | [], compiler ->
         if not @@ FT.is_empty compiler.output then
           compiler.persist compiler.filename

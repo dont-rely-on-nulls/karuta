@@ -1,8 +1,12 @@
 open Compiler.Types
 module Lookup = Compiler.Lookup
 
-let compile_clause ({ step; initialize_nested } : Compiler.Types.runner)
-    (clause : Ast.Clause.t) (compiler : t) : t =
+type state = unit
+
+let initial_state = ()
+
+let compile_clause ({ step; initialize_nested } : unit Compiler.Types.runner)
+    (clause : Ast.Clause.t) (compiler : unit t) : unit t =
   (* TODO: handle location *)
   match clause.content with
   | Directive ({ loc; content = { name = _ :: _, _; _ } }, _) ->

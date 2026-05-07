@@ -25,9 +25,10 @@ end
 
 let compile (directive_loc : Location.location)
     ({ arity; _ } as func : Ast.Expr.func) (body : Ast.Clause.t list list)
-    (step : Ast.Clause.t list * t -> t)
-    ({ env = { modules = _; _ } as _env; _ } as compiler : t)
-    (initialize_nested : Compiler.Types.initialize_nested) : t =
+    (step : Ast.Clause.t list * Types.state t -> Types.state t)
+    ({ env = { modules = _; _ } as _env; _ } as compiler : Types.state t)
+    (initialize_nested : Types.state Compiler.Types.initialize_nested) :
+    Types.state t =
   let module Lookup = (val compiler.lookup) in
   match (Ast.Expr.extract_func_label func, arity, body) with
   | "module", _, _ ->

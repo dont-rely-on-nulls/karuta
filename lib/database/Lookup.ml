@@ -1,5 +1,7 @@
 include Compiler.Lookup
 
+type t = Types.state Compiler.Types.t
+
 let ancestors_of_compiler (compiler : t) : scope =
   let open BatLazyList in
   unfold (Some compiler) (function

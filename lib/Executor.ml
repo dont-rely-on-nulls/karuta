@@ -8,11 +8,19 @@ let parse : string -> Ast.ParserClause.t list attempt = function
       if in_channel_length inc = 0 then error @@ Error.EmptyFile str
       else ok @@ Parser.parse str (In_channel.input_all inc)
 
-let compile' (step : Ast.Clause.t list * Compiler.Types.t -> Compiler.Types.t)
-    (compiler : Compiler.Types.t) :
-    Ast.Clause.t list -> Compiler.Types.t attempt =
- fun decls_queries -> step (decls_queries, compiler) |> ok
+let compile' : type a.
+    (Ast.Clause.t list * a Compiler.Types.t -> a Compiler.Types.t) ->
+    a Compiler.Types.t ->
+    Ast.Clause.t list ->
+    a Compiler.Types.t attempt =
+ fun step compiler decls_queries -> step (decls_queries, compiler) |> ok
 
+(*  let compile' (type a)
+    (step : Ast.Clause.t list * a Compiler.Types.t -> a Compiler.Types.t)
+    (compiler : a Compiler.Types.t) :
+    Ast.Clause.t list -> a Compiler.Types.t attempt =
+ fun decls_queries -> step (decls_queries, compiler) |> ok
+*)
 (* let eval ((compiler, computer) : Compiler.t * Machine.t) : *)
 (*     (Compiler.t * Machine.t) option = *)
 (*   match compiler.entry_point with *)
@@ -45,7 +53,12 @@ let compile ({ sakura_module_name } : Compiler.Types.cli)
         parse filepath |> Error.map (List.append parsed))
     |> preprocess sakura_filename
   in
-  let compile_one_file (preprocessed : preprocessed_files) filepath externals =
+  let compile_one_file : type state.
+      preprocessed_files ->
+      string ->
+      Compiler.Types.comptime Compiler.Types.env ->
+      state Compiler.Types.t attempt =
+   fun preprocessed filepath externals ->
     let compiler_config : (module Compiler.Types.COMPILER_CONFIG) =
       if Preprocessor.is_sakura_file filepath then (module Sakura)
       else (module Karuta)

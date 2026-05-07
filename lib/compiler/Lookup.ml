@@ -1,5 +1,6 @@
 include Types
 
+type t = unit Types.t
 type 'a nested_env = 'a env BatLazyList.t
 type scope = comptime nested_env
 type sig_scope = signature nested_env
