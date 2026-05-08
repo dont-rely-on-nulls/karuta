@@ -3,7 +3,7 @@ module Lookup = Compiler.Lookup
 
 type state = unit
 
-let initial_state = ()
+let initial_state () = ()
 
 let compile_clause ({ step; initialize_nested } : unit Compiler.Types.runner)
     (clause : Ast.Clause.t) (compiler : unit t) : unit t =

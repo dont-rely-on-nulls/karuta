@@ -122,7 +122,7 @@ type 'a runner = {
 module type COMPILER_CONFIG = sig
   type state
 
-  val initial_state : state
+  val initial_state : unit -> state
   val compile_clause : state runner -> Ast.Clause.t -> state t -> state t
 
   module Lookup : LookupS with type t = state t
@@ -142,7 +142,8 @@ module Make (Config : COMPILER_CONFIG) :
   let initialize_nested ({ persist; filename; externals } : initialization)
       imports parent module_name : state t =
     {
-      state = Option.fold ~none:initial_state ~some:(fun p -> p.state) parent;
+      state =
+        Option.fold ~none:(initial_state ()) ~some:(fun p -> p.state) parent;
       parent;
       imports;
       externals;
