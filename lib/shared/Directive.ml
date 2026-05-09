@@ -1,10 +1,11 @@
 open Compiler.Types
 
+let create_nested_module_name module_name parent : string =
+  parent.module_name ^ ModuleName.separator ^ module_name
+
 let initialize_from_parent (type a) module_name
     (initialize_nested : a initialize_nested) parent : a t =
-  let inner_module_name =
-    parent.module_name ^ ModuleName.separator ^ module_name
-  in
+  let inner_module_name = create_nested_module_name module_name parent in
   let inner_filename =
     ModuleName.of_filepath parent.filename ^ "." ^ module_name ^ ".krt"
   in

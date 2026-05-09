@@ -108,6 +108,20 @@ module Expr = struct
         Logger.error loc "Expected unqualified atom";
         exit 1
 
+  let first_functor_atom_arg : t -> string =
+   fun func_candidate ->
+    match func_candidate with
+    | { content = Functor { elements = []; _ }; loc } ->
+        Logger.error loc
+          "Tried to extract first functor atom argument from aan atom";
+        exit 1
+    | { content = Functor { elements = first :: _; _ }; _ } ->
+        extract_unqualified_atom first
+    | _ ->
+        Logger.error func_candidate.loc
+          "Tried to extract first functor atom argument from a non Functor";
+        exit 1
+
   let is_functor : t -> bool = function
     | { content = Functor _; _ } -> true
     | _ -> false

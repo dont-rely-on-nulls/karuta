@@ -23,6 +23,10 @@ module Error = struct
       exit 1)
 end
 
+let rec swap a f =
+  let v = Atomic.get a in
+  if Atomic.compare_and_set a v (f v) then () else swap a f
+
 let compile (directive_loc : Location.location)
     ({ arity; _ } as func : Ast.Expr.func) (body : Ast.Clause.t list list)
     (step : Ast.Clause.t list * Types.state t -> Types.state t)
@@ -32,8 +36,20 @@ let compile (directive_loc : Location.location)
   let module Lookup = (val compiler.lookup) in
   match (Ast.Expr.extract_func_label func, arity, body) with
   | "module", _, _ ->
-      Shared.Directive.compile directive_loc func body step compiler
-        initialize_nested
+      let compiler =
+        Shared.Directive.compile directive_loc func body step compiler
+          initialize_nested
+      in
+      let module_name =
+        Ast.Expr.first_functor_atom_arg
+        @@ Location.add_loc (Ast.Expr.Functor func) directive_loc
+      in
+      let qualified_name =
+        Shared.Directive.create_nested_module_name module_name compiler
+      in
+      swap compiler.state (fun { schemas } ->
+          { schemas = BatSet.String.add qualified_name schemas });
+      compiler
   | "signature", _, _ ->
       Logger.error directive_loc
         "TODO: Sakura has special treatment for signatures";
