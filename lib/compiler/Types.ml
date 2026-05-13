@@ -89,7 +89,14 @@ module type LookupS = sig
     | `UnexpectedSignature of Location.location ]
 end
 
-type cli = { sakura_module_name : string }
+module Options = struct
+  type sakura = { root_module : string; address : string; port : int }
+
+  let initialize_sakura ?(root_module = "db") ~address ~port () : sakura =
+    { root_module; address; port }
+
+  type t = { sakura : sakura option }
+end
 
 type 'state t = {
   state : 'state;

@@ -34,18 +34,29 @@ let preprocess filepath =
 
 (* FIXME: hook up dependency information and sort the file list before compiling *)
 (* TODO: compilation cache *)
-let compile ({ sakura_module_name } : Compiler.Types.cli)
+let compile ({ sakura } : Compiler.Types.Options.t)
     (persist : Compiler.Types.Persist.t) (filepaths : string list) :
     unit attempt =
-  let sakura_filename = sakura_module_name ^ ".skr" in
   let sakura_files, karuta_files =
     BatList.partition Preprocessor.is_sakura_file filepaths
   in
+
   let* sakura_output =
-    sakura_files
-    |> Error.fold (fun parsed filepath ->
-        parse filepath |> Error.map (List.append parsed))
-    |> preprocess sakura_filename
+    match (sakura, sakura_files) with
+    | None, [] | Some _, [] ->
+        Error.ok @@ (Preprocessor.DependencyGraph.empty, BatMap.String.empty)
+    | None, _ :: _ ->
+        Logger.simply_error
+          "Tried to compile Sakura files without a configuration";
+        exit 1
+    | Some { root_module; _ }, sakura_files ->
+        let sakura_filename = root_module ^ ".skr" in
+        sakura_files
+        |> Error.fold (fun parsed filepath ->
+            parse filepath |> Error.map (List.append parsed))
+        |> preprocess sakura_filename
+        ||> fun { dependencies; clauses } ->
+        Error.ok (dependencies, BatMap.String.singleton sakura_filename clauses)
   in
   let compile_one_file (preprocessed : preprocessed_files) filepath externals =
     let compiler_config : (module Compiler.Types.COMPILER_CONFIG) =
@@ -75,11 +86,7 @@ let compile ({ sakura_module_name } : Compiler.Types.cli)
     ok (dependencies, BatMap.String.add filepath clauses preprocessed)
   in
   let* dependency_graph, preprocessed_files =
-    List.fold_left preprocess_one_karuta
-      (ok
-         ( sakura_output.dependencies,
-           BatMap.String.singleton sakura_filename sakura_output.clauses ))
-      karuta_files
+    List.fold_left preprocess_one_karuta (ok sakura_output) karuta_files
   in
   let* expanded_graph = Preprocessor.DependencyGraph.expand dependency_graph in
   let sorted_file_paths =
