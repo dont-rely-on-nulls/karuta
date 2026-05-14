@@ -20,6 +20,12 @@ let compile_clause ({ step; initialize_nested } : unit Compiler.Types.runner)
         (header, { content = first; loc = clause.loc }, rest)
         compiler
   | Query { name; arity; args } ->
+      (match compiler.env.query with
+      | None -> ()
+      | Some { loc; _ } ->
+          Logger.error clause.loc "A module can have at most one query";
+          Logger.error loc "First query defined here";
+          exit 1);
       let open Beam in
       let declaration =
         let fun_args =
@@ -36,4 +42,10 @@ let compile_clause ({ step; initialize_nested } : unit Compiler.Types.runner)
       {
         compiler with
         output = FT.cons (FT.snoc compiler.output declaration) export;
+        env =
+          {
+            compiler.env with
+            query =
+              Some (Location.add_loc { Ast.Clause.name; arity } clause.loc);
+          };
       }

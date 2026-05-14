@@ -34,8 +34,8 @@ let preprocess filepath =
 
 (* FIXME: hook up dependency information and sort the file list before compiling *)
 (* TODO: compilation cache *)
-let compile ({ sakura } : Compiler.Types.Options.t)
-    (persist : Compiler.Types.Persist.t) (filepaths : string list) :
+let compile ({ sakura; artifact } : Compiler.Types.Options.t)
+    (persist : Compiler.Types.Persist.both) (filepaths : string list) :
     unit attempt =
   let sakura_files, karuta_files =
     BatList.partition Preprocessor.is_sakura_file filepaths
@@ -71,7 +71,8 @@ let compile ({ sakura } : Compiler.Types.Options.t)
     | Some body ->
         body |> BatFingerTree.to_list
         |> compile' Target.step
-             (Target.initialize { persist; filename = filepath; externals })
+             (Target.initialize
+                { persist = persist.beam; filename = filepath; externals })
         ||> fun c -> ok @@ c.externals
   in
   let preprocess_one_karuta (acc : preprocessed_result attempt) filepath =
@@ -93,12 +94,38 @@ let compile ({ sakura } : Compiler.Types.Options.t)
     Preprocessor.DependencyGraph.sort expanded_graph karuta_files
   in
   let rec compile_all imports = function
-    | [] -> Ok ()
+    | [] -> Ok imports
     | f :: files ->
         let* externals = compile_one_file preprocessed_files f imports in
         compile_all externals files
   in
-  compile_all BatMap.String.empty sorted_file_paths
+  let* compiled_modules = compile_all BatMap.String.empty sorted_file_paths in
+  match artifact with
+  | Library -> Ok ()
+  | Executable { root_module; filename } -> (
+      let module Map = BatMap.String in
+      match Map.find_opt root_module compiled_modules with
+      | None ->
+          Logger.simply_error
+            "Root module for the executable could not be found";
+          exit 1
+      | Some { content = Signature _; loc } ->
+          Logger.error loc
+            "Expected a module as the entry point but found a signature";
+          exit 1
+      | Some { content = Module { query = None; _ }; loc } ->
+          Logger.error loc "Module does not have a query";
+          exit 1
+      | Some { content = Module { query = Some query; _ }; _ } ->
+          Ok
+            (EntryPoint.emit
+               {
+                 persist = persist.executable;
+                 query = query.content;
+                 sakura;
+                 filename;
+                 root_module;
+               }))
 
 (* let load' filter_fn (filepath : string) : Compiler.t * Machine.t = *)
 (*   filepath |> parse |> List.filter filter_fn |> compile *)

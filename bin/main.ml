@@ -29,15 +29,26 @@ let run : cmd -> unit = function
       (* TODO: Make sakura module name as an available CLI option with db being the default *)
       let open Compiler.Types in
       let options : Options.t =
-        {
-          sakura =
-            Some (Options.initialize_sakura ~address:"localhost" ~port:3435 ());
-        }
+        Options.initialize
+          ~sakura:
+            (Some (Options.initialize_sakura ~address:"localhost" ~port:3435 ()))
+          ~artifact:(Executable { filename = "deal"; root_module = "plus" })
+          ()
       in
+      let prefix = "runtime" in
       let* _ =
         Executor.compile options
-          (fun name forms ->
-            Erl.compile "runtime" name @@ BatFingerTree.to_list forms)
+          {
+            beam =
+              (fun name forms ->
+                Erl.compile prefix name @@ BatFingerTree.to_list forms);
+            executable =
+              (fun name body ->
+                let full_name = prefix ^ "/" ^ name in
+                Out_channel.with_open_text full_name (fun c ->
+                    Out_channel.output_string c body);
+                Unix.chmod full_name 0o755);
+          }
           files
       in
       (* TODO: fix call to run *)

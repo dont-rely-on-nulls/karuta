@@ -150,6 +150,7 @@ let rec ascribe_to_module
         {
           modules = public_comptimes;
           predicates = public_predicates;
+          query = None;
           hidden =
             Some { modules = hidden_comptimes; predicates = hidden_predicates };
         }

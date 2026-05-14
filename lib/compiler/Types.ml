@@ -15,6 +15,8 @@ end)
 module Persist = struct
   (* TODO: don't throw exceptions. Use a result for the return type. *)
   type t = string -> forms -> unit
+  type raw = string -> string -> unit
+  type both = { beam : t; executable : raw }
 end
 
 type functor_map = int PredicateMap.t
@@ -40,6 +42,7 @@ and compiled_module = {
   modules : comptime env;
   (* TODO: Later this will become something related to types *)
   predicates : unit PredicateMap.t;
+  query : predicate_name Location.with_location option;
   hidden : hidden_definitions option;
 }
 
@@ -95,7 +98,13 @@ module Options = struct
   let initialize_sakura ?(root_module = "db") ~address ~port () : sakura =
     { root_module; address; port }
 
-  type t = { sakura : sakura option }
+  type artifact =
+    | Library
+    | Executable of { root_module : string; filename : string }
+
+  type t = { sakura : sakura option; artifact : artifact }
+
+  let initialize ?(sakura = None) ~artifact () : t = { sakura; artifact }
 end
 
 type 'state t = {
@@ -169,6 +178,7 @@ module Make (Config : COMPILER_CONFIG) :
           modules = BatMap.String.empty;
           predicates = PredicateMap.empty;
           hidden = None;
+          query = None;
         };
       persist;
       lookup = (module Config.Lookup);
