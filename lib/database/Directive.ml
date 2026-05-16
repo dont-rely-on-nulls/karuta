@@ -4,7 +4,10 @@ module Error = struct
   module Set = BatSet.String
 
   let supported_directives =
-    Set.of_list [ "persisted"; "ephemeral"; "constraint"; "stored" ]
+    Set.of_list
+      (List.map
+         (Fun.compose String.lowercase_ascii Types.show_directive)
+         Types.all_of_directive)
 
   let treat_error_cases
       ((qualifier, name) :
@@ -27,30 +30,30 @@ let rec swap a f =
   let v = Atomic.get a in
   if Atomic.compare_and_set a v (f v) then () else swap a f
 
+let forbid_nested prefix directive_loc =
+ (function
+ | None -> ()
+ | Some { Location.loc; _ } ->
+     Logger.error directive_loc @@ prefix
+     ^ " are not allowed inside of Sakura directives";
+     Logger.error loc "Directive started here";
+     exit 1)
+
 let compile (directive_loc : Location.location)
     ({ arity; _ } as func : Ast.Expr.func) (body : Ast.Clause.t list list)
     (step : Ast.Clause.t list * Types.state t -> Types.state t)
-    ({ env = { modules = _; _ } as _env; _ } as compiler : Types.state t)
+    ({ env = { modules = _; _ } as _env; state; _ } as compiler : Types.state t)
     (initialize_nested : Types.state Compiler.Types.initialize_nested) :
     Types.state t =
   let module Lookup = (val compiler.lookup) in
   match (Ast.Expr.extract_func_label func, arity, body) with
   | "module", _, _ ->
-      let compiler =
-        Shared.Directive.compile directive_loc func body step compiler
-          initialize_nested
-      in
-      let module_name =
-        Ast.Expr.first_functor_atom_arg
-        @@ Location.add_loc (Ast.Expr.Functor func) directive_loc
-      in
-      let qualified_name =
-        Shared.Directive.create_nested_module_name module_name compiler
-      in
-      swap compiler.state (fun { schemas } ->
-          { schemas = BatSet.String.add qualified_name schemas });
-      compiler
+      forbid_nested "Modules" directive_loc (Atomic.get state).current_directive;
+      Shared.Directive.compile directive_loc func body step compiler
+        initialize_nested
   | "signature", _, _ ->
+      forbid_nested "Signatures" directive_loc
+        (Atomic.get state).current_directive;
       Logger.error directive_loc
         "TODO: Sakura has special treatment for signatures";
       exit 1
@@ -64,6 +67,13 @@ let compile (directive_loc : Location.location)
       in
       match (qualifier.content, name.content, arity) with
       | "sakura", "persisted", 0 ->
+          let module_name =
+            Ast.Expr.first_functor_atom_arg
+            @@ Location.add_loc (Ast.Expr.Functor func) directive_loc
+          in
+          let _qualified_name =
+            Shared.Directive.create_nested_module_name module_name compiler
+          in
           Logger.error directive_loc
             "TODO: persisted directive is not yet implemented";
           exit 1
