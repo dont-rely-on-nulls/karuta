@@ -20,6 +20,7 @@ let compile_clause ({ step; initialize_nested } : unit Compiler.Types.runner)
         (header, { content = first; loc = clause.loc }, rest)
         compiler
   | Query { name; arity; args } ->
+      (* TODO: undo the hack we did for the WAM with the fake declaration *)
       (match compiler.env.query with
       | None -> ()
       | Some { loc; _ } ->
@@ -35,7 +36,6 @@ let compile_clause ({ step; initialize_nested } : unit Compiler.Types.runner)
         |> Builder.call (Builder.atom "")
         |> List.fold_right Ukanren.query_variable args
         |> List.fold_right Compiler.Declaration.call_with_fresh args
-        |> Ukanren.run_lazy
         |> Builder.single_function_declaration name fun_args
       in
       let export = Beam.Builder.Attribute.export [ (name, arity + 1) ] in

@@ -18,11 +18,11 @@ let emit { persist; query = { name; arity }; sakura; filename; root_module } =
   in
   let query =
     Printf.sprintf "%s:'%s'(%s)" root_module name
-      (String.concat ", " @@ List.init arity (Fun.const "''"))
+      (String.concat ", " @@ List.init (arity + 1) (Fun.const "''"))
   in
   let body =
     Printf.sprintf
-      "io:format(\"~p~n\", [karuta:'take-all'(karuta:start(%s, %s))])"
+      "io:format(\"~p~n\", [karuta:'take-all'(karuta:'run-lazy'(%s, %s))])"
       config_map query
   in
   let main = "main(_) ->\n  " ^ body ^ ".\n" in
