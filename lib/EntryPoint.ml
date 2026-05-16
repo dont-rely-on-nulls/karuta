@@ -14,7 +14,8 @@ let emit { persist; query = { name; arity }; sakura; filename; root_module } =
     match sakura with
     | None -> "#{}"
     | Some { address; port; _ } ->
-        Printf.sprintf "#{db_port => %d, db_address => \"%s\"}" port address
+        Printf.sprintf "#{db_port => %d, db_address => \"%s\", db_root => '%s'}"
+          port address root_module
   in
   let query =
     Printf.sprintf "%s:'%s'(%s)" root_module name

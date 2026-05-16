@@ -159,14 +159,17 @@
   ((stream) (when (is_function stream)) (pull (funcall stream))))
 
 (defun start
-  (((map 'db_port port 'db_address address 'db_timeouts timeout-map) goal)
+  (((map 'db_port port 'db_address address 'db_timeouts timeout-map 'db_root db-root) goal)
    (let* ((connect-timeout (maps:get 'connect timeout-map (* 60 1000)))
           (send-timeout (maps:get 'send timeout-map (* 5 1000)))
           (tcp-opts (list 'binary #(packet 0) #(send_timeout send-timeout))))
      (case (gen_tcp:connect address port tcp-opts connect-timeout)
        ((tuple 'ok socket)
-        (funcall goal (map 'db_config (map 'socket socket
-                                           'timeouts timeout-map))))
+        (funcall (conj
+                   (sakura:ask (map) (funcall (fun db-root 'init-payload 0)))
+                   goal)
+                 (map 'db_config (map 'socket socket
+                                      'timeouts timeout-map))))
        ((tuple 'error error) (erlang:error (tuple 'bad_start error))))))
   ((_ goal) (funcall goal #m())))
 
