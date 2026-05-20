@@ -12,16 +12,11 @@ let rename_arg ({ loc; _ } as expr : Ast.Expr.t) (counter : int) :
     loc;
   }
 
-let compare_func (f1 : Ast.Expr.func) (f2 : Ast.Expr.func) : int =
-  Ast.Clause.compare_head
-    { name = Ast.Expr.extract_func_label f1; arity = f1.arity }
-    { name = Ast.Expr.extract_func_label f2; arity = f2.arity }
-
 let compare_clauses (c1 : Ast.ParserClause.t) (c2 : Ast.ParserClause.t) : int =
   match (c1, c2) with
   | ( { content = Declaration { head = h1; _ }; _ },
       { content = Declaration { head = h2; _ }; _ } ) ->
-      compare_func h1 h2
+      Ast.Expr.compare_func h1 h2
   | _, _ -> -1
 
 let canonical_order (l : Ast.Clause.t) (r : Ast.Clause.t) : int =
@@ -354,8 +349,10 @@ let rec parser_to_compiler ({ dependencies; filename } as preprocessor : t)
           grouped_body (dependencies, [])
       in
       let dependencies =
-        match (Ast.Expr.extract_func_label head.content, body) with
-        | "import", [] -> (
+        match
+          (fst head.content.name, Ast.Expr.func_label head.content, body)
+        with
+        | [], "import", [] -> (
             match head.content.elements with
             | [ singleton ] ->
                 let external_dep =
@@ -370,7 +367,7 @@ let rec parser_to_compiler ({ dependencies; filename } as preprocessor : t)
                 Logger.error head.loc
                   "Directive 'import' cannot have multiple expressions within";
                 exit 1)
-        | "import", _ ->
+        | [], "import", _ ->
             Logger.error head.loc "Directive 'import' cannot have a body";
             exit 1
         | _ -> dependencies

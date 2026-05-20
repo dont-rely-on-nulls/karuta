@@ -35,6 +35,17 @@ module Expr = struct
     string Location.with_location list * string Location.with_location
   [@@deriving show]
 
+  let compare_func_label ((lhs_qualifier, lhs_name) : func_label)
+      ((rhs_qualifier, rhs_name) : func_label) : int =
+    let compare_segment =
+     fun (lhs : string Location.with_location)
+         (rhs : string Location.with_location) ->
+      String.compare lhs.content rhs.content
+    in
+    match List.compare compare_segment lhs_qualifier rhs_qualifier with
+    | 0 -> compare_segment lhs_name rhs_name
+    | n -> n
+
   type func = { name : func_label; elements : t list; arity : int }
   [@@deriving show]
 
@@ -47,6 +58,11 @@ module Expr = struct
   [@@deriving show]
 
   and t = base Location.with_location [@@deriving show]
+
+  let compare_func lhs rhs : int =
+    match Int.compare lhs.arity rhs.arity with
+    | 0 -> compare_func_label lhs.name rhs.name
+    | n -> n
 
   let atom : func_label -> func = fun name -> { name; elements = []; arity = 0 }
 
@@ -70,12 +86,15 @@ module Expr = struct
       func -> string Location.with_location * string Location.with_location =
     function
     | { name = [], name; _ } ->
-        Logger.error name.loc "Expected functor to have an unqualified label";
+        Logger.error name.loc "Expected functor to have a qualified label";
         exit 1
     | { name = [ qualifier ], name; _ } -> (qualifier, name)
     | { name = qualifier :: _, _; _ } ->
         Logger.error qualifier.loc "Expected functor to have a single qualifier";
         exit 1
+
+  let func_label : func -> string = function
+    | { name = _, name; _ } -> name.content
 
   let extract_func_label : func -> string = function
     | { name = [], name; _ } -> name.content
