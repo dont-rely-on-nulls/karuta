@@ -46,18 +46,18 @@ let compile (directive_loc : Location.location)
     (initialize_nested : Types.state Compiler.Types.initialize_nested) :
     Types.state t =
   let module Lookup = (val compiler.lookup) in
-  match (Ast.Expr.extract_func_label func, arity, body) with
-  | "module", _, _ ->
+  match (fst func.name, Ast.Expr.func_label func, arity, body) with
+  | [], "module", _, _ ->
       forbid_nested "Modules" directive_loc (Atomic.get state).current_directive;
       Shared.Directive.compile directive_loc func body step compiler
         initialize_nested
-  | "signature", _, _ ->
+  | [], "signature", _, _ ->
       forbid_nested "Signatures" directive_loc
         (Atomic.get state).current_directive;
       Logger.error directive_loc
         "TODO: Sakura has special treatment for signatures";
       exit 1
-  | "project", 0, _ ->
+  | [], "project", 0, _ ->
       Logger.error directive_loc "Sakura does not support project directive";
       exit 1
   | _ -> (
@@ -67,13 +67,7 @@ let compile (directive_loc : Location.location)
       in
       match (qualifier.content, name.content, arity) with
       | "sakura", "persisted", 0 ->
-          let module_name =
-            Ast.Expr.first_functor_atom_arg
-            @@ Location.add_loc (Ast.Expr.Functor func) directive_loc
-          in
-          let _qualified_name =
-            Shared.Directive.create_nested_module_name module_name compiler
-          in
+          Logger.debug compiler.module_name;
           Logger.error directive_loc
             "TODO: persisted directive is not yet implemented";
           exit 1
