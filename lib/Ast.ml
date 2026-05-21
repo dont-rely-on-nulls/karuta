@@ -132,7 +132,7 @@ module Expr = struct
     match func_candidate with
     | { content = Functor { elements = []; _ }; loc } ->
         Logger.error loc
-          "Tried to extract first functor atom argument from aan atom";
+          "Tried to extract first functor atom argument from an atom";
         exit 1
     | { content = Functor { elements = first :: _; _ }; _ } ->
         extract_unqualified_atom first
