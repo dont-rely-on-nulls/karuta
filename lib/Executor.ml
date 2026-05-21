@@ -99,7 +99,17 @@ let compile ({ sakura; artifact } : Compiler.Types.Options.t)
         let* externals = compile_one_file preprocessed_files f imports in
         compile_all externals files
   in
-  let* compiled_modules = compile_all BatMap.String.empty sorted_file_paths in
+  let* compiled_modules =
+    compile_all BatMap.String.empty
+    @@
+    match sakura_output |> snd |> BatMap.String.keys |> BatList.of_enum with
+    | [ sakura_path ] -> sakura_path :: sorted_file_paths
+    | [] -> sorted_file_paths
+    | _ :: _ ->
+        Logger.simply_unreachable
+          "We always work with a single logical Sakura file";
+        exit 1
+  in
   match artifact with
   | Library -> Ok ()
   | Executable { root_module; filename } -> (
