@@ -130,34 +130,41 @@ type initialization = {
 type 'a initialize_nested =
   initialization -> BatSet.String.t -> 'a t option -> string -> 'a t
 
+type ('state, 'directives, 'mods) runner = {
+  step : ('directives, 'mods) Ast.Clause.t list * 'state t -> 'state t;
+  initialize_nested : 'state initialize_nested;
+}
+
 module type COMPILER_CONFIG = sig
-  module Clause : Ast.CLAUSE
-
-  type 'a runner = {
-    step : Clause.t list * 'a t -> 'a t;
-    initialize_nested : 'a initialize_nested;
-  }
-
+  type directives
+  type mods
   type state
 
   val initial_state : unit -> state
-  val compile_clause : state runner -> Clause.t -> state t -> state t
+
+  val compile_clause :
+    (state, directives, mods) runner ->
+    (directives, mods) Ast.Clause.t ->
+    state t ->
+    state t
 
   module Lookup : LookupS with type t = state t
 end
 
 module type COMPILER = sig
-  module Clause : Ast.CLAUSE
-
+  type directives
+  type mods
   type state
 
-  val step : Clause.t list * state t -> state t
+  val step : (directives, mods) Ast.Clause.t list * state t -> state t
   val initialize : initialization -> state t
 end
 
 module Make (Config : COMPILER_CONFIG) :
-  COMPILER with type state = Config.state with module Clause = Config.Clause =
-struct
+  COMPILER
+    with type state = Config.state
+    with type directives = Config.directives
+    with type mods = Config.mods = struct
   include Config
 
   let initialize_nested ({ persist; filename; externals } : initialization)
@@ -193,7 +200,8 @@ struct
     let module_name = ModuleName.of_filepath filename in
     initialize_nested init BatSet.String.empty None module_name
 
-  let rec step : Clause.t list * state t -> state t = function
+  let rec step : (directives, mods) Ast.Clause.t list * state t -> state t =
+    function
     | [], compiler ->
         if not @@ FT.is_empty compiler.output then
           compiler.persist compiler.filename
