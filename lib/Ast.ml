@@ -9,16 +9,41 @@ module type EXPR = sig
   val is_functor : t -> bool
 end
 
-module ClauseF (Expr : EXPR) = struct
+module type DIRECTIVE = sig
+  type 'declaration t [@@deriving show]
+end
+
+module ClauseF (Expr : EXPR) (Directives: DIRECTIVE) = struct
   type head = { name : string; arity : int } [@@deriving show, ord]
 
   type multi_declaration = head * decl * decl Location.with_location list
-  [@@deriving show]
+                                           [@@deriving show]
+
+  and signature_ref =
+    Named of string Location.with_location
+  | Inlined of {declarations: multi_declaration Location.with_location list;
+                directives: directive Location.with_location list}
+
+  and sakura_directive =
+    Persisted of multi_declaration Location.with_location list
+  | Ephemeral of multi_declaration Location.with_location list
+  | Constraint of multi_declaration Location.with_location list
+  
+  and directive =
+    Module of {name: string Location.with_location;
+               signature: signature_ref option;
+               declarations: multi_declaration Location.with_location list;
+               directives: directive Location.with_location list;
+               imports: string Location.with_location BatSet.t}
+  | Signature of {name: string Location.with_location;
+                  declarations: multi_declaration Location.with_location list;
+                  directives: directive Location.with_location list}
+  | Sakura of sakura_directive
 
   and base =
     | MultiDeclaration of multi_declaration
     | Query of { name : string; arity : int; args : string list }
-    | Directive of Expr.func Location.with_location * t list list
+    | Directive of multi_declaration Directive.t
   [@@deriving show]
 
   and decl = {
