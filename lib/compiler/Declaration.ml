@@ -87,7 +87,7 @@ let compile_declaration_bodies { module_name; imports; _ }
 
 let compile_multi
     (({ name; arity }, first_clause, remaining_clauses) :
-      Ast.Clause.head
+      Ast.head
       * Ast.Clause.decl Location.with_location
       * Ast.Clause.decl Location.with_location list)
     ({ env; _ } as compiler : unit t) : unit t =

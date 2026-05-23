@@ -2,7 +2,7 @@ module Form = Beam.Core.Form (Beam.Core.Erlang)
 module FT = BatFingerTree
 module Set = BatSet
 
-type predicate_name = Ast.Clause.head [@@deriving show, ord]
+type predicate_name = Ast.head [@@deriving show, ord]
 type forms = Form.t FT.t
 type 'a env = 'a Location.with_location BatMap.String.t
 type 'a nested_env = 'a env BatLazyList.t
@@ -130,29 +130,34 @@ type initialization = {
 type 'a initialize_nested =
   initialization -> BatSet.String.t -> 'a t option -> string -> 'a t
 
-type 'a runner = {
-  step : Ast.Clause.t list * 'a t -> 'a t;
-  initialize_nested : 'a initialize_nested;
-}
-
 module type COMPILER_CONFIG = sig
+  module Clause : Ast.CLAUSE
+
+  type 'a runner = {
+    step : Clause.t list * 'a t -> 'a t;
+    initialize_nested : 'a initialize_nested;
+  }
+
   type state
 
   val initial_state : unit -> state
-  val compile_clause : state runner -> Ast.Clause.t -> state t -> state t
+  val compile_clause : state runner -> Clause.t -> state t -> state t
 
   module Lookup : LookupS with type t = state t
 end
 
 module type COMPILER = sig
+  module Clause : Ast.CLAUSE
+
   type state
 
-  val step : Ast.Clause.t list * state t -> state t
+  val step : Clause.t list * state t -> state t
   val initialize : initialization -> state t
 end
 
 module Make (Config : COMPILER_CONFIG) :
-  COMPILER with type state = Config.state = struct
+  COMPILER with type state = Config.state with module Clause = Config.Clause =
+struct
   include Config
 
   let initialize_nested ({ persist; filename; externals } : initialization)
@@ -188,7 +193,7 @@ module Make (Config : COMPILER_CONFIG) :
     let module_name = ModuleName.of_filepath filename in
     initialize_nested init BatSet.String.empty None module_name
 
-  let rec step : Ast.Clause.t list * state t -> state t = function
+  let rec step : Clause.t list * state t -> state t = function
     | [], compiler ->
         if not @@ FT.is_empty compiler.output then
           compiler.persist compiler.filename
@@ -216,11 +221,3 @@ module Make (Config : COMPILER_CONFIG) :
           ( remaining,
             Config.compile_clause { initialize_nested; step } clause compiler )
 end
-
-let show_functor_table (functors : functor_map) : string =
-  let open PredicateMap in
-  BatSeq.fold_left
-    (fun acc ({ Ast.Clause.name; arity }, address) ->
-      acc ^ name ^ "/" ^ string_of_int arity ^ ":" ^ string_of_int address
-      ^ "\n")
-    "" (to_seq functors)

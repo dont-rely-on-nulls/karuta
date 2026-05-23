@@ -2,7 +2,7 @@ open Compiler.Types
 
 type payload = {
   persist : Persist.raw;
-  query : Ast.Clause.head;
+  query : Ast.head;
   sakura : Options.sakura option;
   filename : string;
   root_module : string;

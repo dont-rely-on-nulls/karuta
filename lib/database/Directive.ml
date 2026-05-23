@@ -1,9 +1,9 @@
 open Compiler.Types
 
 let treat_error_cases
-      ((qualifier, name) :
-         string Location.with_location * string Location.with_location)
-      (arity : int) : unit =
+    ((qualifier, name) :
+      string Location.with_location * string Location.with_location)
+    (arity : int) : unit =
   if arity <> 0 then (
     Logger.error qualifier.loc "Sakura directives should be qualified atoms";
     exit 1)
@@ -57,8 +57,9 @@ let compile (directive_loc : Location.location)
       in
       match (qualifier.content, name.content, arity) with
       | "sakura", "persisted", 0 ->
-         List.fold_left (Declaration.compile_persisted compiler) body
-          Logger.debug compiler.module_name;
+          List.fold_left
+            (Declaration.compile_persisted compiler)
+            body Logger.debug compiler.module_name;
           Logger.error directive_loc
             "TODO: persisted directive is not yet implemented";
           exit 1

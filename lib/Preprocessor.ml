@@ -35,7 +35,7 @@ let canonical_order (l : Ast.Clause.t) (r : Ast.Clause.t) : int =
   | _ -> 0
 
 let decl_header ({ head = { arity; _ } as f; _ } : Ast.ParserClause.decl) :
-    Ast.Clause.head =
+    Ast.head =
   { name = Ast.Expr.extract_func_label f; arity }
 
 let rename_declaration

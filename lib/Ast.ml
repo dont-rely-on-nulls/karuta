@@ -9,51 +9,12 @@ module type EXPR = sig
   val is_functor : t -> bool
 end
 
-module type DIRECTIVE = sig
-  type 'declaration t [@@deriving show]
+module type LANGUAGE = sig
+  type 'declaration directive [@@deriving show]
+  type extra_module_info [@@deriving show]
 end
 
-module ClauseF (Expr : EXPR) (Directives: DIRECTIVE) = struct
-  type head = { name : string; arity : int } [@@deriving show, ord]
-
-  type multi_declaration = head * decl * decl Location.with_location list
-                                           [@@deriving show]
-
-  and signature_ref =
-    Named of string Location.with_location
-  | Inlined of {declarations: multi_declaration Location.with_location list;
-                directives: directive Location.with_location list}
-
-  and sakura_directive =
-    Persisted of multi_declaration Location.with_location list
-  | Ephemeral of multi_declaration Location.with_location list
-  | Constraint of multi_declaration Location.with_location list
-  
-  and directive =
-    Module of {name: string Location.with_location;
-               signature: signature_ref option;
-               declarations: multi_declaration Location.with_location list;
-               directives: directive Location.with_location list;
-               imports: string Location.with_location BatSet.t}
-  | Signature of {name: string Location.with_location;
-                  declarations: multi_declaration Location.with_location list;
-                  directives: directive Location.with_location list}
-  | Sakura of sakura_directive
-
-  and base =
-    | MultiDeclaration of multi_declaration
-    | Query of { name : string; arity : int; args : string list }
-    | Directive of multi_declaration Directive.t
-  [@@deriving show]
-
-  and decl = {
-    body : Expr.func Location.with_location list;
-    original_arg_list : Expr.t list;
-  }
-  [@@deriving show]
-
-  and t = base Location.with_location [@@deriving show]
-end
+type head = { name : string; arity : int } [@@deriving show, ord]
 
 module Expr = struct
   type func_label =
@@ -169,6 +130,94 @@ module Expr = struct
   let is_functor : t -> bool = function
     | { content = Functor _; _ } -> true
     | _ -> false
+end
+
+type multi_declaration = head * decl * decl Location.with_location list
+[@@deriving show]
+
+and ('language_specific, 'target_specific) signature_ref =
+  | Named of string Location.with_location
+  | Inlined of {
+      declarations : multi_declaration Location.with_location list;
+      directives :
+        ('language_specific, 'target_specific) directive Location.with_location
+        list;
+    }
+
+and ('language_specific, 'target_specific) directive =
+  | Module of {
+      name : string Location.with_location;
+      signature : ('language_specific, 'target_specific) signature_ref option;
+      declarations : multi_declaration Location.with_location list;
+      directives :
+        ('language_specific, 'target_specific) directive Location.with_location
+        list;
+      language_specific : 'language_specific;
+    }
+  | Signature of {
+      name : string Location.with_location;
+      declarations : multi_declaration Location.with_location list;
+      directives :
+        ('language_specific, 'target_specific) directive Location.with_location
+        list;
+    }
+  | TargetSpecific of 'target_specific
+
+and ('language_specific, 'target_specific) base =
+  | MultiDeclaration of multi_declaration
+  | Query of { name : string; arity : int; args : string list }
+  | Directive of ('language_specific, 'target_specific) directive
+[@@deriving show]
+
+and decl = {
+  body : Expr.func Location.with_location list;
+  original_arg_list : Expr.t list;
+}
+[@@deriving show]
+
+and ('language_specific, 'target_specific) t =
+  ('language_specific, 'target_specific) base Location.with_location
+[@@deriving show]
+
+module type CLAUSE = sig
+  module Target : LANGUAGE
+
+  type nonrec multi_declaration = multi_declaration
+
+  type nonrec t =
+    (multi_declaration Target.directive, Target.extra_module_info) t
+
+  type nonrec signature_ref =
+    (multi_declaration Target.directive, Target.extra_module_info) signature_ref
+
+  type nonrec directive =
+    (multi_declaration Target.directive, Target.extra_module_info) directive
+
+  type nonrec base =
+    (multi_declaration Target.directive, Target.extra_module_info) base
+
+  type nonrec decl = decl
+end
+
+module ClauseF (Expr : EXPR) (Target : LANGUAGE) :
+  CLAUSE with module Target = Target = struct
+  module Target = Target
+
+  type nonrec multi_declaration = multi_declaration
+
+  type nonrec t =
+    (multi_declaration Target.directive, Target.extra_module_info) t
+
+  type nonrec signature_ref =
+    (multi_declaration Target.directive, Target.extra_module_info) signature_ref
+
+  type nonrec directive =
+    (multi_declaration Target.directive, Target.extra_module_info) directive
+
+  type nonrec base =
+    (multi_declaration Target.directive, Target.extra_module_info) base
+
+  type nonrec decl = decl
 end
 
 module ParserClauseF (Expr : EXPR) = struct

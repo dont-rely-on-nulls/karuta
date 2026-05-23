@@ -1,6 +1,13 @@
 open Compiler.Types
 module Lookup = Compiler.Lookup
 
+module Clause = Ast.Clause (struct
+  type extra_module_info = { imports : string Location.with_location BatSet.t }
+  [@@deriving show]
+
+  type 'declaration directive = | [@@deriving show]
+end)
+
 type state = unit
 
 let initial_state () = ()
