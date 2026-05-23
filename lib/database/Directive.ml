@@ -1,30 +1,20 @@
 open Compiler.Types
 
-module Error = struct
-  module Set = BatSet.String
-
-  let supported_directives =
-    Set.of_list
-      (List.map
-         (Fun.compose String.lowercase_ascii Types.show_directive)
-         Types.all_of_directive)
-
-  let treat_error_cases
+let treat_error_cases
       ((qualifier, name) :
-        string Location.with_location * string Location.with_location)
+         string Location.with_location * string Location.with_location)
       (arity : int) : unit =
-    if arity <> 0 then (
-      Logger.error qualifier.loc "Sakura directives should be qualified atoms";
-      exit 1)
-    else if qualifier.content = "sakura" then (
-      if Set.mem name.content supported_directives then ()
-      else Logger.error name.loc @@ "Undefined Sakura directive:" ^ name.content;
-      exit 1)
-    else (
-      Logger.error qualifier.loc
-        "Sakura directives should be qualified with 'sakura'";
-      exit 1)
-end
+  if arity <> 0 then (
+    Logger.error qualifier.loc "Sakura directives should be qualified atoms";
+    exit 1)
+  else if qualifier.content = "sakura" then (
+    if BatSet.String.mem name.content Types.supported_directives then ()
+    else Logger.error name.loc @@ "Undefined Sakura directive:" ^ name.content;
+    exit 1)
+  else (
+    Logger.error qualifier.loc
+      "Sakura directives should be qualified with 'sakura'";
+    exit 1)
 
 let rec swap a f =
   let v = Atomic.get a in
@@ -67,6 +57,7 @@ let compile (directive_loc : Location.location)
       in
       match (qualifier.content, name.content, arity) with
       | "sakura", "persisted", 0 ->
+         List.fold_left (Declaration.compile_persisted compiler) body
           Logger.debug compiler.module_name;
           Logger.error directive_loc
             "TODO: persisted directive is not yet implemented";
@@ -84,6 +75,6 @@ let compile (directive_loc : Location.location)
             "Stored procedures are not supported in Sakura yet";
           exit 1
       | _ ->
-          Error.treat_error_cases func_label arity;
+          treat_error_cases func_label arity;
           Logger.simply_unreachable "Unknown directive for Sakura";
           exit 1)

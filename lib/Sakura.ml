@@ -8,9 +8,10 @@ let compile_clause ({ step; initialize_nested } : state Compiler.Types.runner)
   | Directive ({ content = header; loc }, body) ->
       Database.Directive.compile loc header body step compiler initialize_nested
   | MultiDeclaration _ ->
-      Logger.unreachable clause.loc
-        "Step should never see declarations. Sakura has different declaration \
-         types that cannot be compiled uniformly.";
+      Logger.error clause.loc
+        "In Sakura, all declarations must be within a qualified Sakura directive. \
+         Hence, no top-level declarations are allowed.";
+      Logger.simply_error @@ "Available directives: " ^ Database.Types.formatted_supported_directives;
       exit 1
   | Query _ ->
       Logger.error clause.loc "Sakura's schemas do not allow queries";

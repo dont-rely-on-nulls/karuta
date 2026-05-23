@@ -1,6 +1,15 @@
 type directive = Persisted | Ephemeral | Constraint | Stored
 [@@deriving enumerate, show, ord]
 
+let supported_directives =
+  BatSet.String.of_list
+    (List.map
+       (Fun.compose String.lowercase_ascii show_directive)
+       all_of_directive)
+
+let formatted_supported_directives =
+  String.concat ", " @@ BatSet.String.to_list supported_directives
+
 (* TODO: replace string with a proper type type (sic) *)
 type relation_signature = string BatMap.String.t
 type relations = relation_signature BatMap.String.t
