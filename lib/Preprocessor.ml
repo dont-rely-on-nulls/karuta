@@ -19,21 +19,6 @@ let compare_clauses (c1 : Ast.ParserClause.t) (c2 : Ast.ParserClause.t) : int =
       Ast.Expr.compare_func h1 h2
   | _, _ -> -1
 
-let canonical_order (l : Ast.Clause.t) (r : Ast.Clause.t) : int =
-  let open Ast.Clause in
-  match (Location.strip_loc l, Location.strip_loc r) with
-  | Directive ({ content = d1; _ }, _), Directive ({ content = d2; _ }, _) -> (
-      match (d1, d2) with
-      | ( { name = [], { content = "import"; _ }; _ },
-          { name = [], { content = "import"; _ }; _ } ) ->
-          0
-      | { name = [], { content = "import"; _ }; _ }, _ -> -1
-      | _, { name = [], { content = "import"; _ }; _ } -> 1
-      | _, _ -> 0)
-  | Directive _, _ -> -1
-  | _, Directive _ -> 1
-  | _ -> 0
-
 let decl_header ({ head = { arity; _ } as f; _ } : Ast.ParserClause.decl) :
     Ast.head =
   { name = Ast.Expr.extract_func_label f; arity }
@@ -137,10 +122,6 @@ let rec remove_comments (clause : Ast.ParserClause.t) :
       |> fun funcs ->
       if List.is_empty funcs then None
       else Some { content = Ast.ParserClause.QueryConjunction funcs; loc }
-
-let show_clauses (clauses : Ast.Clause.t list) : string =
-  List.fold_left (fun acc term -> acc ^ "\n" ^ Ast.Clause.show term) "" clauses
-[@@warning "-32"]
 
 let check_empty_heads (clause : Ast.ParserClause.t) : Ast.ParserClause.t =
   match clause with
@@ -306,22 +287,31 @@ type t = { filename : string; dependencies : DependencyGraph.t }
 
 let initialize filename : t = { filename; dependencies = BatMap.String.empty }
 
-type output = {
+type ('directives, 'mods) output = {
   dependencies : DependencyGraph.t;
-  clauses : Ast.Clause.t BatFingerTree.t;
+  clauses : ('directives, 'mods) Ast.Clause.t BatFingerTree.t;
 }
 
 let map_clauses f o = { o with clauses = f o.clauses }
 
-let merge (l : output) (r : output) : output =
+let merge :
+    'directives 'mods.
+    ('directives, 'mods) output ->
+    ('directives, 'mods) output ->
+    ('directives, 'mods) output =
+ fun l r ->
   {
     dependencies = DependencyGraph.merge l.dependencies r.dependencies;
     clauses = BatFingerTree.append l.clauses r.clauses;
   }
 
-let fold_map (dependencies : DependencyGraph.t)
-    (f : Ast.ParserClause.t list -> output)
-    (grouped_clauses : Ast.ParserClause.t list list) : output =
+let fold_map :
+    'directives 'mods.
+    DependencyGraph.t ->
+    (Ast.ParserClause.t list -> ('directives, 'mods) output) ->
+    Ast.ParserClause.t list list ->
+    ('directives, 'mods) output =
+ fun dependencies f grouped_clauses ->
   List.fold_left
     (fun acc elem -> merge acc @@ f elem)
     { dependencies; clauses = BatFingerTree.empty }
@@ -334,151 +324,183 @@ module BatFingerTree = struct
     v |> BatFingerTree.to_list |> List.sort f |> BatFingerTree.of_list
 end
 
-let rec parser_to_compiler ({ dependencies; filename } as preprocessor : t)
-    (clause : Ast.ParserClause.t) : output =
-  let open Location in
-  let open Ast in
-  match clause with
-  | { content = Directive (head, body); loc } ->
-      let grouped_body = List.map (group_clauses preprocessor) body in
-      let dependencies, grouped_clauses =
-        List.fold_right
-          (fun { dependencies; clauses } (deps_acc, clauses_acc) ->
-            ( DependencyGraph.merge dependencies deps_acc,
-              BatFingerTree.to_list clauses :: clauses_acc ))
-          grouped_body (dependencies, [])
-      in
-      let dependencies =
-        match
-          (fst head.content.name, Ast.Expr.func_label head.content, body)
-        with
-        | [], "import", [] -> (
-            match head.content.elements with
-            | [ singleton ] ->
-                let external_dep =
-                  Ast.Expr.extract_unqualified_atom singleton
-                in
-                DependencyGraph.add filename external_dep dependencies
-            | [] ->
-                Logger.error head.loc
-                  "Directive 'import' cannot be an empty functor";
-                exit 1
-            | _ ->
-                Logger.error head.loc
-                  "Directive 'import' cannot have multiple expressions within";
-                exit 1)
-        | [], "import", _ ->
-            Logger.error head.loc "Directive 'import' cannot have a body";
-            exit 1
-        | _ -> dependencies
-      in
-      {
-        dependencies;
-        clauses =
-          BatFingerTree.of_list
-            [ { content = Ast.Clause.Directive (head, grouped_clauses); loc } ];
-      }
-  | { content = Declaration decl; loc } ->
-      {
-        dependencies;
-        clauses =
-          BatFingerTree.of_list
-            [
-              {
-                content =
-                  Ast.Clause.MultiDeclaration
-                    (decl_header decl, rename_declaration decl, []);
-                loc;
-              };
-            ];
-      }
-  | { content = QueryConjunction calls; loc } ->
-      let folder set call =
-        S.union set (find_variables @@ Expr.Functor (strip_loc call))
-      in
-      let variables = List.fold_left folder S.empty calls in
-      let list_variables = S.to_list variables in
-      let query_name = "" in
-      let head : Expr.func =
-        {
-          name = ([], { content = query_name; loc });
-          elements =
-            List.map
-              (fun var -> { content = Expr.Variable var; loc })
-              list_variables;
-          arity = S.cardinal variables;
-        }
-      in
-      let fake_decl : ParserClause.decl = { head; body = calls } in
-      let declaration =
-        {
-          content =
-            Clause.MultiDeclaration
-              (decl_header fake_decl, rename_declaration fake_decl, []);
-          loc;
-        }
-      in
-      let query =
-        {
-          content =
-            Clause.Query
-              { name = query_name; arity = head.arity; args = list_variables };
-          loc;
-        }
-      in
-      { dependencies; clauses = BatFingerTree.of_list [ declaration; query ] }
+module type TARGET = sig
+  type directives
+  type mods
 
-and group_clauses ({ dependencies; _ } as preprocessor : t)
-    (clauses : Ast.ParserClause.t list) : output =
-  let multi_mapper (group : Ast.ParserClause.t list) : output =
-    match group with
-    | [ x ] -> parser_to_compiler preprocessor x
-    | { content = Declaration first; loc } :: many ->
+  val target_specific_directive :
+    Ast.Expr.func Location.with_location ->
+    (directives, mods) Ast.Clause.t list list ->
+    Location.location ->
+    (directives, mods) Ast.Clause.directive
+end
+
+module type PREPROCESSOR = sig
+  type directives
+  type mods
+
+  val preprocess : t -> Ast.ParserClause.t list -> (directives, mods) output
+end
+
+module Make (Target : TARGET) :
+  PREPROCESSOR
+    with type directives = Target.directives
+    with type mods = Target.mods = struct
+  include Target
+
+  let rec parser_to_compiler :
+      t -> Ast.ParserClause.t -> (directives, mods) output =
+   fun ({ dependencies; filename } as preprocessor) clause ->
+    let open Location in
+    let open Ast in
+    match clause with
+    | { content = Directive (head, body); loc } ->
+        let grouped_body = List.map (group_clauses preprocessor) body in
+        let dependencies, grouped_clauses =
+          List.fold_right
+            (fun { dependencies; clauses } (deps_acc, clauses_acc) ->
+              ( DependencyGraph.merge dependencies deps_acc,
+                BatFingerTree.to_list clauses :: clauses_acc ))
+            grouped_body (dependencies, [])
+        in
+        let dependencies =
+          match
+            (fst head.content.name, Ast.Expr.func_label head.content, body)
+          with
+          | [], "import", [] -> (
+              match head.content.elements with
+              | [ singleton ] ->
+                  let external_dep =
+                    Ast.Expr.extract_unqualified_atom singleton
+                  in
+                  DependencyGraph.add filename external_dep dependencies
+              | [] ->
+                  Logger.error head.loc
+                    "Directive 'import' cannot be an empty functor";
+                  exit 1
+              | _ ->
+                  Logger.error head.loc
+                    "Directive 'import' cannot have multiple expressions within";
+                  exit 1)
+          | [], "import", _ ->
+              Logger.error head.loc "Directive 'import' cannot have a body";
+              exit 1
+          | _ -> dependencies
+        in
         {
           dependencies;
           clauses =
             BatFingerTree.of_list
               [
                 {
-                  Location.content =
-                    Ast.Clause.MultiDeclaration
-                      ( decl_header first,
-                        rename_declaration first,
-                        List.map from_declaration many );
+                  content =
+                    Ast.Clause.Directive
+                      (target_specific_directive head grouped_clauses loc);
                   loc;
                 };
               ];
         }
-    | _ ->
-        Logger.simply_unreachable "unreachable group";
+    | { content = Declaration decl; loc } ->
+        {
+          dependencies;
+          clauses =
+            BatFingerTree.of_list
+              [
+                {
+                  content =
+                    Ast.Clause.MultiDeclaration
+                      (decl_header decl, rename_declaration decl, []);
+                  loc;
+                };
+              ];
+        }
+    | { content = QueryConjunction calls; loc } ->
+        let folder set call =
+          S.union set (find_variables @@ Expr.Functor (strip_loc call))
+        in
+        let variables = List.fold_left folder S.empty calls in
+        let list_variables = S.to_list variables in
+        let query_name = "" in
+        let head : Expr.func =
+          {
+            name = ([], { content = query_name; loc });
+            elements =
+              List.map
+                (fun var -> { content = Expr.Variable var; loc })
+                list_variables;
+            arity = S.cardinal variables;
+          }
+        in
+        let fake_decl : ParserClause.decl = { head; body = calls } in
+        let declaration =
+          {
+            content =
+              Clause.MultiDeclaration
+                (decl_header fake_decl, rename_declaration fake_decl, []);
+            loc;
+          }
+        in
+        let query =
+          {
+            content =
+              Clause.Query
+                { name = query_name; arity = head.arity; args = list_variables };
+            loc;
+          }
+        in
+        { dependencies; clauses = BatFingerTree.of_list [ declaration; query ] }
+
+  and group_clauses ({ dependencies; _ } as preprocessor : t)
+      (clauses : Ast.ParserClause.t list) =
+    let multi_mapper (group : Ast.ParserClause.t list) =
+      match group with
+      | [ x ] -> parser_to_compiler preprocessor x
+      | { content = Declaration first; loc } :: many ->
+          {
+            dependencies;
+            clauses =
+              BatFingerTree.of_list
+                [
+                  {
+                    Location.content =
+                      Ast.Clause.MultiDeclaration
+                        ( decl_header first,
+                          rename_declaration first,
+                          List.map from_declaration many );
+                    loc;
+                  };
+                ];
+          }
+      | _ ->
+          Logger.simply_unreachable "unreachable group";
+          exit 1
+    in
+    let open Batteries in
+    clauses
+    |> List.filter_map remove_comments
+    |> List.map check_empty_heads |> List.group compare_clauses
+    |> fold_map preprocessor.dependencies multi_mapper
+  (* TODO *)
+
+  let is_sakura_file filepath = Filename.extension filepath = ".skr"
+
+  let validate_top_level (clauses : Ast.ParserClause.t list) :
+      Ast.ParserClause.t list =
+    let open Ast.ParserClause in
+    let open Location in
+    let is_not_directive = function
+      | { content = Declaration _; _ } -> true
+      | { content = QueryConjunction _; _ } -> true
+      | { content = Directive _; _ } -> false
+    in
+    match List.find_opt is_not_directive clauses with
+    | None -> clauses
+    | Some { loc; _ } ->
+        Logger.error loc "Found a non-directive in a Sakura file";
         exit 1
-  in
-  let open Batteries in
-  clauses
-  |> List.filter_map remove_comments
-  |> List.map check_empty_heads |> List.group compare_clauses
-  |> fold_map preprocessor.dependencies multi_mapper
-  |> map_clauses (BatFingerTree.sort canonical_order)
 
-let is_sakura_file filepath = Filename.extension filepath = ".skr"
-
-let validate_top_level (clauses : Ast.ParserClause.t list) :
-    Ast.ParserClause.t list =
-  let open Ast.ParserClause in
-  let open Location in
-  let is_not_directive = function
-    | { content = Declaration _; _ } -> true
-    | { content = QueryConjunction _; _ } -> true
-    | { content = Directive _; _ } -> false
-  in
-  match List.find_opt is_not_directive clauses with
-  | None -> clauses
-  | Some { loc; _ } ->
-      Logger.error loc "Found a non-directive in a Sakura file";
-      exit 1
-
-let run ({ filename; _ } as preprocessor : t)
-    (clauses : Ast.ParserClause.t list) : output =
-  if is_sakura_file filename then
-    validate_top_level clauses |> group_clauses preprocessor
-  else group_clauses preprocessor clauses
+  let preprocess ({ filename; _ } as preprocessor : t) clauses =
+    if is_sakura_file filename then
+      validate_top_level clauses |> group_clauses preprocessor
+    else group_clauses preprocessor clauses
+end

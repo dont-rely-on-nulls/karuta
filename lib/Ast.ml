@@ -15,12 +15,14 @@ module ClauseF (Expr : EXPR) = struct
   type multi_declaration = head * decl * decl Location.with_location list
   [@@deriving show]
 
+  and ('directives, 'mods) signature_body = {
+    declarations : multi_declaration Location.with_location list;
+    directives : ('directives, 'mods) directive Location.with_location list;
+  }
+
   and ('directives, 'mods) signature_ref =
-    | Named of string Location.with_location
-    | Inlined of {
-        declarations : multi_declaration Location.with_location list;
-        directives : ('directives, 'mods) directive Location.with_location list;
-      }
+    | Named of Expr.func_label Location.with_location
+    | Inlined of ('directives, 'mods) signature_body
   [@@deriving show]
 
   and ('directives, 'mods) directive =
@@ -33,8 +35,7 @@ module ClauseF (Expr : EXPR) = struct
       }
     | Signature of {
         name : string Location.with_location;
-        declarations : multi_declaration Location.with_location list;
-        directives : ('directives, 'mods) directive Location.with_location list;
+        body : ('directives, 'mods) signature_body;
       }
     | TargetSpecific of 'directives
   [@@deriving show]
@@ -175,9 +176,10 @@ module ParserClauseF (Expr : EXPR) = struct
   type base =
     | Declaration of decl
     | QueryConjunction of Expr.func Location.with_location list
-    | Directive of Expr.func Location.with_location * t list list
+    | Directive of directive
   [@@deriving show]
 
+  and directive = Expr.func Location.with_location * t list list
   and t = base Location.with_location [@@deriving show]
 
   and decl = { head : Expr.func; body : Expr.func Location.with_location list }

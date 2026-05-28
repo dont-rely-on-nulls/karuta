@@ -51,7 +51,7 @@ and comptime = Module of compiled_module | Signature of compiled_signature
 type scope = comptime nested_env
 type sig_scope = signature nested_env
 
-module type LookupS = sig
+module type LOOKUP = sig
   type t
 
   val empty_signature : sig_scope
@@ -118,7 +118,7 @@ type 'state t = {
   parent : 'state t option;
   env : compiled_module;
   persist : Persist.t;
-  lookup : (module LookupS with type t = 'state t);
+  lookup : (module LOOKUP with type t = 'state t);
 }
 
 type initialization = {
@@ -136,8 +136,8 @@ type ('state, 'directives, 'mods) runner = {
 }
 
 module type COMPILER_CONFIG = sig
-  type directives
-  type mods
+  include Preprocessor.TARGET
+
   type state
 
   val initial_state : unit -> state
@@ -148,12 +148,12 @@ module type COMPILER_CONFIG = sig
     state t ->
     state t
 
-  module Lookup : LookupS with type t = state t
+  module Lookup : LOOKUP with type t = state t
 end
 
 module type COMPILER = sig
-  type directives
-  type mods
+  include Preprocessor.PREPROCESSOR
+
   type state
 
   val step : (directives, mods) Ast.Clause.t list * state t -> state t
@@ -166,6 +166,7 @@ module Make (Config : COMPILER_CONFIG) :
     with type directives = Config.directives
     with type mods = Config.mods = struct
   include Config
+  include Preprocessor.Make (Config)
 
   let initialize_nested ({ persist; filename; externals } : initialization)
       imports parent module_name : state t =

@@ -134,7 +134,6 @@ let predicate (scope : scope)
       Ast.Expr.func_label) (arity : int) =
   match lookup_mod_sig scope qualifiers comptime_select with
   | `Ok { content = Module comp_module; _ } -> (
-      let open Ast.Clause in
       match PredicateMap.find_opt { name; arity } comp_module.predicates with
       | None ->
           Logger.error loc "Undefined predicate";
