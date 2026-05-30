@@ -5,9 +5,10 @@ let rename_arg ({ loc; _ } as expr : Ast.Expr.t) (counter : int) :
   {
     content =
       {
-        name = ([ { content = "karuta"; loc } ], { content = "eq"; loc });
-        elements = [ new_var; expr ];
-        arity = 2;
+        name =
+          ( FT.singleton { Location.content = "karuta"; loc },
+            { content = "eq"; loc } );
+        elements = FT.of_list [ new_var; expr ];
       };
     loc;
   }
@@ -19,20 +20,20 @@ let compare_clauses (c1 : Ast.ParserClause.t) (c2 : Ast.ParserClause.t) : int =
       Ast.Expr.compare_func h1 h2
   | _, _ -> -1
 
-let decl_header ({ head = { arity; _ } as f; _ } : Ast.ParserClause.decl) :
-    Ast.head =
-  { name = Ast.Expr.extract_func_label f; arity }
+let decl_header ({ head; _ } : Ast.ParserClause.decl) : Ast.head =
+  { name = Ast.Expr.extract_func_label head; arity = FT.size head.elements }
 
 let rename_declaration
-    ({ head = { elements; arity; _ }; body } : Ast.ParserClause.decl) :
-    Ast.Clause.decl =
+    ({ head = { elements; _ }; body } : Ast.ParserClause.decl) : Ast.Clause.decl
+    =
+  let arity = FT.size elements in
   let _, new_body =
-    List.fold_right
-      (fun arg (counter, body') ->
+    FT.fold_right
+      (fun (counter, body') arg ->
         let to_append = rename_arg arg counter in
-        (counter - 1, to_append :: body'))
-      elements
+        (counter - 1, FT.cons body' to_append))
       (arity - 1, body)
+      elements
   in
   { body = new_body; original_arg_list = elements }
 
@@ -50,13 +51,8 @@ let rec remove_comments (clause : Ast.ParserClause.t) :
   let open Ast in
   let open Location in
   let non_comment call =
-    match call with
-    | {
-     content =
-       Expr.Functor
-         { name = [ { content = "karuta"; _ } ], { content = "comment"; _ }; _ };
-     _;
-    } ->
+    match call.content with
+    | Expr.Functor func when Ast.Expr.match_func func [ "karuta"; "comment" ] ->
         false
     | _ -> true
   in
@@ -73,7 +69,7 @@ let rec remove_comments (clause : Ast.ParserClause.t) :
         {
           content =
             ParserClause.Directive
-              (head, List.map (List.filter_map remove_comments) body);
+              (head, FT.map (FT.filter_map remove_comments) body);
           loc;
         }
   | {
@@ -92,7 +88,7 @@ let rec remove_comments (clause : Ast.ParserClause.t) :
                 head;
                 body =
                   body
-                  |> List.filter
+                  |> FT.filter
                      @@ Fun.compose non_comment
                           (Location.fmap (fun v -> Ast.Expr.Functor v));
               };
@@ -101,7 +97,7 @@ let rec remove_comments (clause : Ast.ParserClause.t) :
   | { content = QueryConjunction []; _ } -> None
   | { content = QueryConjunction queries; loc } ->
       let filtered_queries =
-        List.map
+        FT.map
           (fun query ->
             remove_comments
             @@ {
@@ -110,9 +106,8 @@ let rec remove_comments (clause : Ast.ParserClause.t) :
                })
           queries
       in
-      filtered_queries
-      |> List.concat_map Option.to_list
-      |> List.map (function
+      filtered_queries |> FT.concat_map FT.of_option
+      |> FT.map (function
         | { content = Ast.ParserClause.QueryConjunction [ func ]; _ } -> func
         | _ ->
             Logger.simply_unreachable
@@ -120,7 +115,7 @@ let rec remove_comments (clause : Ast.ParserClause.t) :
                form.";
             exit 1)
       |> fun funcs ->
-      if List.is_empty funcs then None
+      if FT.is_empty funcs then None
       else Some { content = Ast.ParserClause.QueryConjunction funcs; loc }
 
 let check_empty_heads (clause : Ast.ParserClause.t) : Ast.ParserClause.t =
@@ -144,7 +139,7 @@ let rec find_variables (element : Ast.Expr.base) : variable_set =
   match element with
   | Variable var -> S.add var S.empty
   | Functor { elements = more_elements; _ } ->
-      List.fold_left
+      FT.fold_left
         (fun acc element -> S.union acc (find_variables @@ strip_loc element))
         S.empty more_elements
   | _ -> S.empty
@@ -172,15 +167,6 @@ module DependencyGraph = struct
       BatSet.String.fold (fun child acc -> add child node acc) children acc
     in
     BatMap.String.fold invert_one graph BatMap.String.empty
-
-  (* a <- b
-     b <- c d
-     d <- e *)
-
-  (* Each node:
-      * Append grandchildren to dependency set
-      * Schedule a walk over grandchildren
-      * Register that we already went over  *)
 
   type expansion_state = {
     forward : t;
@@ -274,13 +260,13 @@ module DependencyGraph = struct
            next = BatFingerTree.of_enum (BatMap.String.keys graph);
          }
 
-  let sort (expanded_graph : t) (files : string list) =
+  let sort (expanded_graph : t) (files : string FT.t) =
     let compare_files l r =
       if depends expanded_graph l r then 1
       else if depends expanded_graph r l then -1
       else 0
     in
-    List.sort compare_files files
+    FT.sort compare_files files
 end
 
 type t = { filename : string; dependencies : DependencyGraph.t }
@@ -308,21 +294,14 @@ let merge :
 let fold_map :
     'directives 'mods.
     DependencyGraph.t ->
-    (Ast.ParserClause.t list -> ('directives, 'mods) output) ->
-    Ast.ParserClause.t list list ->
+    (Ast.ParserClause.t FT.t -> ('directives, 'mods) output) ->
+    Ast.ParserClause.t FT.t FT.t ->
     ('directives, 'mods) output =
  fun dependencies f grouped_clauses ->
-  List.fold_left
+  FT.fold_left
     (fun acc elem -> merge acc @@ f elem)
     { dependencies; clauses = BatFingerTree.empty }
     grouped_clauses
-
-module BatFingerTree = struct
-  include BatFingerTree
-
-  let sort f v =
-    v |> BatFingerTree.to_list |> List.sort f |> BatFingerTree.of_list
-end
 
 module type TARGET = sig
   type directives
@@ -330,7 +309,7 @@ module type TARGET = sig
 
   val target_specific_directive :
     Ast.Expr.func Location.with_location ->
-    (directives, mods) Ast.Clause.t list list ->
+    (directives, mods) Ast.Clause.t FT.t FT.t ->
     Location.location ->
     (directives, mods) Ast.Clause.directive
 end
@@ -339,7 +318,7 @@ module type PREPROCESSOR = sig
   type directives
   type mods
 
-  val preprocess : t -> Ast.ParserClause.t list -> (directives, mods) output
+  val preprocess : t -> Ast.ParserClause.t FT.t -> (directives, mods) output
 end
 
 module Make (Target : TARGET) :
@@ -355,13 +334,13 @@ module Make (Target : TARGET) :
     let open Ast in
     match clause with
     | { content = Directive (head, body); loc } ->
-        let grouped_body = List.map (group_clauses preprocessor) body in
+        let grouped_body = FT.map (group_clauses preprocessor) body in
         let dependencies, grouped_clauses =
-          List.fold_right
-            (fun { dependencies; clauses } (deps_acc, clauses_acc) ->
+          FT.fold_right
+            (fun (deps_acc, clauses_acc) { dependencies; clauses } ->
               ( DependencyGraph.merge dependencies deps_acc,
-                BatFingerTree.to_list clauses :: clauses_acc ))
-            grouped_body (dependencies, [])
+                FT.cons clauses_acc clauses ))
+            (dependencies, FT.empty) grouped_body
         in
         let dependencies =
           match
@@ -390,45 +369,40 @@ module Make (Target : TARGET) :
         {
           dependencies;
           clauses =
-            BatFingerTree.of_list
-              [
-                {
-                  content =
-                    Ast.Clause.Directive
-                      (target_specific_directive head grouped_clauses loc);
-                  loc;
-                };
-              ];
+            FT.singleton
+              {
+                content =
+                  Ast.Clause.Directive
+                    (target_specific_directive head grouped_clauses loc);
+                loc;
+              };
         }
     | { content = Declaration decl; loc } ->
         {
           dependencies;
           clauses =
-            BatFingerTree.of_list
-              [
-                {
-                  content =
-                    Ast.Clause.MultiDeclaration
-                      (decl_header decl, rename_declaration decl, []);
-                  loc;
-                };
-              ];
+            FT.singleton
+              {
+                content =
+                  Ast.Clause.MultiDeclaration
+                    (decl_header decl, rename_declaration decl, FT.empty);
+                loc;
+              };
         }
     | { content = QueryConjunction calls; loc } ->
         let folder set call =
           S.union set (find_variables @@ Expr.Functor (strip_loc call))
         in
-        let variables = List.fold_left folder S.empty calls in
-        let list_variables = S.to_list variables in
+        let variables = FT.fold_left folder S.empty calls in
+        let list_variables = FT.of_list @@ S.to_list variables in
         let query_name = "" in
         let head : Expr.func =
           {
-            name = ([], { content = query_name; loc });
+            name = (FT.empty, { content = query_name; loc });
             elements =
-              List.map
+              FT.map
                 (fun var -> { content = Expr.Variable var; loc })
                 list_variables;
-            arity = S.cardinal variables;
           }
         in
         let fake_decl : ParserClause.decl = { head; body = calls } in
@@ -436,56 +410,51 @@ module Make (Target : TARGET) :
           {
             content =
               Clause.MultiDeclaration
-                (decl_header fake_decl, rename_declaration fake_decl, []);
+                (decl_header fake_decl, rename_declaration fake_decl, FT.empty);
             loc;
           }
         in
         let query =
           {
-            content =
-              Clause.Query
-                { name = query_name; arity = head.arity; args = list_variables };
+            content = Clause.Query { name = query_name; args = list_variables };
             loc;
           }
         in
-        { dependencies; clauses = BatFingerTree.of_list [ declaration; query ] }
+        { dependencies; clauses = FT.of_list [ declaration; query ] }
 
   and group_clauses ({ dependencies; _ } as preprocessor : t)
-      (clauses : Ast.ParserClause.t list) =
-    let multi_mapper (group : Ast.ParserClause.t list) =
-      match group with
-      | [ x ] -> parser_to_compiler preprocessor x
-      | { content = Declaration first; loc } :: many ->
+      (clauses : Ast.ParserClause.t FT.t) =
+    let multi_mapper (group : Ast.ParserClause.t FT.t) =
+      match FT.front group with
+      | Some (remaining, single) when remaining = FT.empty ->
+          parser_to_compiler preprocessor single
+      | Some (many, { content = Declaration first; loc }) ->
           {
             dependencies;
             clauses =
-              BatFingerTree.of_list
-                [
-                  {
-                    Location.content =
-                      Ast.Clause.MultiDeclaration
-                        ( decl_header first,
-                          rename_declaration first,
-                          List.map from_declaration many );
-                    loc;
-                  };
-                ];
+              FT.singleton
+                {
+                  Location.content =
+                    Ast.Clause.MultiDeclaration
+                      ( decl_header first,
+                        rename_declaration first,
+                        FT.map from_declaration many );
+                  loc;
+                };
           }
       | _ ->
           Logger.simply_unreachable "unreachable group";
           exit 1
     in
-    let open Batteries in
     clauses
-    |> List.filter_map remove_comments
-    |> List.map check_empty_heads |> List.group compare_clauses
+    |> FT.filter_map remove_comments
+    |> FT.map check_empty_heads |> FT.group compare_clauses
     |> fold_map preprocessor.dependencies multi_mapper
-  (* TODO *)
 
   let is_sakura_file filepath = Filename.extension filepath = ".skr"
 
-  let validate_top_level (clauses : Ast.ParserClause.t list) :
-      Ast.ParserClause.t list =
+  let validate_top_level (clauses : Ast.ParserClause.t FT.t) :
+      Ast.ParserClause.t FT.t =
     let open Ast.ParserClause in
     let open Location in
     let is_not_directive = function
@@ -493,7 +462,7 @@ module Make (Target : TARGET) :
       | { content = QueryConjunction _; _ } -> true
       | { content = Directive _; _ } -> false
     in
-    match List.find_opt is_not_directive clauses with
+    match FT.find_opt is_not_directive clauses with
     | None -> clauses
     | Some { loc; _ } ->
         Logger.error loc "Found a non-directive in a Sakura file";
