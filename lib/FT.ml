@@ -59,3 +59,6 @@ let group (cmp : 'a -> 'a -> int) (ft : 'a t) : 'a t t =
 let rec find_opt (f : 'a -> bool) (ft : 'a t) : 'a option =
   Option.bind (front ft) (fun (remaining, first) ->
       if f first then Some first else find_opt f remaining)
+
+let for_all (f : 'a -> bool) : 'a t -> bool =
+  Fun.compose Option.is_none (find_opt (Fun.compose not f))

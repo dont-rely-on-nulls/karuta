@@ -1,5 +1,4 @@
 module Form = Beam.Core.Form (Beam.Core.Erlang)
-module FT = BatFingerTree
 module Set = BatSet
 
 type predicate_name = Ast.head [@@deriving show, ord]

@@ -9,7 +9,7 @@ module type EXPR = sig
   val is_functor : t -> bool
 end
 
-type head = { name : string; arity : int }
+type head = { name : string; arity : int } [@@deriving show, ord]
 
 module ClauseF (Expr : EXPR) = struct
   type multi_declaration = head * decl * decl Location.with_location FT.t
@@ -48,6 +48,9 @@ module ClauseF (Expr : EXPR) = struct
   }
 
   and ('directives, 'mods) t = ('directives, 'mods) base Location.with_location
+
+  let signature_populated (s : ('directives, 'mods) signature_body) : bool =
+    not (FT.is_empty s.directives && FT.is_empty s.declarations)
 end
 
 module Expr = struct

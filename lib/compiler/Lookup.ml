@@ -20,12 +20,12 @@ let (signature_select : signature selector) = function
       `UnexpectedSignature sig_loc
 
 let rec lookup_mod_sig (envs : 'a env BatLazyList.t)
-    (names : string Location.with_location list) (select : 'a selector) =
-  let rec lookup_mod_sig_qualified (rest : string Location.with_location list)
+    (names : string Location.with_location FT.t) (select : 'a selector) =
+  let rec lookup_mod_sig_qualified (rest : string Location.with_location FT.t)
       (value : 'a Location.with_location) =
-    match rest with
-    | [] -> `Ok value
-    | qualifier :: more -> (
+    match FT.front rest with
+    | None -> `Ok value
+    | Some (more, qualifier) -> (
         match select value with
         | `NestedLookup modules -> (
             match BatMap.String.find_opt qualifier.content modules with
@@ -39,11 +39,11 @@ let rec lookup_mod_sig (envs : 'a env BatLazyList.t)
             Logger.error sig_loc "Reference is here";
             unexpected)
   in
-  match names with
-  | [] ->
+  match FT.front names with
+  | None ->
       Logger.simply_unreachable "There should be names in lookup_mod_sig";
       exit 1
-  | first :: rest -> (
+  | Some (rest, first) -> (
       match Lazy.force envs with
       | BatLazyList.Cons (env, parent) -> (
           match BatMap.String.find_opt first.content env with
@@ -87,9 +87,7 @@ let ancestors_of_compiler (compiler : t) : scope =
 let signature (scope : scope)
     ((qualifiers, unqualified_name) : Ast.Expr.func_label) =
   match
-    lookup_mod_sig scope
-      (List.append qualifiers [ unqualified_name ])
-      comptime_select
+    lookup_mod_sig scope (FT.snoc qualifiers unqualified_name) comptime_select
   with
   | `Ok { content = Module m; loc } ->
       Logger.error unqualified_name.loc "Found module instead of signature";
@@ -101,9 +99,7 @@ let signature (scope : scope)
 let m0dule (scope : scope)
     ((qualifiers, unqualified_name) : Ast.Expr.func_label) =
   match
-    lookup_mod_sig scope
-      (List.append qualifiers [ unqualified_name ])
-      comptime_select
+    lookup_mod_sig scope (FT.snoc qualifiers unqualified_name) comptime_select
   with
   | `Ok { content = Module module'; loc } -> `Ok (Location.add_loc module' loc)
   | `Ok { content = Signature _; loc } ->
@@ -117,7 +113,7 @@ let nested_signature (compiled_signatures : sig_scope) (scope : scope)
     ((qualifiers, unqualified_name) as names : Ast.Expr.func_label) =
   match
     lookup_mod_sig compiled_signatures
-      (List.append qualifiers [ unqualified_name ])
+      (FT.snoc qualifiers unqualified_name)
       signature_select
   with
   | `Ok _ as ok -> ok

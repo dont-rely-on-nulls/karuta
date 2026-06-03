@@ -160,21 +160,6 @@ let rec ascribe_to_module
         "Abstract signatures and modules are not implemented yet";
       exit 1
 
-let all_atoms (args : Ast.Expr.t list) : unit =
-  match
-    args
-    |> List.find_opt
-       @@ Fun.compose
-            (function
-              | Ast.Expr.Functor { arity = 0; elements = []; _ } -> false
-              | _ -> true)
-            Location.strip_loc
-  with
-  | None -> ()
-  | Some { loc; _ } ->
-      Logger.error loc "Expected atom.";
-      exit 1
-
 let rec compile_nested : type a mods directive.
     Location.location ->
     (directive, mods) Ast.Clause.signature_body ->
@@ -182,17 +167,45 @@ let rec compile_nested : type a mods directive.
     Compiler.Types.sig_scope ->
     compiled_signature Location.with_location =
  fun loc body ({ env = { modules; _ }; _ } as compiler) sig_scope ->
-  let all_underscores : Ast.Expr.t list -> bool =
-    List.for_all
+  let all_underscores : Ast.Expr.t FT.t -> bool =
+    FT.for_all
     @@ Fun.compose
          (function Ast.Expr.Variable "_" -> true | _ -> false)
          Location.strip_loc
   in
   let module Lookup = (val compiler.lookup) in
-  let step (acc : compiled_signature) (next : (directive, mods) Ast.Clause.t) =
-    let predicate_happy_case (head : predicate_name) =
-      { acc with predicates = Set.add head acc.predicates }
+  let declaration_step (acc : Compiler.Types.predicate_name Set.t)
+      (next : Ast.Clause.multi_declaration Location.with_location) :
+      Compiler.Types.predicate_name Set.t =
+    let predicate_happy_case (head : predicate_name) = Set.add head acc in
+    let head, { Ast.Clause.original_arg_list; body }, remaining =
+      next.content
     in
+    match FT.front remaining with
+    | Some (remaining_bodies, second) ->
+        Logger.error next.loc
+          "You cannot have multiple definitions when declaring a predicate in \
+           a signature.";
+        Logger.error second.loc "Second definition here.";
+        if not @@ FT.is_empty remaining_bodies then
+          Logger.simply_error @@ "Plus "
+          ^ (string_of_int @@ FT.size remaining_bodies)
+          ^ " other definitions.";
+        exit 1
+    | None when FT.size body = head.arity && all_underscores original_arg_list
+      ->
+        predicate_happy_case head
+    | None when FT.size body = head.arity ->
+        Logger.warning next.loc
+          "Types are not supported yet. Ignoring argument types.";
+        predicate_happy_case head
+    | _ ->
+        Logger.error next.loc
+          "You cannot have a body when declaring a predicate in a signature.";
+        exit 1
+  in
+  let directive_step (acc : compiled_signature)
+      (next : (directive, mods) Ast.Clause.directive Location.with_location) =
     let signature_happy_case (comptime_name : string)
         (definition : signature Location.with_location) =
       {
@@ -201,148 +214,102 @@ let rec compile_nested : type a mods directive.
       }
     in
     match next.content with
-    | MultiDeclaration (_, _, second :: (_ as remaining_bodies)) ->
-        Logger.error next.loc
-          "You cannot have multiple definitions when declaring a predicate in \
-           a signature.";
-        Logger.error second.loc "Second definition here.";
-        (match remaining_bodies with
-        | [] -> ()
-        | more ->
-            Logger.simply_error @@ "Plus "
-            ^ (string_of_int @@ List.length more)
-            ^ " other definitions.");
-        exit 1
-    | MultiDeclaration (head, { original_arg_list; body }, [])
-      when List.length body = head.arity && all_underscores original_arg_list ->
-        predicate_happy_case head
-    | MultiDeclaration (head, { body; _ }, [])
-      when List.length body = head.arity ->
-        Logger.warning next.loc
-          "Types are not supported yet. Ignoring argument types.";
-        predicate_happy_case head
-    | MultiDeclaration _ ->
-        Logger.error next.loc
-          "You cannot have a body when declaring a predicate in a signature.";
-        exit 1
-    | Query _ ->
-        Logger.error next.loc "You cannot have a query in a signature.";
-        exit 1
-    | Directive directive -> (
-        match directive with
-        | Module
-            {
-              signature = Some (Inlined { declarations = []; directives = [] });
-              _;
-            }
-        | Module { signature = None; _ }
-        | Module { directives = _ :: _; _ }
-        | Module { declarations = _ :: _; _ } ->
-            failwith "TODO"
-        | Module
-            {
-              name = { content = module_name; _ };
-              signature = Some (Named module_signature);
-              directives = [];
-              declarations = [];
-              _;
-            } -> (
-            let report_module_as_signature sig_loc module_loc =
-              Logger.error sig_loc
-                "This name does not actually refer to a signature.";
-              Logger.error module_loc "Definition in scope.";
-              exit 1
-            in
-            let module_of_abstract =
-              (* TODO: handle this correctly *)
-              Location.add_loc
-                (ModuleSignature
-                   { modules = BatMap.String.empty; predicates = Set.empty })
-                next.loc
-            in
-            let module_of_plain payload =
-              Location.add_loc (ModuleSignature payload) next.loc
-            in
-            let label = module_signature.content in
-            let scope : Compiler.Types.scope =
-              Lookup.ancestors_of_compiler compiler
-            in
-            match
-              Lookup.nested_signature
-                (Lookup.sig_env_to_sig_scope acc.modules)
-                scope label
-            with
-            | `Ok { content = PlainSignature payload; _ } ->
-                signature_happy_case module_name @@ module_of_plain payload
-            | `Ok { content = Abstract _; _ } ->
-                signature_happy_case module_name module_of_abstract
-            | `UnexpectedModule { loc = outer; _ }
-            | `Ok { content = ModuleSignature _; loc = outer } ->
-                report_module_as_signature module_signature.loc outer
-            | `UnexpectedSignature _ -> exit 1
-            | `Undefined _ ->
-                Logger.error module_signature.loc
-                  "Undefined signature name. Remember: the order matters (for \
-                   now 😉).";
-                exit 1)
-        | Module
-            {
-              name = { content = atom_module_name; _ };
-              signature =
-                Some (Inlined ({ directives = _ :: _; _ } as inline_signature));
-              directives = [];
-              declarations = [];
-              _;
-            }
-        | Module
-            {
-              name = { content = atom_module_name; _ };
-              signature =
-                Some
-                  (Inlined ({ declarations = _ :: _; _ } as inline_signature));
-              directives = [];
-              declarations = [];
-              _;
-            } -> (
-            match BatMap.String.find_opt atom_module_name modules with
-            | Some existing ->
-                Logger.error loc "Failed to define module within a signature";
-                Logger.error existing.loc
-                  "There's already a module or signature with the same name";
-                exit 1
-            | None ->
-                let compiled_module_sig =
-                  compile loc inline_signature compiler
-                in
-                signature_happy_case atom_module_name
-                  (Location.fmap
-                     (fun m -> ModuleSignature m)
-                     compiled_module_sig))
-        | Signature
-            {
-              name = { content = signature_name; _ };
-              body = { declarations; directives };
-            } ->
-            let compiled_sig =
-              compile_nested next.loc directive_body compiler
-                (Lookup.sig_cons sig_scope acc.modules)
-            in
-            let signature_name =
-              Ast.Expr.extract_functor_label signature_name
-            in
-            signature_happy_case signature_name
-            @@ Location.fmap (fun v -> PlainSignature v) compiled_sig
-        | TargetSpecific _ ->
-            Logger.simply_unreachable "This should not be handled here";
+    | Module
+        {
+          name = { content = module_name; _ };
+          signature = Some (Named module_signature);
+          directives;
+          declarations;
+          _;
+        }
+      when FT.is_empty directives && FT.is_empty declarations -> (
+        let report_module_as_signature sig_loc module_loc =
+          Logger.error sig_loc
+            "This name does not actually refer to a signature.";
+          Logger.error module_loc "Definition in scope.";
+          exit 1
+        in
+        let module_of_abstract =
+          (* TODO: handle this correctly *)
+          Location.add_loc
+            (ModuleSignature
+               { modules = BatMap.String.empty; predicates = Set.empty })
+            next.loc
+        in
+        let module_of_plain payload =
+          Location.add_loc (ModuleSignature payload) next.loc
+        in
+        let label = module_signature.content in
+        let scope : Compiler.Types.scope =
+          Lookup.ancestors_of_compiler compiler
+        in
+        match
+          Lookup.nested_signature
+            (Lookup.sig_env_to_sig_scope acc.modules)
+            scope label
+        with
+        | `Ok { content = PlainSignature payload; _ } ->
+            signature_happy_case module_name @@ module_of_plain payload
+        | `Ok { content = Abstract _; _ } ->
+            signature_happy_case module_name module_of_abstract
+        | `UnexpectedModule { loc = outer; _ }
+        | `Ok { content = ModuleSignature _; loc = outer } ->
+            report_module_as_signature module_signature.loc outer
+        | `UnexpectedSignature _ -> exit 1
+        | `Undefined _ ->
+            Logger.error module_signature.loc
+              "Undefined signature name. Remember: the order matters (for now \
+               😉).";
             exit 1)
+    | Module
+        {
+          name = { content = atom_module_name; _ };
+          signature = Some (Inlined inline_signature);
+          directives;
+          declarations;
+          _;
+        }
+      when FT.is_empty directives && FT.is_empty declarations
+           && Ast.Clause.signature_populated inline_signature -> (
+        match BatMap.String.find_opt atom_module_name modules with
+        | Some existing ->
+            Logger.error loc "Failed to define module within a signature";
+            Logger.error existing.loc
+              "There's already a module or signature with the same name";
+            exit 1
+        | None ->
+            let compiled_module_sig = compile loc inline_signature compiler in
+            signature_happy_case atom_module_name
+              (Location.fmap (fun m -> ModuleSignature m) compiled_module_sig))
+    | Signature { name = { content = signature_name; _ }; body } ->
+        let compiled_sig =
+          compile_nested next.loc body compiler
+            (Lookup.sig_cons sig_scope acc.modules)
+        in
+        signature_happy_case signature_name
+        @@ Location.fmap (fun v -> PlainSignature v) compiled_sig
+    | Module { signature = Some (Inlined { declarations; directives }); _ }
+      when FT.is_empty directives && FT.is_empty declarations ->
+        failwith "TODO"
+    | Module { signature = None; _ } -> failwith "TODO"
+    | Module { directives; _ } when not (FT.is_empty directives) ->
+        failwith "TODO"
+    | Module { declarations; _ } when not (FT.is_empty declarations) ->
+        failwith "TODO"
+    | Module { signature = Some _; _ } -> failwith "TODO"
+    | TargetSpecific _ ->
+        Logger.simply_unreachable
+          "Target specific directive should not be handled here";
+        exit 1
   in
-  let compiled_sig =
-    (* TODO: step needs to become two functions and we'll do a double fold *)
-    List.fold_left step
-      { modules = BatMap.String.empty; predicates = Set.empty }
-      body
-  in
-  Location.add_loc compiled_sig loc
+  Location.add_loc
+    (FT.fold_left directive_step
+       {
+         modules = BatMap.String.empty;
+         predicates = FT.fold_left declaration_step Set.empty body.declarations;
+       }
+       body.directives)
+    loc
 
 and compile : type a mods directive.
     Location.location ->

@@ -13,6 +13,22 @@ let rename_arg ({ loc; _ } as expr : Ast.Expr.t) (counter : int) :
     loc;
   }
 
+let all_atoms (args : Ast.Expr.t FT.t) : unit =
+  match
+    args
+    |> FT.find_opt
+       @@ Fun.compose
+            (function
+              | Ast.Expr.Functor { elements; _ } when FT.is_empty elements ->
+                  false
+              | _ -> true)
+            Location.strip_loc
+  with
+  | None -> ()
+  | Some { loc; _ } ->
+      Logger.error loc "Expected atom.";
+      exit 1
+
 let compare_clauses (c1 : Ast.ParserClause.t) (c2 : Ast.ParserClause.t) : int =
   match (c1, c2) with
   | ( { content = Declaration { head = h1; _ }; _ },
@@ -57,12 +73,8 @@ let rec remove_comments (clause : Ast.ParserClause.t) :
     | _ -> true
   in
   match clause with
-  | {
-   content =
-     ParserClause.Directive
-       ({ content = { name = [], { content = "comment"; _ }; _ }; _ }, _);
-   _;
-  } ->
+  | { content = ParserClause.Directive ({ content = header; _ }, _); _ }
+    when Ast.Expr.match_func header [ "comment" ] ->
       None
   | { content = ParserClause.Directive (head, body); loc } ->
       Some
@@ -72,11 +84,8 @@ let rec remove_comments (clause : Ast.ParserClause.t) :
               (head, FT.map (FT.filter_map remove_comments) body);
           loc;
         }
-  | {
-   content =
-     Declaration { head = { name = [], { content = "comment"; _ }; _ }; _ };
-   _;
-  } ->
+  | { content = Declaration { head; _ }; _ }
+    when Ast.Expr.match_func head [ "comment" ] ->
       None
   | { content = Declaration { head; body }; _ } as decl ->
       Some
@@ -93,22 +102,26 @@ let rec remove_comments (clause : Ast.ParserClause.t) :
                           (Location.fmap (fun v -> Ast.Expr.Functor v));
               };
         }
-  | { content = QueryConjunction [ _ ]; _ } as query -> Some query
-  | { content = QueryConjunction []; _ } -> None
+  | { content = QueryConjunction q; _ } as query when FT.size q = 1 ->
+      Some query
+  | { content = QueryConjunction q; _ } when FT.is_empty q -> None
   | { content = QueryConjunction queries; loc } ->
       let filtered_queries =
         FT.map
           (fun query ->
             remove_comments
             @@ {
-                 content = Ast.ParserClause.QueryConjunction [ query ];
+                 content =
+                   Ast.ParserClause.QueryConjunction (FT.singleton query);
                  loc = query.loc;
                })
           queries
       in
       filtered_queries |> FT.concat_map FT.of_option
       |> FT.map (function
-        | { content = Ast.ParserClause.QueryConjunction [ func ]; _ } -> func
+        | { content = Ast.ParserClause.QueryConjunction q; _ }
+          when FT.size q = 1 ->
+            FT.head_exn q
         | _ ->
             Logger.simply_unreachable
               "The conjunctions we constructed are guaranteed not to have this \
@@ -201,7 +214,6 @@ module DependencyGraph = struct
     graph
 
   let expand graph : t Error.attempt =
-    let module FT = BatFingerTree in
     let module Set = BatSet.String in
     let module Map = BatMap.String in
     let atom_to_filepath =
@@ -343,17 +355,15 @@ module Make (Target : TARGET) :
             (dependencies, FT.empty) grouped_body
         in
         let dependencies =
-          match
-            (fst head.content.name, Ast.Expr.func_label head.content, body)
-          with
-          | [], "import", [] -> (
-              match head.content.elements with
-              | [ singleton ] ->
+          if Ast.Expr.match_func head.content [ "import" ] then
+            if FT.is_empty body then (
+              match FT.front head.content.elements with
+              | Some (rest, singleton) when FT.is_empty rest ->
                   let external_dep =
                     Ast.Expr.extract_unqualified_atom singleton
                   in
                   DependencyGraph.add filename external_dep dependencies
-              | [] ->
+              | None ->
                   Logger.error head.loc
                     "Directive 'import' cannot be an empty functor";
                   exit 1
@@ -361,10 +371,10 @@ module Make (Target : TARGET) :
                   Logger.error head.loc
                     "Directive 'import' cannot have multiple expressions within";
                   exit 1)
-          | [], "import", _ ->
+            else (
               Logger.error head.loc "Directive 'import' cannot have a body";
-              exit 1
-          | _ -> dependencies
+              exit 1)
+          else dependencies
         in
         {
           dependencies;
