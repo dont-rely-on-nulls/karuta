@@ -1,18 +1,18 @@
 open Error
 module Form = Beam.Core.Form (Beam.Core.Erlang)
 
-let parse : string -> Ast.ParserClause.t list attempt = function
+let parse : string -> Ast.ParserClause.t FT.t attempt = function
   | "" -> error Error.EmptyFilepath
   | str ->
       In_channel.with_open_text str @@ fun inc ->
       if in_channel_length inc = 0 then error @@ Error.EmptyFile str
       else ok @@ Parser.parse str (In_channel.input_all inc)
 
-let compile' : type a.
-    (Ast.Clause.t list * a Compiler.Types.t -> a Compiler.Types.t) ->
-    a Compiler.Types.t ->
-    Ast.Clause.t list ->
-    a Compiler.Types.t attempt =
+let compile' : type a directives mods.
+    ((directives, mods) Ast.Clause.t FT.t * a Compiler.t -> a Compiler.t) ->
+    a Compiler.t ->
+    (directives, mods) Ast.Clause.t FT.t ->
+    a Compiler.t attempt =
  fun step compiler decls_queries -> step (decls_queries, compiler) |> ok
 
 (* let eval ((compiler, computer) : Compiler.t * Machine.t) : *)
@@ -26,17 +26,19 @@ let compile' : type a.
 (*       in *)
 (*       Some (compiler, computer) *)
 
-type preprocessed_files = Ast.Clause.t BatFingerTree.t BatMap.String.t
-type preprocessed_result = Preprocessor.DependencyGraph.t * preprocessed_files
+type ('directives, 'mods) preprocessed_files =
+  ('directives, 'mods) Ast.Clause.t BatFingerTree.t BatMap.String.t
+
+type ('directives, 'mods) preprocessed_result =
+  Preprocessor.DependencyGraph.t * ('directives, 'mods) preprocessed_files
 
 let preprocess filepath =
   Error.map @@ Preprocessor.run (Preprocessor.initialize filepath)
 
 (* FIXME: hook up dependency information and sort the file list before compiling *)
 (* TODO: compilation cache *)
-let compile ({ sakura; artifact } : Compiler.Types.Options.t)
-    (persist : Compiler.Types.Persist.both) (filepaths : string list) :
-    unit attempt =
+let compile ({ sakura; artifact } : Compiler.Options.t)
+    (persist : Compiler.Persist.both) (filepaths : string list) : unit attempt =
   let sakura_files, karuta_files =
     BatList.partition Preprocessor.is_sakura_file filepaths
   in
@@ -59,11 +61,11 @@ let compile ({ sakura; artifact } : Compiler.Types.Options.t)
         Error.ok (dependencies, BatMap.String.singleton sakura_filename clauses)
   in
   let compile_one_file (preprocessed : preprocessed_files) filepath externals =
-    let compiler_config : (module Compiler.Types.COMPILER_CONFIG) =
-      if Preprocessor.is_sakura_file filepath then (module Sakura)
-      else (module Karuta)
+    let compiler_config : (module Compiler.COMPILER_CONFIG) =
+      if Preprocessor.is_sakura_file filepath then (module Sakura.Clause)
+      else (module Karuta.Clause)
     in
-    let module Target = Compiler.Types.Make ((val compiler_config)) in
+    let module Target = Compiler.Make ((val compiler_config)) in
     match BatMap.String.find_opt filepath preprocessed with
     | None ->
         Logger.simply_unreachable "We hit a file that doesn't exist";

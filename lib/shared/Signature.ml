@@ -1,4 +1,4 @@
-open Compiler.Types
+open Compiler
 
 module Diff : sig
   val predicates :
@@ -164,7 +164,7 @@ let rec compile_nested : type a mods directive.
     Location.location ->
     (directive, mods) Ast.Clause.signature_body ->
     a t ->
-    Compiler.Types.sig_scope ->
+    Compiler.sig_scope ->
     compiled_signature Location.with_location =
  fun loc body ({ env = { modules; _ }; _ } as compiler) sig_scope ->
   let all_underscores : Ast.Expr.t FT.t -> bool =
@@ -174,9 +174,9 @@ let rec compile_nested : type a mods directive.
          Location.strip_loc
   in
   let module Lookup = (val compiler.lookup) in
-  let declaration_step (acc : Compiler.Types.predicate_name Set.t)
+  let declaration_step (acc : Compiler.predicate_name Set.t)
       (next : Ast.Clause.multi_declaration Location.with_location) :
-      Compiler.Types.predicate_name Set.t =
+      Compiler.predicate_name Set.t =
     let predicate_happy_case (head : predicate_name) = Set.add head acc in
     let head, { Ast.Clause.original_arg_list; body }, remaining =
       next.content
@@ -240,9 +240,7 @@ let rec compile_nested : type a mods directive.
           Location.add_loc (ModuleSignature payload) next.loc
         in
         let label = module_signature.content in
-        let scope : Compiler.Types.scope =
-          Lookup.ancestors_of_compiler compiler
-        in
+        let scope : Compiler.scope = Lookup.ancestors_of_compiler compiler in
         match
           Lookup.nested_signature
             (Lookup.sig_env_to_sig_scope acc.modules)

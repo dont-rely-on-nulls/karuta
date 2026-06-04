@@ -1,6 +1,5 @@
-include Types
+include Compiler
 
-type t = unit Types.t
 type 'a nested_env = 'a env BatLazyList.t
 type scope = comptime nested_env
 type sig_scope = signature nested_env
@@ -63,26 +62,6 @@ let sig_env_to_sig_scope (env : signature env) : sig_scope =
 
 let sig_cons (scope : sig_scope) (env : sig_env) : sig_scope =
   BatLazyList.cons env scope
-
-let ancestors_of_compiler (compiler : t) : scope =
-  let open struct
-    type ancestors_of_compiler = Compiler of t | Imports of comptime env | End
-  end in
-  let open BatLazyList in
-  unfold (Compiler compiler) (function
-    | End -> None
-    | Imports imports -> Some (imports, End)
-    | Compiler { parent; env; imports; externals; _ } ->
-        Some
-          ( env.modules,
-            Option.fold
-              ~none:
-                (Imports
-                   (BatMap.String.filter
-                      (fun k _ -> BatSet.String.mem k imports)
-                      externals))
-              ~some:(fun c -> Compiler c)
-              parent ))
 
 let signature (scope : scope)
     ((qualifiers, unqualified_name) : Ast.Expr.func_label) =

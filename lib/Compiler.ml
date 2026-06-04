@@ -52,6 +52,7 @@ type sig_scope = signature nested_env
 
 module type LOOKUP = sig
   type t
+  type state
 
   val empty_signature : sig_scope
   val sig_env_to_sig_scope : sig_env -> sig_scope
@@ -89,6 +90,8 @@ module type LOOKUP = sig
     [> `Ok of unit
     | `Undefined of string Location.with_location
     | `UnexpectedSignature of Location.location ]
+
+  val import_is_available : string -> t -> bool
 end
 
 module Options = struct
@@ -109,7 +112,6 @@ end
 type 'state t = {
   state : 'state;
   externals : comptime env;
-  imports : BatSet.String.t;
   header : forms;
   output : forms;
   filename : string;
@@ -126,11 +128,10 @@ type initialization = {
   externals : comptime env;
 }
 
-type 'a initialize_nested =
-  initialization -> BatSet.String.t -> 'a t option -> string -> 'a t
+type 'a initialize_nested = initialization -> 'a t option -> string -> 'a t
 
 type ('state, 'directives, 'mods) runner = {
-  step : ('directives, 'mods) Ast.Clause.t list * 'state t -> 'state t;
+  step : ('directives, 'mods) Ast.Clause.t FT.t * 'state t -> 'state t;
   initialize_nested : 'state initialize_nested;
 }
 
@@ -155,7 +156,7 @@ module type COMPILER = sig
 
   type state
 
-  val step : (directives, mods) Ast.Clause.t list * state t -> state t
+  val step : (directives, mods) Ast.Clause.t FT.t * state t -> state t
   val initialize : initialization -> state t
 end
 
@@ -168,12 +169,11 @@ module Make (Config : COMPILER_CONFIG) :
   include Preprocessor.Make (Config)
 
   let initialize_nested ({ persist; filename; externals } : initialization)
-      imports parent module_name : state t =
+      parent module_name : state t =
     {
       state =
         Option.fold ~none:(initial_state ()) ~some:(fun p -> p.state) parent;
       parent;
-      imports;
       externals;
       filename;
       module_name;
@@ -198,11 +198,12 @@ module Make (Config : COMPILER_CONFIG) :
 
   let initialize ({ filename; _ } as init : initialization) : state t =
     let module_name = ModuleName.of_filepath filename in
-    initialize_nested init BatSet.String.empty None module_name
+    initialize_nested init None module_name
 
-  let rec step : (directives, mods) Ast.Clause.t list * state t -> state t =
-    function
-    | [], compiler ->
+  let rec step : (directives, mods) Ast.Clause.t FT.t * state t -> state t =
+   fun (clauses, compiler) ->
+    match FT.front clauses with
+    | None ->
         if not @@ FT.is_empty compiler.output then
           compiler.persist compiler.filename
             (FT.append compiler.header compiler.output);
@@ -224,7 +225,7 @@ module Make (Config : COMPILER_CONFIG) :
                 compiler.externals;
           }
         else compiler
-    | clause :: remaining, compiler ->
+    | Some (remaining, clause) ->
         step
           ( remaining,
             Config.compile_clause { initialize_nested; step } clause compiler )

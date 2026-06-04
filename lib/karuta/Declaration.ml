@@ -24,7 +24,7 @@ let call_with_fresh (name : string) expr =
   let open Beam in
   Ukanren.call_with_fresh @@ Builder.lambda name expr
 
-let compile_declaration_bodies { module_name; imports; _ }
+let compile_declaration_bodies ({ module_name; state; _ } : state Compiler.t)
     (clauses : Ast.Clause.decl Location.with_location FT.t) =
   if FT.is_empty clauses then (
     Logger.simply_unreachable "Predicates must have at least one body";
@@ -38,8 +38,8 @@ let compile_declaration_bodies { module_name; imports; _ }
       let vars =
         content.body
         |> FT.map (Fun.compose find_variables Location.strip_loc)
-        |> FT.fold_left Set.union Set.empty
-        |> Set.filter (fun name ->
+        |> FT.fold_left BatSet.union BatSet.empty
+        |> BatSet.filter (fun name ->
             Str.string_match (Str.regexp "^[A-Z]") name 0)
       in
       let open Location in
@@ -79,14 +79,15 @@ let compile_declaration_bodies { module_name; imports; _ }
                        (let suffix =
                           FT.to_list @@ FT.map Location.strip_loc path
                         in
-                        if BatSet.String.mem head.content imports then suffix
+                        if BatMap.String.mem head.content state.imports then
+                          suffix
                         else module_name :: suffix))
                   (Builder.atom fun_name) (FT.to_list args)
         in
 
         content.body |> FT.map make_function |> FT.to_list |> Ukanren.conj
       in
-      Set.fold call_with_fresh vars body
+      BatSet.fold call_with_fresh vars body
     in
     clauses |> FT.map compile_single_body |> FT.to_list |> Ukanren.disj
 
@@ -95,7 +96,7 @@ let compile_multi
       Ast.head
       * Ast.Clause.decl Location.with_location
       * Ast.Clause.decl Location.with_location FT.t)
-    ({ env; _ } as compiler : unit t) : unit t =
+    ({ env; _ } as compiler : state Compiler.t) : state Compiler.t =
   let declaration =
     let args =
       if arity = 0 then []
@@ -113,6 +114,6 @@ let compile_multi
     env =
       {
         env with
-        predicates = PredicateMap.add { name; arity } () env.predicates;
+        predicates = Compiler.PredicateMap.add { name; arity } () env.predicates;
       };
   }

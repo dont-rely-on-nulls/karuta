@@ -27,3 +27,10 @@ type state = inner_state Atomic.t
 
 let initial_state () =
   Atomic.make { schemas = BatMap.String.empty; current_directive = None }
+
+type mods = unit
+
+type directives =
+  | Persisted of Ast.Clause.multi_declaration Location.with_location FT.t
+  | Ephemeral of Ast.Clause.multi_declaration Location.with_location FT.t
+  | Constraint of Ast.Clause.multi_declaration Location.with_location FT.t

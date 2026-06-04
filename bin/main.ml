@@ -27,7 +27,7 @@ let run : cmd -> unit = function
       Logger.Level.set_min_level log_level;
       check_extensions (BatSet.String.of_list [ ".krt"; ".skr"; ".pl" ]) files;
       (* TODO: Make sakura module name as an available CLI option with db being the default *)
-      let open Compiler.Types in
+      let open Compiler in
       let options : Options.t =
         Options.initialize
           ~sakura:
