@@ -1,4 +1,4 @@
-open Compiler
+open Shared.Compiler
 
 let treat_error_cases
     ((qualifier, name) :
@@ -35,8 +35,8 @@ let compile (directive_loc : Location.location)
       (Types.directives, Types.mods) Ast.Clause.t FT.t * Types.state t ->
       Types.state t)
     ({ env = { modules = _; _ } as _env; state; _ } as compiler : Types.state t)
-    (initialize_nested : Types.state Compiler.initialize_nested) : Types.state t
-    =
+    (initialize_nested : Types.state Shared.Compiler.initialize_nested) :
+    Types.state t =
   let module Lookup = (val compiler.lookup) in
   match directive with
   | Module _ ->

@@ -3,11 +3,11 @@ open Types
 let compile :
     Location.location ->
     (directives, mods) Ast.Clause.directive ->
-    ((directives, mods) Ast.Clause.t FT.t * state Compiler.t ->
-    state Compiler.t) ->
-    state Compiler.t ->
-    state Compiler.initialize_nested ->
-    state Compiler.t =
+    ((directives, mods) Ast.Clause.t FT.t * state Shared.Compiler.t ->
+    state Shared.Compiler.t) ->
+    state Shared.Compiler.t ->
+    state Shared.Compiler.initialize_nested ->
+    state Shared.Compiler.t =
  fun directive_loc directive step compiler initialize_nested ->
   match directive with
   | Ast.Clause.Module _ | Ast.Clause.Signature _ ->

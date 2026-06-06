@@ -141,9 +141,9 @@ module type COMPILER_CONFIG = sig
   val initial_state : unit -> state
 
   val preprocess_clauses :
-    Shared.Preprocessor.t ->
+    Preprocessor.t ->
     Ast.ParserClause.t FT.t ->
-    (directives, mods) Shared.Preprocessor.output
+    (directives, mods) Preprocessor.output
 
   val compile_clause :
     (state, directives, mods) runner ->
@@ -160,9 +160,9 @@ module type COMPILER = sig
   type state
 
   val preprocess_clauses :
-    Shared.Preprocessor.t ->
+    Preprocessor.t ->
     Ast.ParserClause.t FT.t ->
-    (directives, mods) Shared.Preprocessor.output
+    (directives, mods) Preprocessor.output
 
   val compile_files :
     Persist.both ->

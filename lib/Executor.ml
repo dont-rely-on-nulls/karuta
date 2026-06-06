@@ -27,13 +27,18 @@ type ('directives, 'mods) preprocessed_result =
 
 (* FIXME: hook up dependency information and sort the file list before compiling *)
 (* TODO: compilation cache *)
-let compile ({ sakura; artifact } : Compiler.Options.t)
-    (persist : Compiler.Persist.both) (filepaths : string list) : unit attempt =
+let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
+    (persist : Shared.Compiler.Persist.both) (filepaths : string list) :
+    unit attempt =
   let sakura_files, karuta_files =
     FT.partition Sakura.Preprocessor.is_sakura_file @@ FT.of_list filepaths
   in
-  let module Sakura : Compiler.COMPILER = Compiler.Make (Sakura.Clause) in
-  let module Karuta : Compiler.COMPILER = Compiler.Make (Karuta.Clause) in
+  let module Sakura : Shared.Compiler.COMPILER =
+    Shared.Compiler.Make (Sakura.Clause)
+  in
+  let module Karuta : Shared.Compiler.COMPILER =
+    Shared.Compiler.Make (Karuta.Clause)
+  in
   let* initial_dependencies, sakura_modules =
     if FT.is_empty sakura_files then
       Error.ok @@ (Shared.DependencyGraph.empty, BatMap.String.empty)
@@ -46,7 +51,8 @@ let compile ({ sakura; artifact } : Compiler.Options.t)
       | Some { root_module; _ } ->
           let preprocess filepath =
             Error.map
-            @@ Sakura.preprocess (Shared.Preprocessor.initialize filepath)
+            @@ Sakura.preprocess_clauses
+                 (Shared.Preprocessor.initialize filepath)
           in
           let sakura_filename = root_module ^ ".skr" in
           sakura_files
@@ -64,7 +70,7 @@ let compile ({ sakura; artifact } : Compiler.Options.t)
       { (Shared.Preprocessor.initialize filepath) with dependencies }
     in
     let* { dependencies; clauses } =
-      filepath |> parse |> Error.map @@ Karuta.preprocess preprocessor
+      filepath |> parse |> Error.map @@ Karuta.preprocess_clauses preprocessor
     in
     ok (dependencies, BatMap.String.add filepath clauses preprocessed)
   in

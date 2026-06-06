@@ -1,13 +1,13 @@
 include Types
 include Shared.Lookup
 
-type t = state Compiler.t
+type t = state Shared.Compiler.t
 
-let ancestors_of_compiler (compiler : t) : Compiler.scope =
+let ancestors_of_compiler (compiler : t) : Shared.Compiler.scope =
   let open struct
     type ancestors_of_compiler =
       | Compiler of t
-      | Imports of comptime Compiler.env
+      | Imports of Shared.Compiler.comptime Shared.Compiler.env
       | End
   end in
   let open BatLazyList in

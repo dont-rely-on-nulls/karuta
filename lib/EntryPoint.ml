@@ -1,4 +1,4 @@
-open Compiler
+open Shared.Compiler
 
 type payload = {
   persist : Persist.raw;

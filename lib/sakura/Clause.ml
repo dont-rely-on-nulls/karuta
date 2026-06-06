@@ -1,12 +1,13 @@
-open Compiler
 include Types
 module Lookup = Lookup
 
 let preprocess_clauses = Preprocessor.preprocess_clauses
 
 let compile_clause
-    ({ step; initialize_nested } : (state, directives, mods) Compiler.runner)
-    (clause : (directives, mods) Ast.Clause.t) (compiler : state t) : state t =
+    ({ step; initialize_nested } :
+      (state, directives, mods) Shared.Compiler.runner)
+    (clause : (directives, mods) Ast.Clause.t)
+    (compiler : state Shared.Compiler.t) : state Shared.Compiler.t =
   match clause.content with
   | Directive directive ->
       Directive.compile clause.loc directive step compiler initialize_nested

@@ -7,5 +7,5 @@ val compile_multi :
   Ast.head
   * Ast.Clause.decl Location.with_location
   * Ast.Clause.decl Location.with_location FT.t ->
-  state Compiler.t ->
-  state Compiler.t
+  state Shared.Compiler.t ->
+  state Shared.Compiler.t

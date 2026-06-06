@@ -1,4 +1,4 @@
-include Compiler
+open Compiler
 
 type 'a nested_env = 'a env BatLazyList.t
 type scope = comptime nested_env

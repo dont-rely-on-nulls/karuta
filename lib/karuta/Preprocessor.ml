@@ -44,7 +44,7 @@ let rec parser_to_compiler :
   let open Location in
   let open Ast in
   match clause with
-  | { content = Directive (head, body); _ } ->
+  | { content = Ast.ParserClause.Directive (head, body); _ } ->
       let grouped_body = FT.map (group_clauses preprocessor) body in
       let dependencies, _grouped_clauses =
         FT.fold_right
@@ -61,7 +61,7 @@ let rec parser_to_compiler :
                 let external_dep =
                   Ast.Expr.extract_unqualified_atom singleton
                 in
-                DependencyGraph.add filename external_dep dependencies
+                Shared.DependencyGraph.add filename external_dep dependencies
             | None ->
                 Logger.error head.loc
                   "Directive 'import' cannot be an empty functor";

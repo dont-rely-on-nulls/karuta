@@ -24,7 +24,8 @@ let call_with_fresh (name : string) expr =
   let open Beam in
   Ukanren.call_with_fresh @@ Builder.lambda name expr
 
-let compile_declaration_bodies ({ module_name; state; _ } : state Compiler.t)
+let compile_declaration_bodies
+    ({ module_name; state; _ } : state Shared.Compiler.t)
     (clauses : Ast.Clause.decl Location.with_location FT.t) =
   if FT.is_empty clauses then (
     Logger.simply_unreachable "Predicates must have at least one body";
@@ -98,7 +99,8 @@ let compile_multi
       Ast.head
       * Ast.Clause.decl Location.with_location
       * Ast.Clause.decl Location.with_location FT.t)
-    ({ env; _ } as compiler : state Compiler.t) : state Compiler.t =
+    ({ env; _ } as compiler : state Shared.Compiler.t) : state Shared.Compiler.t
+    =
   let declaration =
     let args =
       if arity = 0 then []
@@ -116,6 +118,7 @@ let compile_multi
     env =
       {
         env with
-        predicates = Compiler.PredicateMap.add { name; arity } () env.predicates;
+        predicates =
+          Shared.Compiler.PredicateMap.add { name; arity } () env.predicates;
       };
   }

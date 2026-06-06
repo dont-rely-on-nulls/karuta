@@ -4,9 +4,10 @@ module Lookup = Lookup
 let preprocess_clauses = Preprocessor.preprocess_clauses
 
 let compile_clause
-    ({ step; initialize_nested } : (state, directives, mods) Compiler.runner)
-    (clause : (directives, mods) Ast.Clause.t) (compiler : state Compiler.t) :
-    state Compiler.t =
+    ({ step; initialize_nested } :
+      (state, directives, mods) Shared.Compiler.runner)
+    (clause : (directives, mods) Ast.Clause.t)
+    (compiler : state Shared.Compiler.t) : state Shared.Compiler.t =
   (* TODO: handle location *)
   match clause.content with
   | Directive directive ->
