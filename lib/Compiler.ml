@@ -90,8 +90,6 @@ module type LOOKUP = sig
     [> `Ok of unit
     | `Undefined of string Location.with_location
     | `UnexpectedSignature of Location.location ]
-
-  val import_is_available : string -> t -> bool
 end
 
 module Options = struct
@@ -156,7 +154,13 @@ module type COMPILER = sig
 
   type state
 
-  val step : (directives, mods) Ast.Clause.t FT.t * state t -> state t
+  val compile_files :
+    Persist.both ->
+    (directives, mods) Ast.Clause.t FT.t BatMap.String.t ->
+    comptime env ->
+    string FT.t ->
+    comptime env
+
   val initialize : initialization -> state t
 end
 
@@ -229,4 +233,20 @@ module Make (Config : COMPILER_CONFIG) :
         step
           ( remaining,
             Config.compile_clause { initialize_nested; step } clause compiler )
+
+  let compile_one_file (persist : Persist.both) preprocessed externals filepath
+      =
+    match BatMap.String.find_opt filepath preprocessed with
+    | None ->
+        Logger.simply_unreachable "We hit a file that doesn't exist";
+        exit 1
+    | Some body ->
+        (step
+           ( body,
+             initialize
+               { persist = persist.beam; filename = filepath; externals } ))
+          .externals
+
+  let compile_files persist preprocessed_files =
+    FT.fold_left @@ compile_one_file persist preprocessed_files
 end

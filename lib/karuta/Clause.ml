@@ -1,4 +1,7 @@
-open Types
+include Types
+module Lookup = Lookup
+
+let target_specific_directive _ _ _ = failwith "TODO"
 
 let compile_clause
     ({ step; initialize_nested } : (state, directives, mods) Compiler.runner)

@@ -24,11 +24,11 @@ let error = error
 let ( ||> ) = bind
 let map = Result.map
 
-let fold (f : 'b list -> 'a -> 'b list attempt) (elements : 'a list) :
-    'b list attempt =
-  List.fold_left
+let fold (f : 'b FT.t -> 'a -> 'b FT.t attempt) (elements : 'a FT.t) :
+    'b FT.t attempt =
+  FT.fold_left
     (fun acc element -> Result.bind acc (Fun.flip f element))
-    (ok []) elements
+    (ok FT.empty) elements
 
 let ( let* ) o f =
   match o with

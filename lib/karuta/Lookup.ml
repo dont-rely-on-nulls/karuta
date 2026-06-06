@@ -1,4 +1,4 @@
-open Types
+include Types
 include Shared.Lookup
 
 type t = state Compiler.t

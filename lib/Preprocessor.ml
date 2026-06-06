@@ -333,6 +333,8 @@ module type PREPROCESSOR = sig
   val preprocess : t -> Ast.ParserClause.t FT.t -> (directives, mods) output
 end
 
+let is_sakura_file filepath = Filename.extension filepath = ".skr"
+
 module Make (Target : TARGET) :
   PREPROCESSOR
     with type directives = Target.directives
@@ -460,8 +462,6 @@ module Make (Target : TARGET) :
     |> FT.filter_map remove_comments
     |> FT.map check_empty_heads |> FT.group compare_clauses
     |> fold_map preprocessor.dependencies multi_mapper
-
-  let is_sakura_file filepath = Filename.extension filepath = ".skr"
 
   let validate_top_level (clauses : Ast.ParserClause.t FT.t) :
       Ast.ParserClause.t FT.t =

@@ -62,3 +62,9 @@ let rec find_opt (f : 'a -> bool) (ft : 'a t) : 'a option =
 
 let for_all (f : 'a -> bool) : 'a t -> bool =
   Fun.compose Option.is_none (find_opt (Fun.compose not f))
+
+let partition (f : 'a -> bool) : 'a t -> 'a t * 'a t =
+  fold_left
+    (fun (yes, no) elem ->
+      if f elem then (snoc yes elem, no) else (yes, snoc no elem))
+    (empty, empty)

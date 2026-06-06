@@ -1,4 +1,6 @@
+include Shared.Lookup
 include Compiler
+include Types
 
 type t = Types.state Compiler.t
 
