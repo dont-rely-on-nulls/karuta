@@ -324,6 +324,8 @@ module type TARGET = sig
     (directives, mods) Ast.Clause.t FT.t FT.t ->
     Location.location ->
     (directives, mods) Ast.Clause.directive
+
+  val validate_top_level : Ast.ParserClause.t FT.t -> Ast.ParserClause.t FT.t
 end
 
 module type PREPROCESSOR = sig
@@ -463,23 +465,6 @@ module Make (Target : TARGET) :
     |> FT.map check_empty_heads |> FT.group compare_clauses
     |> fold_map preprocessor.dependencies multi_mapper
 
-  let validate_top_level (clauses : Ast.ParserClause.t FT.t) :
-      Ast.ParserClause.t FT.t =
-    let open Ast.ParserClause in
-    let open Location in
-    let is_not_directive = function
-      | { content = Declaration _; _ } -> true
-      | { content = QueryConjunction _; _ } -> true
-      | { content = Directive _; _ } -> false
-    in
-    match FT.find_opt is_not_directive clauses with
-    | None -> clauses
-    | Some { loc; _ } ->
-        Logger.error loc "Found a non-directive in a Sakura file";
-        exit 1
-
-  let preprocess ({ filename; _ } as preprocessor : t) clauses =
-    if is_sakura_file filename then
-      validate_top_level clauses |> group_clauses preprocessor
-    else group_clauses preprocessor clauses
+  let preprocess (preprocessor : t) clauses =
+    validate_top_level clauses |> group_clauses preprocessor
 end

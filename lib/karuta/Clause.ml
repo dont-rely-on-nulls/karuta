@@ -2,6 +2,7 @@ include Types
 module Lookup = Lookup
 
 let target_specific_directive _ _ _ = failwith "TODO"
+let validate_top_level = Fun.id
 
 let compile_clause
     ({ step; initialize_nested } : (state, directives, mods) Compiler.runner)
