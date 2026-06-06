@@ -134,11 +134,16 @@ type ('state, 'directives, 'mods) runner = {
 }
 
 module type COMPILER_CONFIG = sig
-  include Preprocessor.TARGET
-
+  type directives
+  type mods
   type state
 
   val initial_state : unit -> state
+
+  val preprocess_clauses :
+    Shared.Preprocessor.t ->
+    Ast.ParserClause.t FT.t ->
+    (directives, mods) Shared.Preprocessor.output
 
   val compile_clause :
     (state, directives, mods) runner ->
@@ -150,9 +155,14 @@ module type COMPILER_CONFIG = sig
 end
 
 module type COMPILER = sig
-  include Preprocessor.PREPROCESSOR
-
+  type directives
+  type mods
   type state
+
+  val preprocess_clauses :
+    Shared.Preprocessor.t ->
+    Ast.ParserClause.t FT.t ->
+    (directives, mods) Shared.Preprocessor.output
 
   val compile_files :
     Persist.both ->
@@ -170,7 +180,6 @@ module Make (Config : COMPILER_CONFIG) :
     with type directives = Config.directives
     with type mods = Config.mods = struct
   include Config
-  include Preprocessor.Make (Config)
 
   let initialize_nested ({ persist; filename; externals } : initialization)
       parent module_name : state t =
@@ -233,6 +242,8 @@ module Make (Config : COMPILER_CONFIG) :
         step
           ( remaining,
             Config.compile_clause { initialize_nested; step } clause compiler )
+
+  let preprocess_clauses = Config.preprocess_clauses
 
   let compile_one_file (persist : Persist.both) preprocessed externals filepath
       =

@@ -34,7 +34,9 @@ let compile_declaration_bodies ({ module_name; state; _ } : state Compiler.t)
     let compile_single_body
         ({ content; _ } : Ast.Clause.decl Location.with_location) :
         Builder.Expr.t =
-      let find_variables call = Preprocessor.find_variables (Functor call) in
+      let find_variables call =
+        Shared.Preprocessor.find_variables (Functor call)
+      in
       let vars =
         content.body
         |> FT.map (Fun.compose find_variables Location.strip_loc)
