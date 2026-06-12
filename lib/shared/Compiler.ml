@@ -140,11 +140,6 @@ module type COMPILER_CONFIG = sig
 
   val initial_state : unit -> state
 
-  val preprocess_clauses :
-    Preprocessor.t ->
-    Ast.ParserClause.t FT.t ->
-    (directives, mods) Preprocessor.output
-
   val compile_clause :
     (state, directives, mods) runner ->
     (directives, mods) Ast.Clause.t ->
@@ -152,6 +147,11 @@ module type COMPILER_CONFIG = sig
     state t
 
   module Lookup : LOOKUP with type t = state t
+
+  module Preprocessor :
+    Preprocessor.PREPROCESSOR_CONFIG
+      with type directives = directives
+      with type mods = mods
 end
 
 module type COMPILER = sig
@@ -179,13 +179,17 @@ module Make (Config : COMPILER_CONFIG) :
     with type state = Config.state
     with type directives = Config.directives
     with type mods = Config.mods = struct
-  include Config
+  type state = Config.state
+  type directives = Config.directives
+  type mods = Config.mods
 
   let initialize_nested ({ persist; filename; externals } : initialization)
-      parent module_name : state t =
+      parent module_name : Config.state t =
     {
       state =
-        Option.fold ~none:(initial_state ()) ~some:(fun p -> p.state) parent;
+        Option.fold ~none:(Config.initial_state ())
+          ~some:(fun p -> p.state)
+          parent;
       parent;
       externals;
       filename;
@@ -209,11 +213,13 @@ module Make (Config : COMPILER_CONFIG) :
       lookup = (module Config.Lookup);
     }
 
-  let initialize ({ filename; _ } as init : initialization) : state t =
+  let initialize ({ filename; _ } as init : initialization) : Config.state t =
     let module_name = ModuleName.of_filepath filename in
     initialize_nested init None module_name
 
-  let rec step : (directives, mods) Ast.Clause.t FT.t * state t -> state t =
+  let rec step :
+      (Config.directives, Config.mods) Ast.Clause.t FT.t * Config.state t ->
+      Config.state t =
    fun (clauses, compiler) ->
     match FT.front clauses with
     | None ->
@@ -243,7 +249,14 @@ module Make (Config : COMPILER_CONFIG) :
           ( remaining,
             Config.compile_clause { initialize_nested; step } clause compiler )
 
-  let preprocess_clauses = Config.preprocess_clauses
+  let preprocess_clauses =
+    let module TargetPreprocessor :
+      Preprocessor.PREPROCESSOR
+        with type directives = Config.directives
+        with type mods = Config.mods =
+      Preprocessor.Make (Config.Preprocessor)
+    in
+    TargetPreprocessor.preprocess_clauses
 
   let compile_one_file (persist : Persist.both) preprocessed externals filepath
       =

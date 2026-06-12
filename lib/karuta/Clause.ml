@@ -1,7 +1,6 @@
 include Types
 module Lookup = Lookup
-
-let preprocess_clauses = Preprocessor.preprocess_clauses
+module Preprocessor = Preprocessor
 
 let compile_clause
     ({ step; initialize_nested } :

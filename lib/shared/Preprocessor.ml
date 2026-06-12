@@ -128,6 +128,9 @@ type ('directives, 'mods) output = {
   clauses : ('directives, 'mods) Ast.Clause.t BatFingerTree.t;
 }
 
+type ('directives, 'mods) group =
+  t -> Ast.ParserClause.t FT.t -> ('directives, 'mods) output
+
 let map_clauses f o = { o with clauses = f o.clauses }
 
 let merge :
@@ -152,3 +155,69 @@ let fold_map :
     (fun acc elem -> merge acc @@ f elem)
     { dependencies; clauses = BatFingerTree.empty }
     grouped_clauses
+
+module type PREPROCESSOR_CONFIG = sig
+  type directives
+  type mods
+
+  val preprocess_clause :
+    (directives, mods) group ->
+    t ->
+    Ast.ParserClause.t ->
+    (directives, mods) output
+
+  val renamer : Ast.ParserClause.decl -> Ast.Clause.decl
+end
+
+module type PREPROCESSOR = sig
+  type directives
+  type mods
+
+  val preprocess_clauses :
+    t -> Ast.ParserClause.t FT.t -> (directives, mods) output
+end
+
+module Make (Config : PREPROCESSOR_CONFIG) :
+  PREPROCESSOR
+    with type directives = Config.directives
+    with type mods = Config.mods = struct
+  include Config
+
+  let from_declaration (clause : Ast.ParserClause.t) :
+      Ast.Clause.decl Location.with_location =
+    match clause with
+    | { content = Declaration decl; loc } ->
+        { content = Config.renamer decl; loc }
+    | _ ->
+        Logger.simply_unreachable "unreachable from_declaration";
+        exit 1
+
+  let rec preprocess_clauses ({ dependencies; _ } as preprocessor : t)
+      (clauses : Ast.ParserClause.t FT.t) =
+    let multi_mapper (group : Ast.ParserClause.t FT.t) =
+      match FT.front group with
+      | Some (remaining, single) when remaining = FT.empty ->
+          Config.preprocess_clause preprocess_clauses preprocessor single
+      | Some (many, { content = Declaration first; loc }) ->
+          {
+            dependencies;
+            clauses =
+              FT.singleton
+                {
+                  Location.content =
+                    Ast.Clause.MultiDeclaration
+                      ( decl_header first,
+                        Config.renamer first,
+                        FT.map from_declaration many );
+                  loc;
+                };
+          }
+      | _ ->
+          Logger.simply_unreachable "unreachable group";
+          exit 1
+    in
+    clauses
+    |> FT.filter_map remove_comments
+    |> FT.map check_empty_heads |> FT.group compare_clauses
+    |> fold_map preprocessor.dependencies multi_mapper
+end

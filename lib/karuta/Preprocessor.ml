@@ -1,3 +1,4 @@
+include Types
 open Shared.Preprocessor
 
 let rename_arg ({ loc; _ } as expr : Ast.Expr.t) (counter : int) :
@@ -15,9 +16,8 @@ let rename_arg ({ loc; _ } as expr : Ast.Expr.t) (counter : int) :
     loc;
   }
 
-let rename_declaration
-    ({ head = { elements; _ }; body } : Ast.ParserClause.decl) : Ast.Clause.decl
-    =
+let renamer ({ head = { elements; _ }; body } : Ast.ParserClause.decl) :
+    Ast.Clause.decl =
   let arity = FT.size elements in
   let _, new_body =
     FT.fold_right
@@ -29,18 +29,12 @@ let rename_declaration
   in
   { body = new_body; original_arg_list = elements }
 
-let from_declaration (clause : Ast.ParserClause.t) :
-    Ast.Clause.decl Location.with_location =
-  match clause with
-  | { content = Declaration decl; loc } ->
-      { content = rename_declaration decl; loc }
-  | _ ->
-      Logger.simply_unreachable "unreachable from_declaration";
-      exit 1
-
-let rec parser_to_compiler :
-    t -> Ast.ParserClause.t -> (Types.directives, Types.mods) output =
- fun ({ dependencies; filename } as preprocessor) clause ->
+let preprocess_clause :
+    (Types.directives, Types.mods) group ->
+    t ->
+    Ast.ParserClause.t ->
+    (Types.directives, Types.mods) output =
+ fun group_clauses ({ dependencies; filename } as preprocessor) clause ->
   let open Location in
   let open Ast in
   match clause with
@@ -95,7 +89,7 @@ let rec parser_to_compiler :
             {
               content =
                 Ast.Clause.MultiDeclaration
-                  (decl_header decl, rename_declaration decl, FT.empty);
+                  (decl_header decl, renamer decl, FT.empty);
               loc;
             };
       }
@@ -120,7 +114,7 @@ let rec parser_to_compiler :
         {
           content =
             Ast.Clause.MultiDeclaration
-              (decl_header fake_decl, rename_declaration fake_decl, FT.empty);
+              (decl_header fake_decl, renamer fake_decl, FT.empty);
           loc;
         }
       in
@@ -132,36 +126,3 @@ let rec parser_to_compiler :
         }
       in
       { dependencies; clauses = FT.of_list [ declaration; query ] }
-
-and group_clauses ({ dependencies; _ } as preprocessor : t)
-    (clauses : Ast.ParserClause.t FT.t) =
-  let multi_mapper (group : Ast.ParserClause.t FT.t) =
-    match FT.front group with
-    | Some (remaining, single) when remaining = FT.empty ->
-        parser_to_compiler preprocessor single
-    | Some (many, { content = Declaration first; loc }) ->
-        {
-          dependencies;
-          clauses =
-            FT.singleton
-              {
-                Location.content =
-                  Ast.Clause.MultiDeclaration
-                    ( decl_header first,
-                      rename_declaration first,
-                      FT.map from_declaration many );
-                loc;
-              };
-        }
-    | _ ->
-        Logger.simply_unreachable "unreachable group";
-        exit 1
-  in
-  clauses
-  |> FT.filter_map remove_comments
-  |> FT.map check_empty_heads |> FT.group compare_clauses
-  |> fold_map preprocessor.dependencies multi_mapper
-
-let preprocess_clauses (_preprocessor : t) (_clauses : Ast.ParserClause.t FT.t)
-    : (Types.directives, Types.mods) output =
-  failwith "Karuta"
