@@ -31,6 +31,6 @@ let initial_state () =
 type mods = unit
 
 type directives =
-  | Persisted of Ast.Clause.multi_declaration Location.with_location FT.t
-  | Ephemeral of Ast.Clause.multi_declaration Location.with_location FT.t
-  | Constraint of Ast.Clause.multi_declaration Location.with_location FT.t
+  | Persisted of Ast.Module.multi_declaration_env
+  | Ephemeral of Ast.Module.multi_declaration_env
+  | Constraint of Ast.Module.multi_declaration_env

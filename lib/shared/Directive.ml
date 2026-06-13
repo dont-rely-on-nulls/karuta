@@ -19,21 +19,21 @@ let initialize_from_parent (type a) module_name
 
 let create_clause
     (directives :
-      ('directives, 'mods) Ast.Clause.directive Location.with_location FT.t)
-    (declarations : Ast.Clause.multi_declaration Location.with_location FT.t) :
-    ('directives, 'mods) Ast.Clause.t FT.t =
+      ('directives, 'mods) Ast.Module.directive Location.with_location FT.t)
+    (declarations : Ast.Module.multi_declaration) :
+    ('directives, 'mods) Ast.Module.t FT.t =
   let lifted_declarations =
-    FT.map (Location.fmap (fun c -> Ast.Clause.MultiDeclaration c)) declarations
+    FT.map (Location.fmap (fun c -> Ast.Module.MultiDeclaration c)) declarations
   in
   let lifted_directives =
-    FT.map (Location.fmap (fun d -> Ast.Clause.Directive d)) directives
+    FT.map (Location.fmap (fun d -> Ast.Module.Directive d)) directives
   in
   FT.append lifted_directives lifted_declarations
 
 let rec compile : type a.
     Location.location ->
-    ('directives, 'mods) Ast.Clause.directive ->
-    (('directives, 'mods) Ast.Clause.t FT.t * a t -> a t) ->
+    ('directives, 'mods) Ast.Module.directive ->
+    (('directives, 'mods) Ast.Module.t FT.t * a t -> a t) ->
     a t ->
     a Compiler.initialize_nested ->
     a t =
@@ -85,7 +85,7 @@ let rec compile : type a.
         Signature.compile directive_loc signature_body compiler
       in
       let module_without_named_signature =
-        Ast.Clause.Module { module_body with signature = None }
+        Ast.Module.Module { module_body with signature = None }
       in
       let ({ env = { modules; _ } as env; _ } as compiler) =
         compile directive_loc module_without_named_signature step compiler
@@ -188,6 +188,6 @@ let rec compile : type a.
           })
   | TargetSpecific _ ->
       let nested_directive =
-        Location.add_loc (Ast.Clause.Directive directive) directive_loc
+        Location.add_loc (Ast.Module.Directive directive) directive_loc
       in
       step (FT.singleton nested_directive, compiler)

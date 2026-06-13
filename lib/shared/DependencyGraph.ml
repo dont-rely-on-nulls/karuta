@@ -9,15 +9,16 @@ let merge =
       | v, None | None, v -> v
       | Some lset, Some rset -> Some (BatSet.String.union lset rset))
 
-let add key value graph =
-  let open BatMap.String in
-  match find_opt key graph with
-  | None -> add key (BatSet.String.singleton value) graph
-  | Some set -> add key (BatSet.String.add value set) graph
+let add key values graph =
+  match BatMap.String.find_opt key graph with
+  | None -> BatMap.String.add key values graph
+  | Some set -> BatMap.String.add key (BatSet.String.union values set) graph
 
 let invert graph =
   let invert_one node children acc =
-    BatSet.String.fold (fun child acc -> add child node acc) children acc
+    BatSet.String.fold
+      (fun child acc -> add child (BatSet.String.singleton node) acc)
+      children acc
   in
   BatMap.String.fold invert_one graph BatMap.String.empty
 

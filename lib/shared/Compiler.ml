@@ -129,7 +129,7 @@ type initialization = {
 type 'a initialize_nested = initialization -> 'a t option -> string -> 'a t
 
 type ('state, 'directives, 'mods) runner = {
-  step : ('directives, 'mods) Ast.Clause.t FT.t * 'state t -> 'state t;
+  step : ('directives, 'mods) Ast.Module.t FT.t * 'state t -> 'state t;
   initialize_nested : 'state initialize_nested;
 }
 
@@ -142,7 +142,7 @@ module type COMPILER_CONFIG = sig
 
   val compile_clause :
     (state, directives, mods) runner ->
-    (directives, mods) Ast.Clause.t ->
+    (directives, mods) Ast.Module.t ->
     state t ->
     state t
 
@@ -166,7 +166,7 @@ module type COMPILER = sig
 
   val compile_files :
     Persist.both ->
-    (directives, mods) Ast.Clause.t FT.t BatMap.String.t ->
+    (directives, mods) Ast.Module.t FT.t BatMap.String.t ->
     comptime env ->
     string FT.t ->
     comptime env
@@ -218,7 +218,7 @@ module Make (Config : COMPILER_CONFIG) :
     initialize_nested init None module_name
 
   let rec step :
-      (Config.directives, Config.mods) Ast.Clause.t FT.t * Config.state t ->
+      (Config.directives, Config.mods) Ast.Module.t FT.t * Config.state t ->
       Config.state t =
    fun (clauses, compiler) ->
     match FT.front clauses with

@@ -2,19 +2,19 @@ include Types
 module Lookup = Lookup
 module Preprocessor = Preprocessor
 
-let compile_clause
+let compile
     ({ step; initialize_nested } :
       (state, directives, mods) Shared.Compiler.runner)
-    (clause : (directives, mods) Ast.Clause.t)
+    (module_ : (directives, mods) Ast.Module.t)
     (compiler : state Shared.Compiler.t) : state Shared.Compiler.t =
   (* TODO: handle location *)
-  match clause.content with
+  match module_.content with
   | Directive directive ->
-      Directive.compile clause.loc directive step compiler initialize_nested
+      Directive.compile module_.loc directive step compiler initialize_nested
   | MultiDeclaration (header, first, rest) ->
       let open Location in
       Declaration.compile_multi
-        (header, { content = first; loc = clause.loc }, rest)
+        (header, { content = first; loc = module_.loc }, rest)
         compiler
   | Query { name; args } ->
       let arity = FT.size args in
@@ -22,7 +22,7 @@ let compile_clause
       (match compiler.env.query with
       | None -> ()
       | Some { loc; _ } ->
-          Logger.error clause.loc "A module can have at most one query";
+          Logger.error module_.loc "A module can have at most one query";
           Logger.error loc "First query defined here";
           exit 1);
       let open Beam in
@@ -45,6 +45,6 @@ let compile_clause
         env =
           {
             compiler.env with
-            query = Some (Location.add_loc { Ast.name; arity } clause.loc);
+            query = Some (Location.add_loc { Ast.name; arity } module_.loc);
           };
       }

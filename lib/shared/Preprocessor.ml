@@ -123,50 +123,36 @@ type t = { filename : string; dependencies : DependencyGraph.t }
 
 let initialize filename : t = { filename; dependencies = BatMap.String.empty }
 
+type ('directives, 'mods) one_output =
+  | Directive of ('directives, 'mods) Ast.Module.directive
+  | TargetSpecific of {
+      update : 'mods -> 'mods;
+      dependencies : BatSet.String.t;
+    }
+
 type ('directives, 'mods) output = {
   dependencies : DependencyGraph.t;
-  clauses : ('directives, 'mods) Ast.Clause.t BatFingerTree.t;
+  module_ : ('directives, 'mods) Ast.Module.module_body;
 }
 
 type ('directives, 'mods) group =
   t -> Ast.ParserClause.t FT.t -> ('directives, 'mods) output
 
-let map_clauses f o = { o with clauses = f o.clauses }
-
-let merge :
-    'directives 'mods.
-    ('directives, 'mods) output ->
-    ('directives, 'mods) output ->
-    ('directives, 'mods) output =
- fun l r ->
-  {
-    dependencies = DependencyGraph.merge l.dependencies r.dependencies;
-    clauses = BatFingerTree.append l.clauses r.clauses;
-  }
-
-let fold_map :
-    'directives 'mods.
-    DependencyGraph.t ->
-    (Ast.ParserClause.t FT.t -> ('directives, 'mods) output) ->
-    Ast.ParserClause.t FT.t FT.t ->
-    ('directives, 'mods) output =
- fun dependencies f grouped_clauses ->
-  FT.fold_left
-    (fun acc elem -> merge acc @@ f elem)
-    { dependencies; clauses = BatFingerTree.empty }
-    grouped_clauses
+let map_module f o = { o with module_ = f o.module_ }
 
 module type PREPROCESSOR_CONFIG = sig
   type directives
   type mods
 
-  val preprocess_clause :
+  val initial_mods : unit -> mods
+
+  val preprocess_directive :
     (directives, mods) group ->
     t ->
-    Ast.ParserClause.t ->
-    (directives, mods) output
+    Ast.ParserClause.directive ->
+    (directives, mods) one_output
 
-  val renamer : Ast.ParserClause.decl -> Ast.Clause.decl
+  val renamer : Ast.ParserClause.decl -> Ast.Module.decl
 end
 
 module type PREPROCESSOR = sig
@@ -183,41 +169,117 @@ module Make (Config : PREPROCESSOR_CONFIG) :
     with type mods = Config.mods = struct
   include Config
 
-  let from_declaration (clause : Ast.ParserClause.t) :
-      Ast.Clause.decl Location.with_location =
-    match clause with
-    | { content = Declaration decl; loc } ->
-        { content = Config.renamer decl; loc }
-    | _ ->
-        Logger.simply_unreachable "unreachable from_declaration";
-        exit 1
-
-  let rec preprocess_clauses ({ dependencies; _ } as preprocessor : t)
+  let rec preprocess_clauses ({ dependencies; filename } : t)
       (clauses : Ast.ParserClause.t FT.t) =
-    let multi_mapper (group : Ast.ParserClause.t FT.t) =
-      match FT.front group with
-      | Some (remaining, single) when remaining = FT.empty ->
-          Config.preprocess_clause preprocess_clauses preprocessor single
-      | Some (many, { content = Declaration first; loc }) ->
+    let split ({ dependencies; module_ } : (directives, mods) output)
+        (parser_clause : Ast.ParserClause.t) : (directives, mods) output =
+      let open Location in
+      let { loc; content } = parser_clause in
+      match content with
+      | QueryConjunction calls when module_.query = None ->
+          let open Ast in
+          let folder set call =
+            S.union set (find_variables @@ Expr.Functor (strip_loc call))
+          in
+          let variables = FT.fold_left folder S.empty calls in
+          let list_variables = FT.of_list @@ S.to_list variables in
+          let query_name = "" in
+          let head : Expr.func =
+            {
+              name = (FT.empty, { content = query_name; loc });
+              elements =
+                FT.map
+                  (fun var -> { content = Expr.Variable var; loc })
+                  list_variables;
+            }
+          in
+          let fake_decl : ParserClause.decl = { head; body = calls } in
+          let declaration_body =
+            ({ content = renamer fake_decl; loc }, FT.empty)
+          in
+          let query : Module.query_ref with_location =
+            { content = { name = query_name; args = list_variables }; loc }
+          in
           {
             dependencies;
-            clauses =
-              FT.singleton
-                {
-                  Location.content =
-                    Ast.Clause.MultiDeclaration
-                      ( decl_header first,
-                        Config.renamer first,
-                        FT.map from_declaration many );
-                  loc;
-                };
+            module_ =
+              {
+                module_ with
+                query = Some query;
+                declarations =
+                  BatMap.add (decl_header fake_decl) declaration_body
+                    module_.declarations;
+              };
           }
-      | _ ->
-          Logger.simply_unreachable "unreachable group";
+      | QueryConjunction _ ->
+          Logger.error loc "Modules can have at most one query";
+          Logger.error (Option.get module_.query).loc "First query here";
           exit 1
+      | Declaration decl ->
+          let renamed = { loc; content = renamer decl } in
+          {
+            dependencies;
+            module_ =
+              {
+                module_ with
+                declarations =
+                  BatMap.modify_opt (decl_header decl)
+                    (function
+                      | None -> Some (renamed, FT.empty)
+                      | Some (first, others) ->
+                          Some (first, FT.snoc others renamed))
+                    module_.declarations;
+              };
+          }
+      | Directive (({ loc; content = header }, _bodies) as directive) -> (
+          if Ast.Expr.match_func header [ "module" ] then failwith "TODO"
+          else if Ast.Expr.match_func header [ "signature" ] then
+            failwith "TODO"
+          else
+            match
+              Config.preprocess_directive preprocess_clauses
+                { dependencies; filename } directive
+            with
+            | Directive directive ->
+                {
+                  dependencies;
+                  module_ =
+                    {
+                      module_ with
+                      directives =
+                        FT.snoc module_.directives
+                        @@ Location.add_loc directive loc;
+                    };
+                }
+            | TargetSpecific { dependencies = dependency_set; update } ->
+                {
+                  dependencies =
+                    BatMap.String.add module_.name.content dependency_set
+                      dependencies;
+                  module_ =
+                    {
+                      module_ with
+                      target_specific = update module_.target_specific;
+                    };
+                })
     in
     clauses
     |> FT.filter_map remove_comments
-    |> FT.map check_empty_heads |> FT.group compare_clauses
-    |> fold_map preprocessor.dependencies multi_mapper
+    |> FT.map check_empty_heads
+    |> FT.fold_left split
+         {
+           dependencies;
+           module_ =
+             {
+               name =
+                 Location.add_loc
+                   (ModuleName.of_filepath filename)
+                   Location.dummy;
+               signature = None;
+               declarations = BatMap.empty;
+               directives = FT.empty;
+               target_specific = Config.initial_mods ();
+               query = None;
+             };
+         }
 end

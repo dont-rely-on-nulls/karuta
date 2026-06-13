@@ -162,7 +162,7 @@ let rec ascribe_to_module
 
 let rec compile_nested : type a mods directive.
     Location.location ->
-    (directive, mods) Ast.Clause.signature_body ->
+    (directive, mods) Ast.Module.signature_body ->
     a t ->
     Compiler.sig_scope ->
     compiled_signature Location.with_location =
@@ -175,10 +175,10 @@ let rec compile_nested : type a mods directive.
   in
   let module Lookup = (val compiler.lookup) in
   let declaration_step (acc : Compiler.predicate_name Set.t)
-      (next : Ast.Clause.multi_declaration Location.with_location) :
+      (next : Ast.Module.multi_declaration Location.with_location) :
       Compiler.predicate_name Set.t =
     let predicate_happy_case (head : predicate_name) = Set.add head acc in
-    let head, { Ast.Clause.original_arg_list; body }, remaining =
+    let head, { Ast.Module.original_arg_list; body }, remaining =
       next.content
     in
     match FT.front remaining with
@@ -205,7 +205,7 @@ let rec compile_nested : type a mods directive.
         exit 1
   in
   let directive_step (acc : compiled_signature)
-      (next : (directive, mods) Ast.Clause.directive Location.with_location) =
+      (next : (directive, mods) Ast.Module.directive Location.with_location) =
     let signature_happy_case (comptime_name : string)
         (definition : signature Location.with_location) =
       {
@@ -268,7 +268,7 @@ let rec compile_nested : type a mods directive.
           _;
         }
       when FT.is_empty directives && FT.is_empty declarations
-           && Ast.Clause.signature_populated inline_signature -> (
+           && Ast.Module.signature_populated inline_signature -> (
         match BatMap.String.find_opt atom_module_name modules with
         | Some existing ->
             Logger.error loc "Failed to define module within a signature";
@@ -311,7 +311,7 @@ let rec compile_nested : type a mods directive.
 
 and compile : type a mods directive.
     Location.location ->
-    (directive, mods) Ast.Clause.signature_body ->
+    (directive, mods) Ast.Module.signature_body ->
     a t ->
     compiled_signature Location.with_location =
  fun loc body compiler ->

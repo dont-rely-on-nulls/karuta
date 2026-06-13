@@ -11,11 +11,17 @@ end
 
 type head = { name : string; arity : int } [@@deriving show, ord]
 
-module ClauseF (Expr : EXPR) = struct
-  type multi_declaration = head * decl * decl Location.with_location FT.t
+module ModuleF (Expr : EXPR) = struct
+  type multi_declaration_env =
+    ( head,
+      decl Location.with_location * decl Location.with_location FT.t )
+    BatMap.t
+
+  and declaration_env = (head, decl Location.with_location) BatMap.t
+  and query_ref = { name : string; args : string FT.t }
 
   and ('directives, 'mods) signature_body = {
-    declarations : multi_declaration Location.with_location FT.t;
+    declarations : declaration_env;
     directives : ('directives, 'mods) directive Location.with_location FT.t;
   }
 
@@ -24,33 +30,32 @@ module ClauseF (Expr : EXPR) = struct
     | Inlined of ('directives, 'mods) signature_body
 
   and ('directives, 'mods) directive =
-    | Module of {
-        name : string Location.with_location;
-        signature : ('directives, 'mods) signature_ref option;
-        declarations : multi_declaration Location.with_location FT.t;
-        directives : ('directives, 'mods) directive Location.with_location FT.t;
-        target_specific : 'mods;
-      }
+    | Module of ('directives, 'mods) module_body
     | Signature of {
         name : string Location.with_location;
         body : ('directives, 'mods) signature_body;
       }
     | TargetSpecific of 'directives
 
-  and ('directives, 'mods) base =
-    | MultiDeclaration of multi_declaration
-    | Query of { name : string; args : string FT.t }
-    | Directive of ('directives, 'mods) directive
+  and ('directives, 'mods) module_body = {
+    name : string Location.with_location;
+    signature : ('directives, 'mods) signature_ref option;
+    declarations : multi_declaration_env;
+    directives : ('directives, 'mods) directive Location.with_location FT.t;
+    target_specific : 'mods;
+    query : query_ref Location.with_location option;
+  }
 
   and decl = {
     body : Expr.func Location.with_location FT.t;
     original_arg_list : Expr.t FT.t;
   }
 
-  and ('directives, 'mods) t = ('directives, 'mods) base Location.with_location
+  and ('directives, 'mods) t =
+    ('directives, 'mods) module_body Location.with_location
 
   let signature_populated (s : ('directives, 'mods) signature_body) : bool =
-    not (FT.is_empty s.directives && FT.is_empty s.declarations)
+    not (FT.is_empty s.directives && BatMap.is_empty s.declarations)
 end
 
 module Expr = struct
@@ -200,5 +205,5 @@ module ParserClauseF (Expr : EXPR) = struct
     | _ -> false
 end
 
-module Clause = ClauseF (Expr)
+module Module = ModuleF (Expr)
 module ParserClause = ParserClauseF (Expr)

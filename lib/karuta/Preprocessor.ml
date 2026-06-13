@@ -17,7 +17,7 @@ let rename_arg ({ loc; _ } as expr : Ast.Expr.t) (counter : int) :
   }
 
 let renamer ({ head = { elements; _ }; body } : Ast.ParserClause.decl) :
-    Ast.Clause.decl =
+    Ast.Module.decl =
   let arity = FT.size elements in
   let _, new_body =
     FT.fold_right
@@ -76,7 +76,7 @@ let preprocess_clause :
       (*     FT.singleton *)
       (*       { *)
       (*         content = *)
-      (*           Ast.Clause.Directive *)
+      (*           Ast.Module.Directive *)
       (*             (target_specific_directive head grouped_clauses loc); *)
       (*         loc; *)
       (*       }; *)
@@ -88,7 +88,7 @@ let preprocess_clause :
           FT.singleton
             {
               content =
-                Ast.Clause.MultiDeclaration
+                Ast.Module.MultiDeclaration
                   (decl_header decl, renamer decl, FT.empty);
               loc;
             };
@@ -113,7 +113,7 @@ let preprocess_clause :
       let declaration =
         {
           content =
-            Ast.Clause.MultiDeclaration
+            Ast.Module.MultiDeclaration
               (decl_header fake_decl, renamer fake_decl, FT.empty);
           loc;
         }
@@ -121,7 +121,7 @@ let preprocess_clause :
       let query =
         {
           content =
-            Ast.Clause.Query { name = query_name; args = list_variables };
+            Ast.Module.Query { name = query_name; args = list_variables };
           loc;
         }
       in

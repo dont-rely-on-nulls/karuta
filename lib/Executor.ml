@@ -20,7 +20,7 @@ let parse : string -> Ast.ParserClause.t FT.t attempt = function
 (*       Some (compiler, computer) *)
 
 type ('directives, 'mods) preprocessed_files =
-  ('directives, 'mods) Ast.Clause.t BatFingerTree.t BatMap.String.t
+  ('directives, 'mods) Ast.Module.t BatFingerTree.t BatMap.String.t
 
 type ('directives, 'mods) preprocessed_result =
   Shared.DependencyGraph.t * ('directives, 'mods) preprocessed_files

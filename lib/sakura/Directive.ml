@@ -30,9 +30,9 @@ let forbid_nested prefix directive_loc =
      exit 1)
 
 let compile (directive_loc : Location.location)
-    (directive : (Types.directives, Types.mods) Ast.Clause.directive)
+    (directive : (Types.directives, Types.mods) Ast.Module.directive)
     (step :
-      (Types.directives, Types.mods) Ast.Clause.t FT.t * Types.state t ->
+      (Types.directives, Types.mods) Ast.Module.t FT.t * Types.state t ->
       Types.state t)
     ({ env = { modules = _; _ } as _env; state; _ } as compiler : Types.state t)
     (initialize_nested : Types.state Shared.Compiler.initialize_nested) :

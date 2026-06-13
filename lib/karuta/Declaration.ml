@@ -26,14 +26,14 @@ let call_with_fresh (name : string) expr =
 
 let compile_declaration_bodies
     ({ module_name; state; _ } : state Shared.Compiler.t)
-    (clauses : Ast.Clause.decl Location.with_location FT.t) =
+    (clauses : Ast.Module.decl Location.with_location FT.t) =
   if FT.is_empty clauses then (
     Logger.simply_unreachable "Predicates must have at least one body";
     exit 1)
   else
     let open Beam in
     let compile_single_body
-        ({ content; _ } : Ast.Clause.decl Location.with_location) :
+        ({ content; _ } : Ast.Module.decl Location.with_location) :
         Builder.Expr.t =
       let find_variables call =
         Shared.Preprocessor.find_variables (Functor call)
@@ -97,8 +97,8 @@ let compile_declaration_bodies
 let compile_multi
     (({ name; arity }, first_clause, remaining_clauses) :
       Ast.head
-      * Ast.Clause.decl Location.with_location
-      * Ast.Clause.decl Location.with_location FT.t)
+      * Ast.Module.decl Location.with_location
+      * Ast.Module.decl Location.with_location FT.t)
     ({ env; _ } as compiler : state Shared.Compiler.t) : state Shared.Compiler.t
     =
   let declaration =
