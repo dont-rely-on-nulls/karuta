@@ -3,7 +3,7 @@ open Shared.Preprocessor
 
 let is_sakura_file filepath = Filename.extension filepath = ".skr"
 
-let renamer : Ast.ParserClause.decl -> Ast.Clause.decl =
+let renamer : Ast.ParserClause.decl -> Ast.Module.decl =
  fun _ -> failwith "TODO: Sakura renamer"
 
 let validate_top_level (clause : Ast.ParserClause.t) : Ast.ParserClause.t =

@@ -12,7 +12,12 @@ end
 type head = { name : string; arity : int } [@@deriving show, ord]
 
 module ModuleF (Expr : EXPR) = struct
-  type multi_declaration_env =
+  type declaration = head * decl Location.with_location
+
+  and multi_declaration =
+    head * (decl Location.with_location * decl Location.with_location FT.t)
+
+  and multi_declaration_env =
     ( head,
       decl Location.with_location * decl Location.with_location FT.t )
     BatMap.t

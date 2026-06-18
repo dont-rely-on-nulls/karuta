@@ -120,17 +120,22 @@ type 'state t = {
   lookup : (module LOOKUP with type t = 'state t);
 }
 
-type initialization = {
+type 'mods initialization = {
   persist : Persist.t;
   filename : string;
   externals : comptime env;
+  mods : 'mods;
 }
 
-type 'a initialize_nested = initialization -> 'a t option -> string -> 'a t
+type ('state, 'mods) initialize_nested =
+  'mods initialization -> 'state t option -> string -> 'state t
+
+type ('state, 'directives, 'mods) step =
+  ('directives, 'mods) Ast.Module.module_body * 'state t -> 'state t
 
 type ('state, 'directives, 'mods) runner = {
-  step : ('directives, 'mods) Ast.Module.t FT.t * 'state t -> 'state t;
-  initialize_nested : 'state initialize_nested;
+  step : ('state, 'directives, 'mods) step;
+  initialize_nested : ('state, 'mods) initialize_nested;
 }
 
 module type COMPILER_CONFIG = sig
@@ -138,13 +143,24 @@ module type COMPILER_CONFIG = sig
   type mods
   type state
 
-  val initial_state : unit -> state
+  val initial_state : mods -> state
+  val merge_state : mods -> state -> state
 
-  val compile_clause :
-    (state, directives, mods) runner ->
-    (directives, mods) Ast.Module.t ->
+  val compile_declaration :
+    Ast.head ->
+    Ast.Module.decl Location.with_location
+    * Ast.Module.decl Location.with_location FT.t ->
     state t ->
     state t
+
+  val compile_directive :
+    (state, directives, mods) runner ->
+    state t ->
+    (directives, mods) Ast.Module.directive Location.with_location ->
+    state t
+
+  val compile_query :
+    Ast.Module.query_ref Location.with_location option -> state t -> state t
 
   module Lookup : LOOKUP with type t = state t
 
@@ -166,12 +182,12 @@ module type COMPILER = sig
 
   val compile_files :
     Persist.both ->
-    (directives, mods) Ast.Module.t FT.t BatMap.String.t ->
+    (directives, mods) Ast.Module.module_body BatMap.String.t ->
     comptime env ->
     string FT.t ->
     comptime env
 
-  val initialize : initialization -> state t
+  val initialize : mods initialization -> state t
 end
 
 module Make (Config : COMPILER_CONFIG) :
@@ -183,12 +199,14 @@ module Make (Config : COMPILER_CONFIG) :
   type directives = Config.directives
   type mods = Config.mods
 
-  let initialize_nested ({ persist; filename; externals } : initialization)
-      parent module_name : Config.state t =
+  let initialize_nested
+      ({ persist; filename; externals; mods } : mods initialization) parent
+      module_name : Config.state t =
     {
       state =
-        Option.fold ~none:(Config.initial_state ())
-          ~some:(fun p -> p.state)
+        Option.fold
+          ~none:(Config.initial_state mods)
+          ~some:(fun p -> Config.merge_state mods p.state)
           parent;
       parent;
       externals;
@@ -213,41 +231,41 @@ module Make (Config : COMPILER_CONFIG) :
       lookup = (module Config.Lookup);
     }
 
-  let initialize ({ filename; _ } as init : initialization) : Config.state t =
+  let initialize ({ filename; _ } as init : mods initialization) :
+      Config.state t =
     let module_name = ModuleName.of_filepath filename in
     initialize_nested init None module_name
 
-  let rec step :
-      (Config.directives, Config.mods) Ast.Module.t FT.t * Config.state t ->
-      Config.state t =
-   fun (clauses, compiler) ->
-    match FT.front clauses with
-    | None ->
-        if not @@ FT.is_empty compiler.output then
-          compiler.persist compiler.filename
-            (FT.append compiler.header compiler.output);
-        if Option.is_none compiler.parent then
-          {
-            compiler with
-            externals =
-              BatMap.String.add compiler.module_name
-                (let open Location in
-                 add_loc (Module compiler.env)
-                 @@ double
-                      (* TODO: make the endl actually point to the end of the file *)
-                      {
-                        pos_fname = compiler.filename;
-                        pos_lnum = 1;
-                        pos_bol = 0;
-                        pos_cnum = 1;
-                      })
-                compiler.externals;
-          }
-        else compiler
-    | Some (remaining, clause) ->
-        step
-          ( remaining,
-            Config.compile_clause { initialize_nested; step } clause compiler )
+  let rec step : (Config.state, Config.directives, Config.mods) step =
+   fun ({ declarations; directives; query; _ }, compiler) ->
+    let compiler =
+      FT.fold_left
+        (Config.compile_directive { step; initialize_nested })
+        compiler directives
+      |> BatMap.foldi Config.compile_declaration declarations
+      |> Config.compile_query query
+    in
+    if not @@ FT.is_empty compiler.output then
+      compiler.persist compiler.filename
+        (FT.append compiler.header compiler.output);
+    if Option.is_none compiler.parent then
+      {
+        compiler with
+        externals =
+          BatMap.String.add compiler.module_name
+            (let open Location in
+             add_loc (Module compiler.env)
+             @@ double
+                  (* TODO: make the endl actually point to the end of the file *)
+                  {
+                    pos_fname = compiler.filename;
+                    pos_lnum = 1;
+                    pos_bol = 0;
+                    pos_cnum = 1;
+                  })
+            compiler.externals;
+      }
+    else compiler
 
   let preprocess_clauses =
     let module TargetPreprocessor :
@@ -268,7 +286,12 @@ module Make (Config : COMPILER_CONFIG) :
         (step
            ( body,
              initialize
-               { persist = persist.beam; filename = filepath; externals } ))
+               {
+                 persist = persist.beam;
+                 filename = filepath;
+                 externals;
+                 mods = body.target_specific;
+               } ))
           .externals
 
   let compile_files persist preprocessed_files =

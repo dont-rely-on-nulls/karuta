@@ -31,11 +31,10 @@ let forbid_nested prefix directive_loc =
 
 let compile (directive_loc : Location.location)
     (directive : (Types.directives, Types.mods) Ast.Module.directive)
-    (step :
-      (Types.directives, Types.mods) Ast.Module.t FT.t * Types.state t ->
-      Types.state t)
+    (step : (Types.state, Types.directives, Types.mods) step)
     ({ env = { modules = _; _ } as _env; state; _ } as compiler : Types.state t)
-    (initialize_nested : Types.state Shared.Compiler.initialize_nested) :
+    (initialize_nested :
+      (Types.state, Types.mods) Shared.Compiler.initialize_nested) :
     Types.state t =
   let module Lookup = (val compiler.lookup) in
   match directive with

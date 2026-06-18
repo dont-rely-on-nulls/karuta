@@ -2,21 +2,14 @@ include Types
 module Lookup = Lookup
 module Preprocessor = Preprocessor
 
-let compile
-    ({ step; initialize_nested } :
-      (state, directives, mods) Shared.Compiler.runner)
-    (module_ : (directives, mods) Ast.Module.t)
-    (compiler : state Shared.Compiler.t) : state Shared.Compiler.t =
-  (* TODO: handle location *)
-  match module_.content with
-  | Directive directive ->
-      Directive.compile module_.loc directive step compiler initialize_nested
-  | MultiDeclaration (header, first, rest) ->
-      let open Location in
-      Declaration.compile_multi
-        (header, { content = first; loc = module_.loc }, rest)
-        compiler
-  | Query { name; args } ->
+let compile_directive = Directive.compile
+let compile_declaration = Declaration.compile
+
+let compile_query (query : Ast.Module.query_ref Location.with_location option)
+    compiler =
+  match query with
+  | None -> compiler
+  | Some { Location.loc; content = { name; args } } ->
       let arity = FT.size args in
       (* TODO: undo the hack we did for the WAM with the fake declaration *)
       (match compiler.env.query with

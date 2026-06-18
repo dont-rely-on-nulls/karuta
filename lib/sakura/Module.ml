@@ -2,7 +2,17 @@ include Types
 module Lookup = Lookup
 module Preprocessor = Preprocessor
 
-let compile
+let compile_directive = Directive.compile
+let compile_declaration = Declaration.compile
+
+let compile_query query compiler =
+  match query with
+  | None -> compiler
+  | Some { Location.loc; _ } ->
+      Logger.error loc "Sakura's schemas do not allow queries";
+      exit 1
+
+(* let compile
     ({ step; initialize_nested } :
       (state, directives, mods) Shared.Compiler.runner)
     (module_ : (directives, mods) Ast.Module.t)
@@ -20,3 +30,4 @@ let compile
   | Query _ ->
       Logger.error module_.loc "Sakura's schemas do not allow queries";
       exit 1
+ *)

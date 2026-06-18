@@ -3,52 +3,40 @@ open Compiler
 let create_nested_module_name module_name parent : string =
   parent.module_name ^ ModuleName.separator ^ module_name
 
-let initialize_from_parent (type a) module_name
-    (initialize_nested : a initialize_nested) parent : a t =
-  let inner_module_name = create_nested_module_name module_name parent in
+let initialize_from_parent (type state) (type mods) (type directives)
+    ({ target_specific; name = { content = name; _ }; _ } :
+      (directives, mods) Ast.Module.module_body)
+    (initialize_nested : (state, mods) initialize_nested) parent : state t =
+  let inner_module_name = create_nested_module_name name parent in
   let inner_filename =
-    ModuleName.of_filepath parent.filename ^ "." ^ module_name ^ ".krt"
+    ModuleName.of_filepath parent.filename ^ "." ^ name ^ ".krt"
   in
   initialize_nested
     {
       externals = parent.externals;
       persist = parent.persist;
       filename = inner_filename;
+      mods = target_specific;
     }
     (Some parent) inner_module_name
 
-let create_clause
-    (directives :
-      ('directives, 'mods) Ast.Module.directive Location.with_location FT.t)
-    (declarations : Ast.Module.multi_declaration) :
-    ('directives, 'mods) Ast.Module.t FT.t =
-  let lifted_declarations =
-    FT.map (Location.fmap (fun c -> Ast.Module.MultiDeclaration c)) declarations
-  in
-  let lifted_directives =
-    FT.map (Location.fmap (fun d -> Ast.Module.Directive d)) directives
-  in
-  FT.append lifted_directives lifted_declarations
-
-let rec compile : type a.
+let rec compile : type state mods.
     Location.location ->
-    ('directives, 'mods) Ast.Module.directive ->
-    (('directives, 'mods) Ast.Module.t FT.t * a t -> a t) ->
-    a t ->
-    a Compiler.initialize_nested ->
-    a t =
+    ('directives, mods) Ast.Module.directive ->
+    (state, 'directives, mods) step ->
+    state t ->
+    (state, mods) Compiler.initialize_nested ->
+    state t =
  fun directive_loc directive step
      ({ env = { modules; _ } as env; _ } as compiler) initialize_nested ->
   let module Lookup = (val compiler.lookup) in
   match directive with
   | Module
-      {
-        name = { content = module_name; loc = module_loc } as name;
-        signature = None;
-        declarations;
-        directives;
-        _;
-      } -> (
+      ({
+         name = { content = module_name; loc = module_loc } as name;
+         signature = None;
+         _;
+       } as module_) -> (
       let module_name' = (FT.empty, name) in
       let comptime_value = Lookup.ancestors_of_compiler compiler in
       match Lookup.m0dule comptime_value module_name' with
@@ -59,11 +47,10 @@ let rec compile : type a.
              Modules and signatures share their scope.";
           exit 1
       | `Undefined _ ->
-          let body = create_clause directives declarations in
           let compiled_module =
-            compiler |> initialize_from_parent module_name initialize_nested
+            compiler |> initialize_from_parent module_ initialize_nested
             |> fun c ->
-            step (body, c) |> fun c ->
+            step (module_, c) |> fun c ->
             Location.add_loc (Module c.env) directive_loc
           in
           {
@@ -114,13 +101,11 @@ let rec compile : type a.
             "Take care of non-oks when doing lookups in modules";
           exit 1)
   | Module
-      {
-        name = { content = module_name; loc = module_loc } as name;
-        signature = Some (Named signature_name);
-        declarations;
-        directives;
-        _;
-      } -> (
+      ({
+         name = { content = module_name; loc = module_loc } as name;
+         signature = Some (Named signature_name);
+         _;
+       } as module_) -> (
       let module_name' = (FT.empty, name) in
       let comptime_value = Lookup.ancestors_of_compiler compiler in
       match
@@ -134,11 +119,10 @@ let rec compile : type a.
              Modules and signatures share their scope.";
           exit 1
       | `Undefined _, `Ok signature ->
-          let body = create_clause directives declarations in
           let comptime =
-            compiler |> initialize_from_parent module_name initialize_nested
+            compiler |> initialize_from_parent module_ initialize_nested
             |> fun c ->
-            step (body, c) |> fun c -> Location.add_loc c.env directive_loc
+            step (module_, c) |> fun c -> Location.add_loc c.env directive_loc
           in
           let compiled_module =
             signature
@@ -187,7 +171,7 @@ let rec compile : type a.
               { env with modules = BatMap.String.add name compiled_sig modules };
           })
   | TargetSpecific _ ->
-      let nested_directive =
-        Location.add_loc (Ast.Module.Directive directive) directive_loc
-      in
-      step (FT.singleton nested_directive, compiler)
+      Logger.simply_unreachable
+        "Shared directive compilation should not handle target specific \
+         directives";
+      exit 1

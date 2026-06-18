@@ -167,23 +167,22 @@ let rec compile_nested : type a mods directive.
     Compiler.sig_scope ->
     compiled_signature Location.with_location =
  fun loc body ({ env = { modules; _ }; _ } as compiler) sig_scope ->
-  let all_underscores : Ast.Expr.t FT.t -> bool =
+  let module Lookup = (val compiler.lookup) in
+  (*let all_underscores : Ast.Expr.t FT.t -> bool =
     FT.for_all
     @@ Fun.compose
          (function Ast.Expr.Variable "_" -> true | _ -> false)
          Location.strip_loc
   in
-  let module Lookup = (val compiler.lookup) in
-  let declaration_step (acc : Compiler.predicate_name Set.t)
-      (next : Ast.Module.multi_declaration Location.with_location) :
-      Compiler.predicate_name Set.t =
-    let predicate_happy_case (head : predicate_name) = Set.add head acc in
-    let head, { Ast.Module.original_arg_list; body }, remaining =
-      next.content
+   let declaration_step (acc : Compiler.predicate_name Set.t)
+      (( head,
+         ({ content = { Ast.Module.original_arg_list; body }; loc }, remaining)
+       ) :
+        Ast.Module.declaration) : Compiler.predicate_name Set.t =
+    Set.add head acc
     in
-    match FT.front remaining with
-    | Some (remaining_bodies, second) ->
-        Logger.error next.loc
+     | Some (remaining_bodies, second) ->
+        Logger.error loc
           "You cannot have multiple definitions when declaring a predicate in \
            a signature.";
         Logger.error second.loc "Second definition here.";
@@ -192,18 +191,18 @@ let rec compile_nested : type a mods directive.
           ^ (string_of_int @@ FT.size remaining_bodies)
           ^ " other definitions.";
         exit 1
-    | None when FT.size body = head.arity && all_underscores original_arg_list
+   | None when FT.size body = head.arity && all_underscores original_arg_list
       ->
         predicate_happy_case head
     | None when FT.size body = head.arity ->
-        Logger.warning next.loc
+        Logger.warning loc
           "Types are not supported yet. Ignoring argument types.";
         predicate_happy_case head
     | _ ->
-        Logger.error next.loc
+        Logger.error loc
           "You cannot have a body when declaring a predicate in a signature.";
-        exit 1
-  in
+        exit 1 
+        in *)
   let directive_step (acc : compiled_signature)
       (next : (directive, mods) Ast.Module.directive Location.with_location) =
     let signature_happy_case (comptime_name : string)
@@ -222,7 +221,7 @@ let rec compile_nested : type a mods directive.
           declarations;
           _;
         }
-      when FT.is_empty directives && FT.is_empty declarations -> (
+      when FT.is_empty directives && BatMap.is_empty declarations -> (
         let report_module_as_signature sig_loc module_loc =
           Logger.error sig_loc
             "This name does not actually refer to a signature.";
@@ -267,7 +266,8 @@ let rec compile_nested : type a mods directive.
           declarations;
           _;
         }
-      when FT.is_empty directives && FT.is_empty declarations
+      when FT.is_empty directives
+           && BatMap.is_empty declarations
            && Ast.Module.signature_populated inline_signature -> (
         match BatMap.String.find_opt atom_module_name modules with
         | Some existing ->
@@ -287,12 +287,12 @@ let rec compile_nested : type a mods directive.
         signature_happy_case signature_name
         @@ Location.fmap (fun v -> PlainSignature v) compiled_sig
     | Module { signature = Some (Inlined { declarations; directives }); _ }
-      when FT.is_empty directives && FT.is_empty declarations ->
+      when FT.is_empty directives && BatMap.is_empty declarations ->
         failwith "TODO"
     | Module { signature = None; _ } -> failwith "TODO"
     | Module { directives; _ } when not (FT.is_empty directives) ->
         failwith "TODO"
-    | Module { declarations; _ } when not (FT.is_empty declarations) ->
+    | Module { declarations; _ } when not (BatMap.is_empty declarations) ->
         failwith "TODO"
     | Module { signature = Some _; _ } -> failwith "TODO"
     | TargetSpecific _ ->
@@ -304,7 +304,9 @@ let rec compile_nested : type a mods directive.
     (FT.fold_left directive_step
        {
          modules = BatMap.String.empty;
-         predicates = FT.fold_left declaration_step Set.empty body.declarations;
+         predicates =
+           BatEnum.fold (Fun.flip Set.add) Set.empty
+             (BatMap.keys body.declarations);
        }
        body.directives)
     loc
