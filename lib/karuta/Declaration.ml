@@ -94,10 +94,9 @@ let compile_declaration_bodies
     in
     clauses |> FT.map compile_single_body |> FT.to_list |> Ukanren.disj
 
-let compile_multi
-    (({ name; arity }, first_clause, remaining_clauses) :
-      Ast.head
-      * Ast.Module.decl Location.with_location
+let compile ({ name; arity } : Ast.head)
+    ((first_clause, remaining_clauses) :
+      Ast.Module.decl Location.with_location
       * Ast.Module.decl Location.with_location FT.t)
     ({ env; _ } as compiler : state Shared.Compiler.t) : state Shared.Compiler.t
     =

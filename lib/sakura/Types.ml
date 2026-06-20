@@ -25,10 +25,12 @@ type inner_state = {
 
 type state = inner_state Atomic.t
 
-let initial_state () =
+let init_state () =
   Atomic.make { schemas = BatMap.String.empty; current_directive = None }
 
 type mods = unit
+
+let merge_state (_ : mods) = Fun.id
 
 type directives =
   | Persisted of Ast.Module.multi_declaration_env

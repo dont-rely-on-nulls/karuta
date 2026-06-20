@@ -5,12 +5,10 @@ module Preprocessor = Preprocessor
 let compile_directive = Directive.compile
 let compile_declaration = Declaration.compile
 
-let compile_query query compiler =
-  match query with
-  | None -> compiler
-  | Some { Location.loc; _ } ->
-      Logger.error loc "Sakura's schemas do not allow queries";
-      exit 1
+let compile_query =
+  Logger.simply_unreachable
+    "Compiling a query for Sakura means the its preprocessor is defective";
+  exit 1
 
 (* let compile
     ({ step; initialize_nested } :

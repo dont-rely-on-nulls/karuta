@@ -6,18 +6,12 @@ let compile_directive = Directive.compile
 let compile_declaration = Declaration.compile
 
 let compile_query (query : Ast.Module.query_ref Location.with_location option)
-    compiler =
+    (compiler : state Shared.Compiler.t) =
   match query with
   | None -> compiler
-  | Some { Location.loc; content = { name; args } } ->
+  | Some { loc; content = { name; args } } ->
       let arity = FT.size args in
       (* TODO: undo the hack we did for the WAM with the fake declaration *)
-      (match compiler.env.query with
-      | None -> ()
-      | Some { loc; _ } ->
-          Logger.error module_.loc "A module can have at most one query";
-          Logger.error loc "First query defined here";
-          exit 1);
       let open Beam in
       let declaration =
         let fun_args =
@@ -38,6 +32,6 @@ let compile_query (query : Ast.Module.query_ref Location.with_location option)
         env =
           {
             compiler.env with
-            query = Some (Location.add_loc { Ast.name; arity } module_.loc);
+            query = Some (Location.add_loc { Ast.name; arity } loc);
           };
       }

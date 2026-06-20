@@ -143,7 +143,7 @@ module type COMPILER_CONFIG = sig
   type mods
   type state
 
-  val initial_state : mods -> state
+  val init_state : mods -> state
   val merge_state : mods -> state -> state
 
   val compile_declaration :
@@ -204,8 +204,7 @@ module Make (Config : COMPILER_CONFIG) :
       module_name : Config.state t =
     {
       state =
-        Option.fold
-          ~none:(Config.initial_state mods)
+        Option.fold ~none:(Config.init_state mods)
           ~some:(fun p -> Config.merge_state mods p.state)
           parent;
       parent;

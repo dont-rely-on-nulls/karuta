@@ -34,10 +34,10 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
     FT.partition Sakura.Preprocessor.is_sakura_file @@ FT.of_list filepaths
   in
   let module Sakura : Shared.Compiler.COMPILER =
-    Shared.Compiler.Make (Sakura.Clause)
+    Shared.Compiler.Make (Sakura.Module)
   in
   let module Karuta : Shared.Compiler.COMPILER =
-    Shared.Compiler.Make (Karuta.Clause)
+    Shared.Compiler.Make (Karuta.Module)
   in
   let* initial_dependencies, sakura_modules =
     if FT.is_empty sakura_files then
@@ -59,9 +59,9 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
           |> Error.fold (fun parsed filepath ->
               parse filepath |> Error.map (FT.append parsed))
           |> preprocess sakura_filename
-          ||> fun { dependencies; clauses } ->
+          ||> fun { dependencies; module_ } ->
           Error.ok
-            (dependencies, BatMap.String.singleton sakura_filename clauses)
+            (dependencies, BatMap.String.singleton sakura_filename module_)
   in
   let preprocess_one_karuta acc filepath =
     let open Error in
@@ -69,10 +69,10 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
     let preprocessor =
       { (Shared.Preprocessor.initialize filepath) with dependencies }
     in
-    let* { dependencies; clauses } =
+    let* { dependencies; module_ } =
       filepath |> parse |> Error.map @@ Karuta.preprocess_clauses preprocessor
     in
-    ok (dependencies, BatMap.String.add filepath clauses preprocessed)
+    ok (dependencies, BatMap.String.add filepath module_ preprocessed)
   in
   let* dependency_graph, preprocessed_files =
     FT.fold_left preprocess_one_karuta

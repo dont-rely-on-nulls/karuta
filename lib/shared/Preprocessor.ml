@@ -124,18 +124,15 @@ type t = { filename : string; dependencies : DependencyGraph.t }
 let initialize filename : t = { filename; dependencies = BatMap.String.empty }
 
 type ('directives, 'mods) one_output =
-  | Directive of ('directives, 'mods) Ast.Module.directive
-  | TargetSpecific of {
-      update : 'mods -> 'mods;
-      dependencies : BatSet.String.t;
-    }
+  | TargetSpecificDirective of 'directives
+  | Update of { action : 'mods -> 'mods; dependencies : BatSet.String.t }
 
 type ('directives, 'mods) output = {
   dependencies : DependencyGraph.t;
   module_ : ('directives, 'mods) Ast.Module.module_body;
 }
 
-type ('directives, 'mods) group =
+type ('directives, 'mods) recur =
   t -> Ast.ParserClause.t FT.t -> ('directives, 'mods) output
 
 let map_module f o = { o with module_ = f o.module_ }
@@ -144,13 +141,18 @@ module type PREPROCESSOR_CONFIG = sig
   type directives
   type mods
 
-  val initial_mods : unit -> mods
+  val init_mods : unit -> mods
 
   val preprocess_directive :
-    (directives, mods) group ->
-    t ->
+    (directives, mods) recur ->
     Ast.ParserClause.directive ->
     (directives, mods) one_output
+
+  val preprocess_query :
+    Location.location ->
+    Ast.Expr.func Location.with_location FT.t ->
+    (directives, mods) Ast.Module.module_body ->
+    (directives, mods) Ast.Module.module_body
 
   val renamer : Ast.ParserClause.decl -> Ast.Module.decl
 end
@@ -162,6 +164,18 @@ module type PREPROCESSOR = sig
   val preprocess_clauses :
     t -> Ast.ParserClause.t FT.t -> (directives, mods) output
 end
+
+let preprocess_declaration (decl : Ast.ParserClause.decl Location.with_location)
+    (renamer : Ast.ParserClause.decl -> Ast.Module.decl)
+    (declarations : Ast.Module.multi_declaration_env) :
+    Ast.Module.multi_declaration_env =
+  let open Location in
+  let renamed = { loc = decl.loc; content = renamer decl.content } in
+  BatMap.modify_opt (decl_header decl.content)
+    (function
+      | None -> Some (renamed, FT.empty)
+      | Some (first, others) -> Some (first, FT.snoc others renamed))
+    declarations
 
 module Make (Config : PREPROCESSOR_CONFIG) :
   PREPROCESSOR
@@ -177,57 +191,19 @@ module Make (Config : PREPROCESSOR_CONFIG) :
       let { loc; content } = parser_clause in
       match content with
       | QueryConjunction calls when module_.query = None ->
-          let open Ast in
-          let folder set call =
-            S.union set (find_variables @@ Expr.Functor (strip_loc call))
-          in
-          let variables = FT.fold_left folder S.empty calls in
-          let list_variables = FT.of_list @@ S.to_list variables in
-          let query_name = "" in
-          let head : Expr.func =
-            {
-              name = (FT.empty, { content = query_name; loc });
-              elements =
-                FT.map
-                  (fun var -> { content = Expr.Variable var; loc })
-                  list_variables;
-            }
-          in
-          let fake_decl : ParserClause.decl = { head; body = calls } in
-          let declaration_body =
-            ({ content = renamer fake_decl; loc }, FT.empty)
-          in
-          let query : Module.query_ref with_location =
-            { content = { name = query_name; args = list_variables }; loc }
-          in
-          {
-            dependencies;
-            module_ =
-              {
-                module_ with
-                query = Some query;
-                declarations =
-                  BatMap.add (decl_header fake_decl) declaration_body
-                    module_.declarations;
-              };
-          }
+          { dependencies; module_ = Config.preprocess_query loc calls module_ }
       | QueryConjunction _ ->
           Logger.error loc "Modules can have at most one query";
           Logger.error (Option.get module_.query).loc "First query here";
           exit 1
       | Declaration decl ->
-          let renamed = { loc; content = renamer decl } in
           {
             dependencies;
             module_ =
               {
                 module_ with
                 declarations =
-                  BatMap.modify_opt (decl_header decl)
-                    (function
-                      | None -> Some (renamed, FT.empty)
-                      | Some (first, others) ->
-                          Some (first, FT.snoc others renamed))
+                  preprocess_declaration { content = decl; loc } Config.renamer
                     module_.declarations;
               };
           }
@@ -236,11 +212,8 @@ module Make (Config : PREPROCESSOR_CONFIG) :
           else if Ast.Expr.match_func header [ "signature" ] then
             failwith "TODO"
           else
-            match
-              Config.preprocess_directive preprocess_clauses
-                { dependencies; filename } directive
-            with
-            | Directive directive ->
+            match Config.preprocess_directive preprocess_clauses directive with
+            | TargetSpecificDirective directive ->
                 {
                   dependencies;
                   module_ =
@@ -248,10 +221,11 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                       module_ with
                       directives =
                         FT.snoc module_.directives
-                        @@ Location.add_loc directive loc;
+                        @@ Location.add_loc
+                             (Ast.Module.TargetSpecific directive) loc;
                     };
                 }
-            | TargetSpecific { dependencies = dependency_set; update } ->
+            | Update { dependencies = dependency_set; action } ->
                 {
                   dependencies =
                     BatMap.String.add module_.name.content dependency_set
@@ -259,7 +233,7 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                   module_ =
                     {
                       module_ with
-                      target_specific = update module_.target_specific;
+                      target_specific = action module_.target_specific;
                     };
                 })
     in
@@ -278,7 +252,7 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                signature = None;
                declarations = BatMap.empty;
                directives = FT.empty;
-               target_specific = Config.initial_mods ();
+               target_specific = Config.init_mods ();
                query = None;
              };
          }

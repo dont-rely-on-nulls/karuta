@@ -1,1 +1,1 @@
-let compile _ = failwith "TODO"
+let compile = failwith "TODO"

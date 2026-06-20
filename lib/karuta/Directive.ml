@@ -1,14 +1,13 @@
 open Types
+open Shared.Compiler
 
 let compile :
-    Location.location ->
-    (directives, mods) Ast.Module.directive ->
-    ((directives, mods) Ast.Module.module_body * state Shared.Compiler.t ->
-    state Shared.Compiler.t) ->
-    state Shared.Compiler.t ->
-    (state, mods) Shared.Compiler.initialize_nested ->
-    state Shared.Compiler.t =
- fun directive_loc directive step compiler initialize_nested ->
+    (Types.state, Types.directives, Types.mods) runner ->
+    Types.state t ->
+    (Types.directives, Types.mods) Ast.Module.directive Location.with_location ->
+    Types.state t =
+ fun { step; initialize_nested } compiler
+     { content = directive; loc = directive_loc } ->
   match directive with
   | Ast.Module.Module _ | Ast.Module.Signature _ ->
       Shared.Directive.compile directive_loc directive step compiler
