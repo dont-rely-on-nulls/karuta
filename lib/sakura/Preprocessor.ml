@@ -4,26 +4,16 @@ open Shared.Preprocessor
 let is_sakura_file filepath = Filename.extension filepath = ".skr"
 let init_mods = Fun.id
 
-let renamer : Ast.ParserClause.decl -> Ast.Module.decl =
- fun _ -> failwith "TODO: Sakura renamer"
+let preprocess_declaration
+    ({ loc; _ } : Ast.ParserClause.decl Location.with_location) _ =
+  Logger.error loc "Declarations are only allowed inside Sakura directives";
+  exit 1
 
-let validate_top_level (clause : Ast.ParserClause.t) : Ast.ParserClause.t =
-  let open Ast.ParserClause in
-  let open Location in
-  let is_directive = function
-    | { content = Declaration _; _ } -> false
-    | { content = QueryConjunction _; _ } -> false
-    | { content = Directive _; _ } -> true
-  in
-  if is_directive clause then clause
-  else (
-    Logger.error clause.loc "Found a non-directive in a Sakura file";
-    exit 1)
-
-let preprocess_clause (_group_clauses : (directives, mods) recur)
-    (_preprocessor : t) (_clauses : Ast.ParserClause.t) :
-    (directives, mods) output =
-  failwith "TODO: Sakura preprocess_clause"
+let parser_to_internal (declaration : Ast.ParserClause.decl) :
+    string * Ast.Module.decl =
+  ( Ast.Expr.extract_func_label declaration.head,
+    { body = declaration.body; original_arg_list = declaration.head.elements }
+  )
 
 let preprocess_directive :
     (Types.directives, Types.mods) recur ->
@@ -54,9 +44,10 @@ let preprocess_directive :
                    Logger.error loc "Sakura directives are not nestable";
                    exit 1
                | Declaration decl ->
-                   preprocess_declaration
+                   let name, decl = parser_to_internal decl in
+                   Shared.Preprocessor.group_declaration name
                      (Location.add_loc decl loc)
-                     renamer acc)
+                     acc)
              BatMap.empty body
   in
   TargetSpecificDirective

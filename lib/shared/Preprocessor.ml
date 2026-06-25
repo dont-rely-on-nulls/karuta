@@ -21,9 +21,6 @@ let compare_clauses (c1 : Ast.ParserClause.t) (c2 : Ast.ParserClause.t) : int =
       Ast.Expr.compare_func h1 h2
   | _, _ -> -1
 
-let decl_header ({ head; _ } : Ast.ParserClause.decl) : Ast.head =
-  { name = Ast.Expr.extract_func_label head; arity = FT.size head.elements }
-
 let rec remove_comments (clause : Ast.ParserClause.t) :
     Ast.ParserClause.t option =
   let open Ast in
@@ -143,6 +140,11 @@ module type PREPROCESSOR_CONFIG = sig
 
   val init_mods : unit -> mods
 
+  val preprocess_declaration :
+    Ast.ParserClause.decl Location.with_location ->
+    Ast.Module.multi_declaration_env ->
+    Ast.Module.multi_declaration_env
+
   val preprocess_directive :
     (directives, mods) recur ->
     Ast.ParserClause.directive ->
@@ -153,9 +155,18 @@ module type PREPROCESSOR_CONFIG = sig
     Ast.Expr.func Location.with_location FT.t ->
     (directives, mods) Ast.Module.module_body ->
     (directives, mods) Ast.Module.module_body
-
-  val renamer : Ast.ParserClause.decl -> Ast.Module.decl
 end
+
+let group_declaration (name : string)
+    (decl : Ast.Module.decl Location.with_location)
+    (declarations : Ast.Module.multi_declaration_env) :
+    Ast.Module.multi_declaration_env =
+  BatMap.modify_opt
+    { Ast.name; arity = FT.size decl.content.original_arg_list }
+    (function
+      | None -> Some (decl, FT.empty)
+      | Some (first, others) -> Some (first, FT.snoc others decl))
+    declarations
 
 module type PREPROCESSOR = sig
   type directives
@@ -164,18 +175,6 @@ module type PREPROCESSOR = sig
   val preprocess_clauses :
     t -> Ast.ParserClause.t FT.t -> (directives, mods) output
 end
-
-let preprocess_declaration (decl : Ast.ParserClause.decl Location.with_location)
-    (renamer : Ast.ParserClause.decl -> Ast.Module.decl)
-    (declarations : Ast.Module.multi_declaration_env) :
-    Ast.Module.multi_declaration_env =
-  let open Location in
-  let renamed = { loc = decl.loc; content = renamer decl.content } in
-  BatMap.modify_opt (decl_header decl.content)
-    (function
-      | None -> Some (renamed, FT.empty)
-      | Some (first, others) -> Some (first, FT.snoc others renamed))
-    declarations
 
 module Make (Config : PREPROCESSOR_CONFIG) :
   PREPROCESSOR
@@ -203,7 +202,7 @@ module Make (Config : PREPROCESSOR_CONFIG) :
               {
                 module_ with
                 declarations =
-                  preprocess_declaration { content = decl; loc } Config.renamer
+                  Config.preprocess_declaration { content = decl; loc }
                     module_.declarations;
               };
           }

@@ -216,7 +216,7 @@ let rec compile_nested : type a mods directive.
     | Module
         {
           name = { content = module_name; _ };
-          signature = Some (Named module_signature);
+          signature = Some { content = Named module_signature; _ };
           directives;
           declarations;
           _;
@@ -261,7 +261,7 @@ let rec compile_nested : type a mods directive.
     | Module
         {
           name = { content = atom_module_name; _ };
-          signature = Some (Inlined inline_signature);
+          signature = Some { content = Inlined inline_signature; _ };
           directives;
           declarations;
           _;
@@ -286,15 +286,33 @@ let rec compile_nested : type a mods directive.
         in
         signature_happy_case signature_name
         @@ Location.fmap (fun v -> PlainSignature v) compiled_sig
-    | Module { signature = Some (Inlined { declarations; directives }); _ }
+    | Module
+        {
+          signature =
+            Some
+              { content = Inlined { declarations; directives }; loc = sig_loc };
+          _;
+        }
       when FT.is_empty directives && BatMap.is_empty declarations ->
-        failwith "TODO"
-    | Module { signature = None; _ } -> failwith "TODO"
-    | Module { directives; _ } when not (FT.is_empty directives) ->
-        failwith "TODO"
-    | Module { declarations; _ } when not (BatMap.is_empty declarations) ->
-        failwith "TODO"
-    | Module { signature = Some _; _ } -> failwith "TODO"
+        Logger.error sig_loc
+          "This signature turns your module into a giant unit. Did you forget \
+           to add a body?";
+        exit 1
+    | Module { signature = None; _ } ->
+        Logger.error next.loc
+          "Module declarations in signatures must have a signature.";
+        exit 1
+    | Module { directives; declarations; _ }
+      when (not (FT.is_empty directives)) || not (BatMap.is_empty declarations)
+      ->
+        Logger.error next.loc
+          "Module declarations in signatures cannot have a body.";
+        exit 1
+    | Module { signature = Some _; _ } ->
+        Logger.simply_unreachable
+          "The compiler should have handled all possible combinations for \
+           modules inside signatures at this point.";
+        exit 1
     | TargetSpecific _ ->
         Logger.simply_unreachable
           "Target specific directive should not be handled here";

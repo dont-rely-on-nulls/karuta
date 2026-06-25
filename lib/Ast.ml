@@ -44,7 +44,8 @@ module ModuleF (Expr : EXPR) = struct
 
   and ('directives, 'mods) module_body = {
     name : string Location.with_location;
-    signature : ('directives, 'mods) signature_ref option;
+    signature :
+      ('directives, 'mods) signature_ref Location.with_location option;
     declarations : multi_declaration_env;
     directives : ('directives, 'mods) directive Location.with_location FT.t;
     target_specific : 'mods;

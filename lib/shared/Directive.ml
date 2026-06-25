@@ -64,7 +64,7 @@ let rec compile : type state mods.
   | Module
       ({
          name = { content = module_name; _ } as name;
-         signature = Some (Inlined signature_body);
+         signature = Some { content = Inlined signature_body; _ };
          _;
        } as module_body) -> (
       (* TODO: add locations to each body *)
@@ -103,7 +103,7 @@ let rec compile : type state mods.
   | Module
       ({
          name = { content = module_name; loc = module_loc } as name;
-         signature = Some (Named signature_name);
+         signature = Some { content = Named signature_name; _ };
          _;
        } as module_) -> (
       let module_name' = (FT.empty, name) in

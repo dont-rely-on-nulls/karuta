@@ -32,6 +32,15 @@ let renamer ({ head = { elements; _ }; body } : Ast.ParserClause.decl) :
   in
   { body = new_body; original_arg_list = elements }
 
+let preprocess_declaration (decl : Ast.ParserClause.decl Location.with_location)
+    (declarations : Ast.Module.multi_declaration_env) :
+    Ast.Module.multi_declaration_env =
+  let open Location in
+  let renamed = { loc = decl.loc; content = renamer decl.content } in
+  Shared.Preprocessor.group_declaration
+    (Ast.Expr.extract_func_label decl.content.head)
+    renamed declarations
+
 let preprocess_directive :
     (Types.directives, Types.mods) recur ->
     Ast.ParserClause.directive ->
@@ -93,5 +102,10 @@ let preprocess_query (loc : Location.location)
     module_ with
     query = Some query;
     declarations =
-      BatMap.add (decl_header fake_decl) declaration_body module_.declarations;
+      BatMap.add
+        {
+          Ast.name = Ast.Expr.extract_func_label head;
+          arity = FT.size list_variables;
+        }
+        declaration_body module_.declarations;
   }
