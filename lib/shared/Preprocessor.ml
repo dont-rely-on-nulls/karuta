@@ -40,7 +40,7 @@ let rec remove_comments (clause : Ast.ParserClause.t) :
         {
           content =
             ParserClause.Directive
-              (head, FT.map (FT.filter_map remove_comments) body);
+              (head, FT.map (Location.fmap (FT.filter_map remove_comments)) body);
           loc;
         }
   | { content = Declaration { head; _ }; _ }
@@ -228,7 +228,7 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                 exit 1
             | 1, Some (remaining, body) when FT.size remaining = 0 ->
                 let { dependencies = preprocessed_dependencies; module_ } =
-                  preprocess_clauses { dependencies; filename } body
+                  preprocess_clauses { dependencies; filename } body.content
                 in
                 {
                   dependencies =
@@ -238,11 +238,12 @@ module Make (Config : PREPROCESSOR_CONFIG) :
             | 1, Some (remaining, signature_body) when FT.size remaining = 1 ->
                 let body = FT.head_exn remaining in
                 let { module_ = signature_module; _ } =
-                  preprocess_clauses { dependencies; filename } signature_body
+                  preprocess_clauses { dependencies; filename }
+                    signature_body.content
                 in
                 let { dependencies = body_dependencies; module_ = body_module }
                     =
-                  preprocess_clauses { dependencies; filename } body
+                  preprocess_clauses { dependencies; filename } body.content
                 in
                 {
                   dependencies =
@@ -261,18 +262,20 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                                     .multi_declaration_env_to_declaration_env
                                       signature_module.declarations;
                                   directives = signature_module.directives;
-                                  (* TODO: The location below is wrong, but making it right requires more AST changes *)
                                 })
-                             loc);
+                             signature_body.loc);
                     };
                 }
             | 2, Some (remaining, body) when FT.size remaining = 0 ->
+                let ({ loc = signature_name_loc; _ } as signature_name) =
+                  FT.get header.elements 1
+                in
                 let signature_name =
-                  Ast.Expr.get_functor_label @@ FT.get header.elements 1
+                  Ast.Expr.get_functor_label signature_name
                 in
                 let { dependencies = body_dependencies; module_ = body_module }
                     =
-                  preprocess_clauses { dependencies; filename } body
+                  preprocess_clauses { dependencies; filename } body.content
                 in
                 {
                   dependencies =
@@ -283,10 +286,8 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                       name = module_name;
                       signature =
                         Some
-                          (Location.add_loc
-                             (Ast.Module.Named
-                                (Location.add_loc signature_name loc))
-                             loc);
+                          (Location.add_loc (Ast.Module.Named signature_name)
+                             signature_name_loc);
                     };
                 }
             | 2, Some (remaining, _) when FT.size remaining = 1 ->
@@ -298,12 +299,14 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                 Logger.error loc
                 @@ "Modules can have at most only two bodies and you have "
                 ^ Int.to_string @@ FT.size remaining;
-                (* TODO: fold over the header elements and report all the arguments *)
+                FT.error_all_after 2 remaining "Extra body for module here";
                 exit 1
             | arity, _ ->
                 Logger.error loc
                 @@ "Module directives can handle at most 2 atoms as arguments \
                     and you have " ^ Int.to_string arity;
+                FT.error_all_after 2 header.elements
+                  "Extra module argument here";
                 exit 1)
           else if Ast.Expr.match_func header [ "signature" ] then
             failwith "TODO"

@@ -48,7 +48,7 @@ let preprocess_directive :
                    Shared.Preprocessor.group_declaration name
                      (Location.add_loc decl loc)
                      acc)
-             BatMap.empty body
+             BatMap.empty body.content
   in
   TargetSpecificDirective
     (if Ast.Expr.match_func head.content [ "sakura"; "persisted" ] then

@@ -216,7 +216,9 @@ let rec compile_nested : type a mods directive.
     | Module
         {
           name = { content = module_name; _ };
-          signature = Some { content = Named module_signature; _ };
+          signature =
+            Some
+              { content = Named module_signature; loc = module_signature_loc };
           directives;
           declarations;
           _;
@@ -238,7 +240,7 @@ let rec compile_nested : type a mods directive.
         let module_of_plain payload =
           Location.add_loc (ModuleSignature payload) next.loc
         in
-        let label = module_signature.content in
+        let label = module_signature in
         let scope : Compiler.scope = Lookup.ancestors_of_compiler compiler in
         match
           Lookup.nested_signature
@@ -251,10 +253,10 @@ let rec compile_nested : type a mods directive.
             signature_happy_case module_name module_of_abstract
         | `UnexpectedModule { loc = outer; _ }
         | `Ok { content = ModuleSignature _; loc = outer } ->
-            report_module_as_signature module_signature.loc outer
+            report_module_as_signature module_signature_loc outer
         | `UnexpectedSignature _ -> exit 1
         | `Undefined _ ->
-            Logger.error module_signature.loc
+            Logger.error module_signature_loc
               "Undefined signature name. Remember: the order matters (for now \
                😉).";
             exit 1)

@@ -423,7 +423,8 @@ let rec parser_clause :
 
 and directive :
     'e.
-    ( (Ast.Expr.func Location.with_location * Ast.ParserClause.t FT.t FT.t)
+    ( (Ast.Expr.func Location.with_location
+      * Ast.ParserClause.t FT.t Location.with_location FT.t)
       Location.with_location,
       ([> expr_errors ] as 'e) )
     parser =
@@ -441,13 +442,19 @@ and directive :
         period @&& skip_whitespace_and_comments @&& return
         @@ Location.add_loc (header, bodies) header.loc
 
-and top_level : 'e. (Ast.ParserClause.t FT.t, ([> expr_errors ] as 'e)) parser =
- fun state ->
+and top_level :
+    'e.
+    ( Ast.ParserClause.t FT.t Location.with_location,
+      ([> expr_errors ] as 'e) )
+    parser =
+ fun ({ loc = startl; _ } as state) ->
   state
   |> skip_whitespace_and_comments
      @&& star
            (parser_clause @>> capture
            @@ fun result -> skip_whitespace_and_comments @&& return result)
+     @>> fun (result, ({ loc = endl; _ } as state)) ->
+     Ok (Location.add_loc result { startl; endl }, state)
 
 (* TODO: Change output type of this to be a fingertree *)
 let parse (filepath : string) (source : string) =
@@ -460,7 +467,7 @@ let parse (filepath : string) (source : string) =
        @@ fun file ->
        is_not some (fun () loc -> `ExpectedEOF (file, loc)) @&& return file
   with
-  | Ok (parsed, _) -> parsed
+  | Ok (parsed, _) -> parsed.content
   | Error e ->
       (match e with
       | `ExpectedEOF (_, loc) ->

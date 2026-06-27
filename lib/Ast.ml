@@ -31,7 +31,7 @@ module ModuleF (Expr : EXPR) = struct
   }
 
   and ('directives, 'mods) signature_ref =
-    | Named of Expr.func_label Location.with_location
+    | Named of Expr.func_label
     | Inlined of ('directives, 'mods) signature_body
 
   and ('directives, 'mods) directive =
@@ -208,7 +208,9 @@ module ParserClauseF (Expr : EXPR) = struct
     | QueryConjunction of Expr.func Location.with_location FT.t
     | Directive of directive
 
-  and directive = Expr.func Location.with_location * t FT.t FT.t
+  and directive =
+    Expr.func Location.with_location * t FT.t Location.with_location FT.t
+
   and t = base Location.with_location
   and decl = { head : Expr.func; body : Expr.func Location.with_location FT.t }
 

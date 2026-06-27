@@ -110,7 +110,7 @@ let rec compile : type state mods.
       let comptime_value = Lookup.ancestors_of_compiler compiler in
       match
         ( Lookup.m0dule comptime_value module_name',
-          Lookup.signature comptime_value signature_name.content )
+          Lookup.signature comptime_value signature_name )
       with
       | `Ok { loc; _ }, _ | `UnexpectedSignature loc, _ ->
           Logger.error module_loc "Failed to define module";

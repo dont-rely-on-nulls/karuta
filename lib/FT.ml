@@ -9,6 +9,11 @@ let rec mattch (compare : 'a -> 'a -> bool) (ft : 'a t) (to_compare : 'a list) =
       compare to_match_ft to_match_list
       && mattch compare remaining_ft remaining_list
 
+let error_all_after n (ft : 'a Location.with_location t) msg =
+  let open Location in
+  let _, extras = split_at ft n in
+  iter (fun arg -> Logger.error arg.loc msg) extras
+
 let filter_map (f : 'a -> 'b option) =
   fold_left
     (fun acc elem ->
