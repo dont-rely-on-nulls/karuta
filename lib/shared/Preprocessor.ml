@@ -206,8 +206,105 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                     module_.declarations;
               };
           }
-      | Directive (({ loc; content = header }, _bodies) as directive) -> (
-          if Ast.Expr.match_func header [ "module" ] then failwith "TODO"
+      | Directive (({ loc; content = header }, bodies) as directive) -> (
+          all_atoms header.elements;
+          let arity = FT.size header.elements in
+          if Ast.Expr.match_func header [ "module" ] then (
+            let module_name =
+              match FT.front header.elements with
+              | None ->
+                  Logger.error loc "All modules must be named";
+                  exit 1
+              | Some (_, module_name) ->
+                  Location.add_loc
+                    (Ast.Expr.extract_functor_label module_name)
+                    module_name.loc
+            in
+            match (arity, FT.front bodies) with
+            | _, None ->
+                Logger.error loc
+                  "Expected a module to have at least one body for its \
+                   implementation";
+                exit 1
+            | 1, Some (remaining, body) when FT.size remaining = 0 ->
+                let { dependencies = preprocessed_dependencies; module_ } =
+                  preprocess_clauses { dependencies; filename } body
+                in
+                {
+                  dependencies =
+                    DependencyGraph.merge dependencies preprocessed_dependencies;
+                  module_ = { module_ with name = module_name };
+                }
+            | 1, Some (remaining, signature_body) when FT.size remaining = 1 ->
+                let body = FT.head_exn remaining in
+                let { module_ = signature_module; _ } =
+                  preprocess_clauses { dependencies; filename } signature_body
+                in
+                let { dependencies = body_dependencies; module_ = body_module }
+                    =
+                  preprocess_clauses { dependencies; filename } body
+                in
+                {
+                  dependencies =
+                    DependencyGraph.merge dependencies body_dependencies;
+                  module_ =
+                    {
+                      body_module with
+                      name = module_name;
+                      signature =
+                        Some
+                          (Location.add_loc
+                             (Ast.Module.Inlined
+                                {
+                                  declarations =
+                                    Ast.Module
+                                    .multi_declaration_env_to_declaration_env
+                                      signature_module.declarations;
+                                  directives = signature_module.directives;
+                                  (* TODO: The location below is wrong, but making it right requires more AST changes *)
+                                })
+                             loc);
+                    };
+                }
+            | 2, Some (remaining, body) when FT.size remaining = 0 ->
+                let signature_name =
+                  Ast.Expr.get_functor_label @@ FT.get header.elements 1
+                in
+                let { dependencies = body_dependencies; module_ = body_module }
+                    =
+                  preprocess_clauses { dependencies; filename } body
+                in
+                {
+                  dependencies =
+                    DependencyGraph.merge dependencies body_dependencies;
+                  module_ =
+                    {
+                      body_module with
+                      name = module_name;
+                      signature =
+                        Some
+                          (Location.add_loc
+                             (Ast.Module.Named
+                                (Location.add_loc signature_name loc))
+                             loc);
+                    };
+                }
+            | 2, Some (remaining, _) when FT.size remaining = 1 ->
+                Logger.error loc
+                  "There is a conflict between the provided named signature \
+                   and a provided inline signature. There can be only one!";
+                exit 1
+            | arity, Some (remaining, _) when arity = 1 || arity = 2 ->
+                Logger.error loc
+                @@ "Modules can have at most only two bodies and you have "
+                ^ Int.to_string @@ FT.size remaining;
+                (* TODO: fold over the header elements and report all the arguments *)
+                exit 1
+            | arity, _ ->
+                Logger.error loc
+                @@ "Module directives can handle at most 2 atoms as arguments \
+                    and you have " ^ Int.to_string arity;
+                exit 1)
           else if Ast.Expr.match_func header [ "signature" ] then
             failwith "TODO"
           else

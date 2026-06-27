@@ -62,6 +62,10 @@ module ModuleF (Expr : EXPR) = struct
 
   let signature_populated (s : ('directives, 'mods) signature_body) : bool =
     not (FT.is_empty s.directives && BatMap.is_empty s.declarations)
+
+  let multi_declaration_env_to_declaration_env
+      (multi_declaration_env : multi_declaration_env) : declaration_env =
+    BatMap.map Pair.fst multi_declaration_env
 end
 
 module Expr = struct
@@ -146,6 +150,12 @@ module Expr = struct
     | Some (_, first_segment) ->
         Logger.error first_segment.loc
           "Expected functor to have an unqualified label";
+        exit 1
+
+  let get_functor_label : t -> func_label = function
+    | { content = Functor f; _ } -> f.name
+    | _ ->
+        Logger.simply_error "Trying to get a functor label out of a non-functor";
         exit 1
 
   let extract_functor_label : t -> string = function

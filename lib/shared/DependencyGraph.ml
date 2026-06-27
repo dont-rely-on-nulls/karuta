@@ -9,6 +9,8 @@ let merge =
       | v, None | None, v -> v
       | Some lset, Some rset -> Some (BatSet.String.union lset rset))
 
+let union = List.fold_left merge empty
+
 let add key values graph =
   match BatMap.String.find_opt key graph with
   | None -> BatMap.String.add key values graph
