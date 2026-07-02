@@ -227,13 +227,23 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                    implementation";
                 exit 1
             | 1, Some (remaining, body) when FT.size remaining = 0 ->
-                let { dependencies = preprocessed_dependencies; module_ } =
+                let { dependencies = body_dependencies; module_ = body_module }
+                    =
                   preprocess_clauses { dependencies; filename } body.content
                 in
                 {
                   dependencies =
-                    DependencyGraph.merge dependencies preprocessed_dependencies;
-                  module_ = { module_ with name = module_name };
+                    DependencyGraph.merge dependencies body_dependencies;
+                  module_ =
+                    {
+                      module_ with
+                      directives =
+                        FT.snoc module_.directives
+                        @@ Location.add_loc
+                             (Ast.Module.Module
+                                { body_module with name = module_name })
+                             loc;
+                    };
                 }
             | 1, Some (remaining, signature_body) when FT.size remaining = 1 ->
                 let body = FT.head_exn remaining in
@@ -250,20 +260,29 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                     DependencyGraph.merge dependencies body_dependencies;
                   module_ =
                     {
-                      body_module with
-                      name = module_name;
-                      signature =
-                        Some
-                          (Location.add_loc
-                             (Ast.Module.Inlined
+                      module_ with
+                      directives =
+                        FT.snoc module_.directives
+                        @@ Location.add_loc
+                             (Ast.Module.Module
                                 {
-                                  declarations =
-                                    Ast.Module
-                                    .multi_declaration_env_to_declaration_env
-                                      signature_module.declarations;
-                                  directives = signature_module.directives;
+                                  body_module with
+                                  name = module_name;
+                                  signature =
+                                    Some
+                                      (Location.add_loc
+                                         (Ast.Module.Inlined
+                                            {
+                                              declarations =
+                                                Ast.Module
+                                                .multi_declaration_env_to_declaration_env
+                                                  signature_module.declarations;
+                                              directives =
+                                                signature_module.directives;
+                                            })
+                                         signature_body.loc);
                                 })
-                             signature_body.loc);
+                             loc;
                     };
                 }
             | 2, Some (remaining, body) when FT.size remaining = 0 ->
@@ -282,12 +301,21 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                     DependencyGraph.merge dependencies body_dependencies;
                   module_ =
                     {
-                      body_module with
-                      name = module_name;
-                      signature =
-                        Some
-                          (Location.add_loc (Ast.Module.Named signature_name)
-                             signature_name_loc);
+                      module_ with
+                      directives =
+                        FT.snoc module_.directives
+                        @@ Location.add_loc
+                             (Ast.Module.Module
+                                {
+                                  body_module with
+                                  name = module_name;
+                                  signature =
+                                    Some
+                                      (Location.add_loc
+                                         (Ast.Module.Named signature_name)
+                                         signature_name_loc);
+                                })
+                             loc;
                     };
                 }
             | 2, Some (remaining, _) when FT.size remaining = 1 ->
@@ -295,11 +323,11 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                   "There is a conflict between the provided named signature \
                    and a provided inline signature. There can be only one!";
                 exit 1
-            | arity, Some (remaining, _) when arity = 1 || arity = 2 ->
+            | arity, Some _ when arity = 1 || arity = 2 ->
                 Logger.error loc
                 @@ "Modules can have at most only two bodies and you have "
-                ^ Int.to_string @@ FT.size remaining;
-                FT.error_all_after 2 remaining "Extra body for module here";
+                ^ Int.to_string @@ FT.size bodies;
+                FT.error_all_after 2 bodies "Extra body for module here";
                 exit 1
             | arity, _ ->
                 Logger.error loc
@@ -308,8 +336,62 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                 FT.error_all_after 2 header.elements
                   "Extra module argument here";
                 exit 1)
-          else if Ast.Expr.match_func header [ "signature" ] then
-            failwith "TODO"
+          else if Ast.Expr.match_func header [ "signature" ] then (
+            let signature_name =
+              match FT.front header.elements with
+              | None ->
+                  Logger.error loc "Signature directives must declare a name";
+                  exit 1
+              | Some (_, signature_name) ->
+                  Location.add_loc
+                    (Ast.Expr.extract_functor_label signature_name)
+                    signature_name.loc
+            in
+            match (arity, FT.front bodies) with
+            | _, None ->
+                Logger.error loc "Abstract signatures are not supported yet";
+                (* TODO: implement abstract signatures *)
+                exit 1
+            | 1, Some (remaining, body) when FT.size remaining = 0 ->
+                let { module_ = nested; _ } =
+                  preprocess_clauses { dependencies; filename } body.content
+                in
+                {
+                  dependencies;
+                  module_ =
+                    {
+                      module_ with
+                      directives =
+                        FT.snoc module_.directives
+                        @@ Location.add_loc
+                             (Ast.Module.Signature
+                                {
+                                  name = signature_name;
+                                  body =
+                                    {
+                                      declarations =
+                                        Ast.Module
+                                        .multi_declaration_env_to_declaration_env
+                                          nested.declarations;
+                                      directives = nested.directives;
+                                    };
+                                })
+                             loc;
+                    };
+                }
+            | arity, Some _ when arity = 1 ->
+                Logger.error loc
+                @@ "Signatures can have at most one body and you have "
+                ^ Int.to_string @@ FT.size bodies;
+                FT.error_all_after 1 bodies "Extra body for signature here";
+                exit 1
+            | arity, _ ->
+                Logger.error loc
+                @@ "Signature directives must have exactly one atom as an \
+                    argument and you have " ^ Int.to_string arity;
+                FT.error_all_after 1 header.elements
+                  "Extra signature argument here";
+                exit 1)
           else
             match Config.preprocess_directive preprocess_clauses directive with
             | TargetSpecificDirective directive ->
