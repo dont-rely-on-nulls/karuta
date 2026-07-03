@@ -209,6 +209,28 @@ module Make (Config : PREPROCESSOR_CONFIG) :
       | Directive (({ loc; content = header }, bodies) as directive) -> (
           all_atoms header.elements;
           let arity = FT.size header.elements in
+          let check_for_type_annotations : Ast.ParserClause.t FT.t -> unit =
+           fun clauses ->
+            let all_underscores : Ast.Expr.t FT.t -> bool =
+              FT.for_all
+              @@ Fun.compose
+                   (function Ast.Expr.Variable "_" -> true | _ -> false)
+                   Location.strip_loc
+            in
+            let open Ast.ParserClause in
+            FT.iter
+              (function
+                | {
+                    content =
+                      Ast.ParserClause.Declaration { head = { elements; _ }; _ };
+                    loc;
+                  } ->
+                    if all_underscores elements then
+                      Logger.warning loc
+                        "Types are not supported yet. Ignoring argument types."
+                | _ -> ())
+              clauses
+          in
           if Ast.Expr.match_func header [ "module" ] then (
             let module_name =
               match FT.front header.elements with
@@ -247,6 +269,7 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                 }
             | 1, Some (remaining, signature_body) when FT.size remaining = 1 ->
                 let body = FT.head_exn remaining in
+                check_for_type_annotations signature_body.content;
                 let { module_ = signature_module; _ } =
                   preprocess_clauses { dependencies; filename }
                     signature_body.content
@@ -353,6 +376,7 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                 (* TODO: implement abstract signatures *)
                 exit 1
             | 1, Some (remaining, body) when FT.size remaining = 0 ->
+                check_for_type_annotations body.content;
                 let { module_ = nested; _ } =
                   preprocess_clauses { dependencies; filename } body.content
                 in

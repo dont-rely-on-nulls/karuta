@@ -168,41 +168,6 @@ let rec compile_nested : type a mods directive.
     compiled_signature Location.with_location =
  fun loc body ({ env = { modules; _ }; _ } as compiler) sig_scope ->
   let module Lookup = (val compiler.lookup) in
-  (*let all_underscores : Ast.Expr.t FT.t -> bool =
-    FT.for_all
-    @@ Fun.compose
-         (function Ast.Expr.Variable "_" -> true | _ -> false)
-         Location.strip_loc
-  in
-   let declaration_step (acc : Compiler.predicate_name Set.t)
-      (( head,
-         ({ content = { Ast.Module.original_arg_list; body }; loc }, remaining)
-       ) :
-        Ast.Module.declaration) : Compiler.predicate_name Set.t =
-    Set.add head acc
-    in
-     | Some (remaining_bodies, second) ->
-        Logger.error loc
-          "You cannot have multiple definitions when declaring a predicate in \
-           a signature.";
-        Logger.error second.loc "Second definition here.";
-        if not @@ FT.is_empty remaining_bodies then
-          Logger.simply_error @@ "Plus "
-          ^ (string_of_int @@ FT.size remaining_bodies)
-          ^ " other definitions.";
-        exit 1
-   | None when FT.size body = head.arity && all_underscores original_arg_list
-      ->
-        predicate_happy_case head
-    | None when FT.size body = head.arity ->
-        Logger.warning loc
-          "Types are not supported yet. Ignoring argument types.";
-        predicate_happy_case head
-    | _ ->
-        Logger.error loc
-          "You cannot have a body when declaring a predicate in a signature.";
-        exit 1 
-        in *)
   let directive_step (acc : compiled_signature)
       (next : (directive, mods) Ast.Module.directive Location.with_location) =
     let signature_happy_case (comptime_name : string)
