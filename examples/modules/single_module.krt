@@ -1,6 +1,14 @@
 :- module[first-module] {
   my-nat[A] :- karuta:nat[A].
   :- module[b] {
-    my-eq[A, B] :- karuta:eq[A, B].
+    :- import[whatever].
+    my-eq[A, B] :- whatever:eq[A, B].
   }.
+
+ :- module[c] {
+    :- import[whatever].
+ }.
+
+ % For the future
+ % :- module[w] import[whatever].
 }.

@@ -1,4 +1,4 @@
-open Types
+open Compiler
 
 type 'a nested_env = 'a env BatLazyList.t
 type scope = comptime nested_env
@@ -19,12 +19,12 @@ let (signature_select : signature selector) = function
       `UnexpectedSignature sig_loc
 
 let rec lookup_mod_sig (envs : 'a env BatLazyList.t)
-    (names : string Location.with_location list) (select : 'a selector) =
-  let rec lookup_mod_sig_qualified (rest : string Location.with_location list)
+    (names : string Location.with_location FT.t) (select : 'a selector) =
+  let rec lookup_mod_sig_qualified (rest : string Location.with_location FT.t)
       (value : 'a Location.with_location) =
-    match rest with
-    | [] -> `Ok value
-    | qualifier :: more -> (
+    match FT.front rest with
+    | None -> `Ok value
+    | Some (more, qualifier) -> (
         match select value with
         | `NestedLookup modules -> (
             match BatMap.String.find_opt qualifier.content modules with
@@ -38,11 +38,11 @@ let rec lookup_mod_sig (envs : 'a env BatLazyList.t)
             Logger.error sig_loc "Reference is here";
             unexpected)
   in
-  match names with
-  | [] ->
+  match FT.front names with
+  | None ->
       Logger.simply_unreachable "There should be names in lookup_mod_sig";
       exit 1
-  | first :: rest -> (
+  | Some (rest, first) -> (
       match Lazy.force envs with
       | BatLazyList.Cons (env, parent) -> (
           match BatMap.String.find_opt first.content env with
@@ -60,21 +60,13 @@ let empty_signature : sig_scope = BatLazyList.nil
 let sig_env_to_sig_scope (env : signature env) : sig_scope =
   BatLazyList.of_list [ env ]
 
-let sig_cons (scope : sig_scope) (env : Types.sig_env) : sig_scope =
+let sig_cons (scope : sig_scope) (env : sig_env) : sig_scope =
   BatLazyList.cons env scope
-
-let ancestors_of_compiler (compiler : t) : scope =
-  let open BatLazyList in
-  unfold (Some compiler) (function
-    | None -> None
-    | Some { parent; env; _ } -> Some (env.modules, parent))
 
 let signature (scope : scope)
     ((qualifiers, unqualified_name) : Ast.Expr.func_label) =
   match
-    lookup_mod_sig scope
-      (List.append qualifiers [ unqualified_name ])
-      comptime_select
+    lookup_mod_sig scope (FT.snoc qualifiers unqualified_name) comptime_select
   with
   | `Ok { content = Module m; loc } ->
       Logger.error unqualified_name.loc "Found module instead of signature";
@@ -86,9 +78,7 @@ let signature (scope : scope)
 let m0dule (scope : scope)
     ((qualifiers, unqualified_name) : Ast.Expr.func_label) =
   match
-    lookup_mod_sig scope
-      (List.append qualifiers [ unqualified_name ])
-      comptime_select
+    lookup_mod_sig scope (FT.snoc qualifiers unqualified_name) comptime_select
   with
   | `Ok { content = Module module'; loc } -> `Ok (Location.add_loc module' loc)
   | `Ok { content = Signature _; loc } ->
@@ -102,7 +92,7 @@ let nested_signature (compiled_signatures : sig_scope) (scope : scope)
     ((qualifiers, unqualified_name) as names : Ast.Expr.func_label) =
   match
     lookup_mod_sig compiled_signatures
-      (List.append qualifiers [ unqualified_name ])
+      (FT.snoc qualifiers unqualified_name)
       signature_select
   with
   | `Ok _ as ok -> ok
@@ -119,7 +109,6 @@ let predicate (scope : scope)
       Ast.Expr.func_label) (arity : int) =
   match lookup_mod_sig scope qualifiers comptime_select with
   | `Ok { content = Module comp_module; _ } -> (
-      let open Ast.Clause in
       match PredicateMap.find_opt { name; arity } comp_module.predicates with
       | None ->
           Logger.error loc "Undefined predicate";

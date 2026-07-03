@@ -1,26 +1,12 @@
 open Error
 module Form = Beam.Core.Form (Beam.Core.Erlang)
 
-let parse : string -> Ast.ParserClause.t list attempt = function
+let parse : string -> Ast.ParserClause.t FT.t attempt = function
   | "" -> error Error.EmptyFilepath
   | str ->
       In_channel.with_open_text str @@ fun inc ->
       if in_channel_length inc = 0 then error @@ Error.EmptyFile str
       else ok @@ Parser.parse str (In_channel.input_all inc)
-
-let preprocess (filepath : string) :
-    Ast.ParserClause.t list -> Ast.Clause.t list attempt = function
-  | [] -> error @@ Error.CouldNotPreprocess filepath
-  | decls_queries -> ok @@ Preprocessor.group_clauses decls_queries
-
-let compile' (compiler : Compiler.Types.t) : Ast.Clause.t list -> unit attempt =
-  function
-  | [] ->
-      Logger.simply_unreachable
-        "Compiler error: unreachable when executing compile function.";
-      exit 1
-  | decls_queries ->
-      Compile.step (decls_queries, compiler) |> Fun.const () |> ok
 
 (* let eval ((compiler, computer) : Compiler.t * Machine.t) : *)
 (*     (Compiler.t * Machine.t) option = *)
@@ -33,10 +19,109 @@ let compile' (compiler : Compiler.Types.t) : Ast.Clause.t list -> unit attempt =
 (*       in *)
 (*       Some (compiler, computer) *)
 
-let compile (persist : Compiler.Types.Persist.t) (filepath : string) :
+type ('directives, 'mods) preprocessed_files =
+  ('directives, 'mods) Ast.Module.t BatFingerTree.t BatMap.String.t
+
+type ('directives, 'mods) preprocessed_result =
+  Shared.DependencyGraph.t * ('directives, 'mods) preprocessed_files
+
+(* FIXME: hook up dependency information and sort the file list before compiling *)
+(* TODO: compilation cache *)
+let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
+    (persist : Shared.Compiler.Persist.both) (filepaths : string list) :
     unit attempt =
-  filepath |> parse ||> preprocess filepath
-  ||> compile' (Compiler.Types.initialize persist filepath)
+  let sakura_files, karuta_files =
+    FT.partition Sakura.Preprocessor.is_sakura_file @@ FT.of_list filepaths
+  in
+  let module Sakura : Shared.Compiler.COMPILER =
+    Shared.Compiler.Make (Sakura.Module)
+  in
+  let module Karuta : Shared.Compiler.COMPILER =
+    Shared.Compiler.Make (Karuta.Module)
+  in
+  let* initial_dependencies, sakura_modules =
+    if FT.is_empty sakura_files then
+      Error.ok @@ (Shared.DependencyGraph.empty, BatMap.String.empty)
+    else
+      match sakura with
+      | None ->
+          Logger.simply_error
+            "Tried to compile Sakura files without a configuration";
+          exit 1
+      | Some { root_module; _ } ->
+          let preprocess filepath =
+            Error.map
+            @@ Sakura.preprocess_clauses
+                 (Shared.Preprocessor.initialize filepath)
+          in
+          let sakura_filename = root_module ^ ".skr" in
+          sakura_files
+          |> Error.fold (fun parsed filepath ->
+              parse filepath |> Error.map (FT.append parsed))
+          |> preprocess sakura_filename
+          ||> fun { dependencies; module_ } ->
+          Error.ok
+            (dependencies, BatMap.String.singleton sakura_filename module_)
+  in
+  let preprocess_one_karuta acc filepath =
+    let open Error in
+    let* dependencies, preprocessed = acc in
+    let preprocessor =
+      { (Shared.Preprocessor.initialize filepath) with dependencies }
+    in
+    let* { dependencies; module_ } =
+      filepath |> parse |> Error.map @@ Karuta.preprocess_clauses preprocessor
+    in
+    ok (dependencies, BatMap.String.add filepath module_ preprocessed)
+  in
+  let* dependency_graph, preprocessed_files =
+    FT.fold_left preprocess_one_karuta
+      (ok (initial_dependencies, BatMap.String.empty))
+      karuta_files
+  in
+  let* expanded_graph = Shared.DependencyGraph.expand dependency_graph in
+  let sorted_file_paths =
+    Shared.DependencyGraph.sort expanded_graph karuta_files
+  in
+  let compiled_modules =
+    (match sakura_modules |> BatMap.String.keys |> BatList.of_enum with
+      | [ sakura_path ] ->
+          Sakura.compile_files persist sakura_modules BatMap.String.empty
+          @@ FT.singleton sakura_path
+      | [] -> BatMap.String.empty
+      | _ :: _ ->
+          Logger.simply_unreachable
+            "We always work with a single logical Sakura file";
+          exit 1)
+    |> fun compiled ->
+    Karuta.compile_files persist preprocessed_files compiled sorted_file_paths
+  in
+  match artifact with
+  | Library -> Ok ()
+  | Executable { root_module; filename } -> (
+      let module Map = BatMap.String in
+      match Map.find_opt root_module compiled_modules with
+      | None ->
+          Logger.simply_error
+            "Root module for the executable could not be found";
+          exit 1
+      | Some { content = Signature _; loc } ->
+          Logger.error loc
+            "Expected a module as the entry point but found a signature";
+          exit 1
+      | Some { content = Module { query = None; _ }; loc } ->
+          Logger.error loc "Module does not have a query";
+          exit 1
+      | Some { content = Module { query = Some query; _ }; _ } ->
+          Ok
+            (EntryPoint.emit
+               {
+                 persist = persist.executable;
+                 query = query.content;
+                 sakura;
+                 filename;
+                 root_module;
+               }))
 
 (* let load' filter_fn (filepath : string) : Compiler.t * Machine.t = *)
 (*   filepath |> parse |> List.filter filter_fn |> compile *)

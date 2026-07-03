@@ -1,5 +1,6 @@
-minus[InL, InR, Out] :-
-    neg[InR, MinusInR],
-    plus[InL, MinusInR, Out].
+:- import[plus].
 
-minus[4, -2, Out]?
+minus[InL, InR, Out] :-
+    plus:pluz[InR, Out, InL].
+
+minus[succ[succ[succ[succ[0]]]], succ[0], Out]?
