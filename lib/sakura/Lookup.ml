@@ -1,8 +1,7 @@
 include Shared.Lookup
-include Shared.Compiler
 include Types
 
-type t = Types.state Shared.Compiler.t
+type t = state Shared.Compiler.t
 
 let ancestors_of_compiler (compiler : t) : scope =
   let open BatLazyList in
