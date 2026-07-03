@@ -1,5 +1,3 @@
-(* TODO: Something is wrong with the locations due to the parser. Investigate that. *)
-
 type parser_state = { remaining : BatSubstring.t; loc : Location.t }
 type ('a, 'e) parser = parser_state -> ('a * parser_state, 'e) result
 
@@ -58,20 +56,17 @@ let capture :
     ('b * parser_state, 'e) result =
  fun f (result, state) -> f result state
 
-let star : 'a 'e 'none. ('a, 'e) parser -> ('a BatFingerTree.t, 'none) parser =
+let star : 'a 'e 'none. ('a, 'e) parser -> ('a FT.t, 'none) parser =
  fun p state ->
   state
   |>
   let rec loop acc =
-    ifte p
-      (capture @@ fun elem -> loop (BatFingerTree.snoc acc elem))
-      (return acc)
+    ifte p (capture @@ fun elem -> loop (FT.snoc acc elem)) (return acc)
   in
-  loop BatFingerTree.empty
+  loop FT.empty
 
 let plus p =
-  p @>> capture
-  @@ fun first -> star p @> replace @@ Fun.flip BatFingerTree.cons first
+  p @>> capture @@ fun first -> star p @> replace @@ Fun.flip FT.cons first
 
 open BatSubstring
 
@@ -240,9 +235,9 @@ let list_of :
     separator:(unit, 'e) parser ->
     end_delim:(unit, 'e) parser ->
     ('a, 'e) parser ->
-    ('a BatFingerTree.t, 'e) parser =
+    ('a FT.t, 'e) parser =
  fun ?(allow_trailing = false) ~start_delim ~separator ~end_delim item ->
-  let open BatFingerTree in
+  let open FT in
   let trailing =
     if allow_trailing then maybe separator @&& succeed else succeed
   in
@@ -271,7 +266,6 @@ let func_label :
  fun ({ loc = startl; _ } as state) ->
   state
   |> star (atom @>> capture @@ fun a -> colon @&& return a)
-     @> replace BatFingerTree.to_list
      @>> fun (qualifiers, state) ->
      state
      |> (quoted_atom @|| atom)
@@ -310,7 +304,7 @@ and list : 'e. (Ast.Expr.t, ([> expr_errors ] as 'e)) parser =
     @@ skip_whitespace_and_comments @&& expr
   in
   let build_cons startl endl prefix (tail : Ast.Expr.t) : Ast.Expr.t =
-    BatFingerTree.fold_right
+    FT.fold_right
       (fun acc elem ->
         Location.add_loc
           (Ast.Expr.Cons (elem, acc))
@@ -327,7 +321,7 @@ and list : 'e. (Ast.Expr.t, ([> expr_errors ] as 'e)) parser =
   in
   state
   |> prefix_elements @>> fun (prefix, state) ->
-     if BatFingerTree.is_empty prefix then state |> right_bracket @&& nil startl
+     if FT.is_empty prefix then state |> right_bracket @&& nil startl
      else
        state
        |> ifte pipe
@@ -368,7 +362,7 @@ and func :
           @>> fun (args, ({ loc = endl; _ } as state)) ->
           Ok
             ( Location.add_loc
-                (Ast.Expr.func label.content (BatFingerTree.to_list args))
+                (Ast.Expr.func label.content args)
                 { startl; endl },
               state ))
           (injl (Location.fmap Ast.Expr.atom label) @> Result.ok)
@@ -379,11 +373,11 @@ and func :
 let query :
     'e.
     Ast.Expr.func Location.with_location ->
-    ( Ast.Expr.func Location.with_location list Location.with_location,
+    ( Ast.Expr.func Location.with_location FT.t Location.with_location,
       ([> expr_errors ] as 'e) )
     parser =
  fun first_element ->
-  (ifte question_mark (snd @> return [ first_element ])
+  (ifte question_mark (snd @> return (FT.singleton first_element))
   @@
   let space_comma : (unit, 'e) parser =
     skip_whitespace_and_comments @&& comma
@@ -391,7 +385,7 @@ let query :
   list_of ~start_delim:space_comma ~separator:space_comma
     ~end_delim:(skip_whitespace_and_comments @&& question_mark)
     (skip_whitespace_and_comments @&& func)
-  @> replace @@ BatFingerTree.to_list @> List.cons first_element)
+  @> replace (Fun.flip FT.cons first_element))
   @> replace
   @@ fun l -> Location.add_loc l first_element.loc
 
@@ -406,9 +400,9 @@ let declaration :
      ~separator:(skip_whitespace_and_comments @&& comma)
      ~end_delim:(skip_whitespace_and_comments @&& period)
      (skip_whitespace_and_comments @&& func)
-  @|| period @&& return BatFingerTree.empty)
-  @> replace @@ BatFingerTree.to_list
-  @> fun body -> Location.add_loc { Ast.ParserClause.head; body } loc
+  @|| period @&& return FT.empty)
+  @> replace
+  @@ fun body -> Location.add_loc { Ast.ParserClause.head; body } loc
 
 let rec parser_clause :
     'e. (Ast.ParserClause.t, ([> expr_errors ] as 'e)) parser =
@@ -429,7 +423,8 @@ let rec parser_clause :
 
 and directive :
     'e.
-    ( (Ast.Expr.func Location.with_location * Ast.ParserClause.t list list)
+    ( (Ast.Expr.func Location.with_location
+      * Ast.ParserClause.t FT.t Location.with_location FT.t)
       Location.with_location,
       ([> expr_errors ] as 'e) )
     parser =
@@ -445,16 +440,21 @@ and directive :
         @>> capture
         @@ fun bodies ->
         period @&& skip_whitespace_and_comments @&& return
-        @@ Location.add_loc (header, BatFingerTree.to_list bodies) header.loc
+        @@ Location.add_loc (header, bodies) header.loc
 
-and top_level : 'e. (Ast.ParserClause.t list, ([> expr_errors ] as 'e)) parser =
- fun state ->
+and top_level :
+    'e.
+    ( Ast.ParserClause.t FT.t Location.with_location,
+      ([> expr_errors ] as 'e) )
+    parser =
+ fun ({ loc = startl; _ } as state) ->
   state
   |> skip_whitespace_and_comments
      @&& star
            (parser_clause @>> capture
            @@ fun result -> skip_whitespace_and_comments @&& return result)
-     @> replace @@ BatFingerTree.to_list
+     @>> fun (result, ({ loc = endl; _ } as state)) ->
+     Ok (Location.add_loc result { startl; endl }, state)
 
 (* TODO: Change output type of this to be a fingertree *)
 let parse (filepath : string) (source : string) =
@@ -467,7 +467,7 @@ let parse (filepath : string) (source : string) =
        @@ fun file ->
        is_not some (fun () loc -> `ExpectedEOF (file, loc)) @&& return file
   with
-  | Ok (parsed, _) -> parsed
+  | Ok (parsed, _) -> parsed.content
   | Error e ->
       (match e with
       | `ExpectedEOF (_, loc) ->

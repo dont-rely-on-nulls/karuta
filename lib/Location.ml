@@ -30,3 +30,4 @@ let add p1 p2 v = { content = v; loc = { startl = to_t p1; endl = to_t p2 } }
 let strip_loc (v : 'a with_location) : 'a = v.content
 let add_loc (v : 'a) (loc : location) : 'a with_location = { content = v; loc }
 let double (loc : t) : location = { startl = loc; endl = loc }
+let dummy = double @@ to_t Lexing.dummy_pos
