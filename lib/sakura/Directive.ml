@@ -34,15 +34,14 @@ let compile :
     Types.state t ->
     (Types.directives, Types.mods) Ast.Module.directive Location.with_location ->
     Types.state t =
- fun { step; initialize_nested }
+ fun runner
      ({ env = { modules = _; _ } as _env; state; _ } as compiler :
        Types.state t) { content = directive; loc = directive_loc } ->
   let module Lookup = (val compiler.lookup) in
   match directive with
   | Module _ ->
       forbid_nested "Modules" directive_loc (Atomic.get state).current_directive;
-      Shared.Directive.compile directive_loc directive step compiler
-        initialize_nested
+      Shared.Directive.compile directive_loc directive compiler runner
   | Signature _ ->
       forbid_nested "Signatures" directive_loc
         (Atomic.get state).current_directive;

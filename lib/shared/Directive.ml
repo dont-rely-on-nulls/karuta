@@ -23,12 +23,11 @@ let initialize_from_parent (type state) (type mods) (type directives)
 let rec compile : type state mods.
     Location.location ->
     ('directives, mods) Ast.Module.directive ->
-    (state, 'directives, mods) step ->
     state t ->
-    (state, mods) Compiler.initialize_nested ->
+    (state, 'directives, mods) Compiler.runner ->
     state t =
- fun directive_loc directive step
-     ({ env = { modules; _ } as env; _ } as compiler) initialize_nested ->
+ fun directive_loc directive ({ env = { modules; _ } as env; _ } as compiler)
+     ({ step; initialize_nested } as runner) ->
   let module Lookup = (val compiler.lookup) in
   match directive with
   | Module
@@ -75,8 +74,7 @@ let rec compile : type state mods.
         Ast.Module.Module { module_body with signature = None }
       in
       let ({ env = { modules; _ } as env; _ } as compiler) =
-        compile directive_loc module_without_named_signature step compiler
-          initialize_nested
+        compile directive_loc module_without_named_signature compiler runner
       in
       let module_name' = (FT.empty, name) in
       let comptime_value = Lookup.ancestors_of_compiler compiler in

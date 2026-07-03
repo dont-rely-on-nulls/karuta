@@ -6,12 +6,10 @@ let compile :
     Types.state t ->
     (Types.directives, Types.mods) Ast.Module.directive Location.with_location ->
     Types.state t =
- fun { step; initialize_nested } compiler
-     { content = directive; loc = directive_loc } ->
+ fun runner compiler { content = directive; loc = directive_loc } ->
   match directive with
   | Ast.Module.Module _ | Ast.Module.Signature _ ->
-      Shared.Directive.compile directive_loc directive step compiler
-        initialize_nested
+      Shared.Directive.compile directive_loc directive compiler runner
   | Ast.Module.TargetSpecific (Import import_name) -> (
       let module Lookup = (val compiler.lookup) in
       let module_name' = (FT.empty, import_name) in
