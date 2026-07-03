@@ -22,11 +22,9 @@ let check_extensions (ext : BatSet.String.t) (files : string list) : unit =
   List.iter check_single_extension files
 
 let run : cmd -> unit = function
-  (* TODO: Introduce multiple files to compile subcommand *)
-  | Compile { files; artifact; log_level } ->
+  | Compile { files; artifact; output_path; log_level } ->
       Logger.Level.set_min_level log_level;
       check_extensions (BatSet.String.of_list [ ".krt"; ".skr"; ".pl" ]) files;
-      (* TODO: Make sakura module name as an available CLI option with db being the default *)
       let open Shared.Compiler in
       let options : Options.t =
         Options.initialize
@@ -34,22 +32,19 @@ let run : cmd -> unit = function
             (Some (Options.initialize_sakura ~address:"localhost" ~port:3435 ()))
           ~artifact ()
       in
-      let prefix = "runtime" in
-      let* _ =
-        Executor.compile options
-          {
-            beam =
-              (fun name forms ->
-                Erl.compile prefix name @@ BatFingerTree.to_list forms);
-            executable =
-              (fun name body ->
-                let full_name = prefix ^ "/" ^ name in
-                Out_channel.with_open_text full_name (fun c ->
-                    Out_channel.output_string c body);
-                Unix.chmod full_name 0o755);
-          }
-          files
-      in
-      ()
+      Error.void
+      @@ Executor.compile options
+           {
+             beam =
+               (fun name forms ->
+                 Erl.compile output_path name @@ BatFingerTree.to_list forms);
+             executable =
+               (fun name body ->
+                 let full_name = output_path ^ "/" ^ name in
+                 Out_channel.with_open_text full_name (fun c ->
+                     Out_channel.output_string c body);
+                 Unix.chmod full_name 0o755);
+           }
+           files
 
 let () = exit @@ parse_command_line_and_run run

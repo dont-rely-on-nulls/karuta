@@ -23,6 +23,7 @@ let ok = ok
 let error = error
 let ( ||> ) = bind
 let map = Result.map
+let void (attempt : 'a attempt) : unit = Result.iter (Fun.const ()) attempt
 
 let fold (f : 'b FT.t -> 'a -> 'b FT.t attempt) (elements : 'a FT.t) :
     'b FT.t attempt =
