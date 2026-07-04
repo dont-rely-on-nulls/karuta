@@ -33,6 +33,6 @@ type mods = unit
 let merge_state (_ : mods) = Fun.id
 
 type directives =
-  | Persisted of Ast.Module.multi_declaration_env
+  | Persisted of Ast.Module.declaration_env
   | Ephemeral of Ast.Module.multi_declaration_env
   | Constraint of Ast.Module.multi_declaration_env

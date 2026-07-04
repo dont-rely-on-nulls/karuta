@@ -28,4 +28,4 @@ let query_variable var_name goal : Expr.t =
 let run_lazy (goal : Expr.t) : Expr.t =
   call_with_module (atom "karuta") (atom "run-lazy")
     (* TODO: receive the config as an argument *)
-    [ Expr.Map (Expr.Creation []); goal ]
+    [ Expr.Map (Expr.MapCreation []); goal ]

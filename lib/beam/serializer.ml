@@ -93,7 +93,7 @@ module Expression = struct
             ^ comma_separated_list string_of_clause clauses
             ^ "}")
     | Tuple contents -> string_of_tuple to_string contents
-    | Map (Creation entries) ->
+    | Map (MapCreation entries) ->
         "{map,1,"
         ^ comma_separated_list
             (fun (k, v) ->

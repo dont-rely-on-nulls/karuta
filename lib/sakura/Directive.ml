@@ -56,7 +56,5 @@ let compile :
       Logger.error directive_loc
         "TODO: constraint directive is not yet implemented";
       exit 1
-  | TargetSpecific (Persisted _declarations) ->
-      Logger.error directive_loc
-        "TODO: persisted directive is not yet implemented";
-      exit 1
+  | TargetSpecific (Persisted declarations) ->
+      BatMap.foldi Declaration.compile_persisted declarations compiler

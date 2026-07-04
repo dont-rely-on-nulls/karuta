@@ -52,7 +52,8 @@ let preprocess_directive :
   in
   TargetSpecificDirective
     (if Ast.Expr.match_func head.content [ "sakura"; "persisted" ] then
-       preprocess_bodies (fun env -> Persisted env)
+       preprocess_bodies (fun env ->
+           Persisted (Ast.Module.multi_declaration_env_to_declaration_env env))
      else if Ast.Expr.match_func head.content [ "sakura"; "ephemeral" ] then
        preprocess_bodies (fun env -> Ephemeral env)
      else if Ast.Expr.match_func head.content [ "sakura"; "constraint" ] then
