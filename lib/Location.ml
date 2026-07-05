@@ -17,14 +17,14 @@ type location = {
   startl : t;  (** Beginning of region *)
   endl : t;  (** End of region *)
 }
-(** Source code location. Locations are associated with source code region. *)
+(** Source code location. Locations delimit a source code region. *)
 
 type 'a with_location = {
-  content : 'a;  (** Generic type *)
+  content : 'a;  (** Generic type payload *)
   loc : location;  (** Associated location, with a beginning and end. *)
 }
-(** Parametric type to add location to any other type, although used for types
-    that are associated with source code regions *)
+(** Parametric type to add a location to any other type. Used to indicate the
+    source code region where the payload originated. *)
 
 (** [step n loc] advances offset position by provided amount.
     @param n amount to advance offset.
@@ -98,8 +98,8 @@ let strip_loc (v : 'a with_location) : 'a = v.content
     @return same value as before updated with provided location. *)
 let add_loc (v : 'a) (loc : location) : 'a with_location = { content = v; loc }
 
-(** [double loc] Receive half of a location and create a full (beginning and
-    end) location.
+(** [double loc] Receive half of a location and create a full location by using
+    the argument as both beginning and end.
     @param loc half-location to be used.
     @return full location. *)
 let double (loc : t) : location = { startl = loc; endl = loc }
