@@ -9,7 +9,9 @@ let initialize_from_parent (type state) (type mods) (type directives)
     (initialize_nested : (state, mods) initialize_nested) parent : state t =
   let inner_module_name = create_nested_module_name name parent in
   let inner_filename =
-    ModuleName.of_filepath parent.filename ^ "." ^ name ^ ".krt"
+    ModuleName.of_filepath parent.filename
+    ^ "." ^ name
+    ^ Filename.extension parent.filename
   in
   initialize_nested
     {

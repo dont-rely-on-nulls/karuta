@@ -2,10 +2,14 @@ open Types
 
 let compile _ _ _ = failwith "TODO"
 
+(* let rec swap a f = *)
+(*   let v = Atomic.get a in *)
+(*   if Atomic.compare_and_set a v (f v) then () else swap a f *)
+
 let compile_persisted ({ name; arity } : Ast.head)
     ({ content = { original_arg_list; _ }; _ } :
       Ast.Module.decl Location.with_location)
-    ({ env; module_name; _ } as compiler : state Shared.Compiler.t) :
+    ({ env; module_name; state; _ } as compiler : state Shared.Compiler.t) :
     state Shared.Compiler.t =
   let find_invalid_argument =
     FT.find_opt @@ fun arg ->
@@ -21,12 +25,7 @@ let compile_persisted ({ name; arity } : Ast.head)
          persisted predicate"
       else "Every argument in a Sakura predicate definition must be a variable";
       exit 1);
-  let full_name =
-    BatString.replace_chars
-      (function '.' -> ":" | c -> BatString.of_char c)
-      module_name
-    ^ ":" ^ name
-  in
+  let full_name = BatString.lchop ~n:3 module_name ^ ":" ^ name in
   let declaration =
     let args =
       if arity = 0 then []
@@ -45,7 +44,11 @@ let compile_persisted ({ name; arity } : Ast.head)
              |> BatList.of_enum)
              (List.map Beam.Builder.var args);
            Beam.Builder.list_expr
-             [ Beam.Builder.atom "Base"; Beam.Builder.string full_name ];
+             (* TODO: Multi group namespace needs to be treated at some point *)
+             [
+               Beam.Builder.atom "Base";
+               Beam.Builder.string @@ "sakura:" ^ full_name;
+             ];
          ]
   in
   let export = Beam.Builder.Attribute.export [ (name, arity) ] in

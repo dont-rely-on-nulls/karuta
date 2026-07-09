@@ -15,6 +15,25 @@ let parser_to_internal (declaration : Ast.ParserClause.decl) :
     { body = declaration.body; original_arg_list = declaration.head.elements }
   )
 
+let report_error_cases (directive_loc : Location.location)
+    ((qualifiers, name) :
+      string Location.with_location FT.t * string Location.with_location) : unit
+    =
+  match FT.front qualifiers with
+  | None ->
+      Logger.error directive_loc
+        "Sakura directives should be qualified with a single 'sakura' atom"
+  | Some (remaining, _) when FT.size remaining <> 0 ->
+      Logger.error directive_loc
+        "Sakura directives should be qualified with a single 'sakura' atom"
+  | Some (_, qualifier) when qualifier.content <> "sakura" ->
+      Logger.error qualifier.loc
+        "Sakura directives should be qualified with a single 'sakura' atom"
+  | Some (_, qualifier) ->
+      Logger.error name.loc "Undefined Sakura directive";
+      Logger.simply_error @@ "Available directives are: "
+      ^ Types.formatted_supported_directives
+
 let preprocess_directive :
     (Types.directives, Types.mods) recur ->
     Ast.ParserClause.directive ->
@@ -59,7 +78,7 @@ let preprocess_directive :
      else if Ast.Expr.match_func head.content [ "sakura"; "constraint" ] then
        preprocess_bodies (fun env -> Constraint env)
      else (
-       Logger.error head.loc "Unknown Sakura directive";
+       report_error_cases head.loc head.content.name;
        exit 1))
 
 let preprocess_query (loc : Location.location)
