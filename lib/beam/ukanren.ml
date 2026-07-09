@@ -15,17 +15,6 @@ let disj (goals : Expr.t list) : Expr.t =
 let conj (goals : Expr.t list) : Expr.t =
   call_with_module (atom "karuta") (atom "conj") [ list_expr goals ]
 
-let take_all (stream : Expr.t) : Expr.t =
-  call_with_module (atom "karuta") (atom "take-all") [ stream ]
-
-let start (config : Expr.t) (goal : Expr.t) : Expr.t =
-  call_with_module (atom "karuta") (atom "start") [ config; goal ]
-
 let query_variable var_name goal : Expr.t =
   call_with_module (atom "karuta") (atom "query-variable")
     [ var var_name; atom var_name; goal ]
-
-let run_lazy (goal : Expr.t) : Expr.t =
-  call_with_module (atom "karuta") (atom "run-lazy")
-    (* TODO: receive the config as an argument *)
-    [ Expr.Map (Expr.MapCreation []); goal ]
