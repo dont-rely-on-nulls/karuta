@@ -2,6 +2,9 @@ open Types
 
 let compile _ _ _ = failwith "TODO"
 
+(* TODO: collect names of every declaration in every schema so we can do
+  the check on program initialization. *)
+
 (* let rec swap a f = *)
 (*   let v = Atomic.get a in *)
 (*   if Atomic.compare_and_set a v (f v) then () else swap a f *)
