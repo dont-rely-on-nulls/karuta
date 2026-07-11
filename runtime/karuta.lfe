@@ -125,7 +125,7 @@
     ((andalso (is_reference a) (is_map_key a state)) (unify-variable state a b))
     ((andalso (is_reference b) (is_map_key b state)) (unify-variable state b a))
     ((andalso (is_map a) (is_map b) (== (map_size a) (map_size b)))
-      (unify-map state a b))
+     (unify-map state a b))
     ((andalso (is_tuple a) (is_tuple b) (== (tuple_size a) (tuple_size b)))
       (unify-tuple state (tuple_size a) 1 a b))
     ('true
@@ -163,7 +163,10 @@
    (let* ((timeout-map (maps:get 'db_timeouts config (map)))
           (connect-timeout (maps:get 'connect timeout-map (* 60 1000)))
           (send-timeout (maps:get 'send timeout-map (* 5 1000)))
-          (tcp-opts (list 'binary #(packet 0) (tuple 'send_timeout send-timeout))))
+          (tcp-opts (list 'binary
+                          #(active false)
+                          #(packet 0)
+                          (tuple 'send_timeout send-timeout))))
      (case (gen_tcp:connect address port tcp-opts connect-timeout)
        ((tuple 'ok socket)
         (funcall goal
@@ -223,9 +226,10 @@
   (lambda (state)
     (case (pull results)
       ((tuple 'ok head tail)
-       (funcall (mplus (eq pattern head)
-                       (delay (bind-results pattern tail)))
-                state))
+       (funcall
+         (disj (eq pattern head)
+               (bind-results pattern tail))
+         state))
       ((tuple 'error 'no-result) '()))))
 
 (defun stream-map
