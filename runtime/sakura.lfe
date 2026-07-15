@@ -14,25 +14,28 @@
     (map)
     keyvals))
 
+(defun normalize-attribute-name (kv)
+  (let (((list attribute value) kv))
+    (clj:-> attribute
+      (atom_to_list)
+      (string:titlecase)
+      (list_to_atom)
+      (list value))))
+
+(defun row->map (row)
+  (clj:->> row
+    (lists:map (fun normalize-attribute-name 1))
+    (keyvals->map)))
+
+(defun rows->maps (rows)
+  (lists:map (fun row->map 1) rows))
+
 (defun cursor-sexp->map (cursor)
   (case cursor
     ((cons 'cursor keyvals)
      (maps:update_with
        'rows
-       (lambda (rows)
-         (lists:map
-           (lambda (row)
-             (clj:->> row
-               (lists:map
-                 (lambda (kv)
-                   (let (((list key val) kv))
-                     (clj:-> key
-                       (atom_to_list)
-                       (string:titlecase)
-                       (list_to_atom)
-                       (list val)))))
-               (keyvals->map)))
-           rows))
+       (fun rows->maps 1)
        (list)
        (keyvals->map keyvals)))))
 
