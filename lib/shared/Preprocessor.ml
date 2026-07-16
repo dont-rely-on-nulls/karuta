@@ -212,10 +212,7 @@ module Make (Config : PREPROCESSOR_CONFIG) :
           let check_for_type_annotations : Ast.ParserClause.t FT.t -> unit =
            fun clauses ->
             let all_underscores : Ast.Expr.t FT.t -> bool =
-              FT.for_all
-              @@ Fun.compose
-                   (function Ast.Expr.Variable "_" -> true | _ -> false)
-                   Location.strip_loc
+              FT.for_all Ast.Expr.is_underscore
             in
             let open Ast.ParserClause in
             FT.iter
@@ -225,7 +222,7 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                       Ast.ParserClause.Declaration { head = { elements; _ }; _ };
                     loc;
                   } ->
-                    if all_underscores elements then
+                    if not @@ all_underscores elements then
                       Logger.warning loc
                         "Types are not supported yet. Ignoring argument types."
                 | _ -> ())

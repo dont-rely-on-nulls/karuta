@@ -2,7 +2,9 @@ open Abstract_format
 
 module type ERLANG = sig
   module rec Expr : sig
-    type t =
+    type comprehension = Bitstring of t | List of t | Map of t
+
+    and t =
       | Literal of Primitives.literal
       | Comprehension of comprehension
       | Bitstring of bitstring
@@ -64,7 +66,7 @@ module type ERLANG = sig
     and association_type = Assoc | Exact
 
     and mapp =
-      | Creation of (t * t) list
+      | MapCreation of (t * t) list
       | Update of t * (association_type * t * t) list
 
     and func =
@@ -75,8 +77,6 @@ module type ERLANG = sig
       | Named of (Primitives.variable * Clause.clause list)
       | Call of (t * t list)
       | CallWithModule of (t * t * t list)
-
-    and comprehension = Bitstring of t | List of t | Map of t
 
     and bitstring = {
       value : t;
@@ -262,7 +262,7 @@ module Erlang : ERLANG = struct
     and association_type = Assoc | Exact
 
     and mapp =
-      | Creation of (t * t) list
+      | MapCreation of (t * t) list
       | Update of t * (association_type * t * t) list
 
     and func =
@@ -346,7 +346,7 @@ module Erlang : ERLANG = struct
     and association_type = Assoc | Exact
 
     and mapp =
-      | Creation of (t * t) list
+      | MapCreation of (t * t) list
       | Update of t * (association_type * t * t) list
 
     and func =

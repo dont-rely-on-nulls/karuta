@@ -65,7 +65,20 @@ module ModuleF (Expr : EXPR) = struct
 
   let multi_declaration_env_to_declaration_env
       (multi_declaration_env : multi_declaration_env) : declaration_env =
-    BatMap.map Pair.fst multi_declaration_env
+    BatMap.map
+      (fun (lhs, rhs) ->
+        if FT.is_empty rhs then lhs
+        else (
+          Logger.simply_error
+          @@ "This declaration must have only one body, but you have "
+          ^ string_of_int (FT.size rhs + 1);
+          Logger.error Location.(lhs.loc) "First definition here";
+          FT.iter
+            (fun { Location.loc; _ } ->
+              Logger.error loc "Extra definition here")
+            rhs;
+          exit 1))
+      multi_declaration_env
 end
 
 module Expr = struct
@@ -200,6 +213,15 @@ module Expr = struct
   let is_functor : t -> bool = function
     | { content = Functor _; _ } -> true
     | _ -> false
+
+  let is_variable : t -> bool = function
+    | { content = Variable _; _ } -> true
+    | _ -> false
+
+  let is_underscore : t -> bool =
+    Fun.compose
+      (function Variable "_" -> true | _ -> false)
+      Location.strip_loc
 end
 
 module ParserClauseF (Expr : EXPR) = struct
