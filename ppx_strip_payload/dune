@@ -1,0 +1,7 @@
+(library
+ (name ppx_strip_payload)
+ (kind ppx_rewriter)
+ (public_name karuta.ppx_strip_payload)
+ (preprocess
+  (pps ppxlib.metaquot))
+ (libraries ppxlib))

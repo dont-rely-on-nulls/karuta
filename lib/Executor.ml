@@ -114,7 +114,7 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
           exit 1
       | Some { content = Module { query = Some query; _ }; _ } ->
           Ok
-            (EntryPoint.emit
+            (Executable.emit
                {
                  persist = persist.executable;
                  query = query.content;

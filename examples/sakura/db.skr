@@ -1,0 +1,6 @@
+:- module[public] {
+  :- sakura:persisted {
+    relation[Name].
+    attribute[Relation_name, Attr_name, Domain_name].
+  }.
+}.

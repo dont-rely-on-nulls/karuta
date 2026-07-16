@@ -26,6 +26,7 @@ let pattern_nil = pattern_literal Primitives.Nil
 let call f args = Expr.Fun (Expr.Call (f, args))
 let call_with_module m f args = Expr.Fun (Expr.CallWithModule (m, f, args))
 let function_declaration name arity clauses = Function { name; arity; clauses }
+let map keys vals = Expr.Map (Expr.MapCreation (BatList.combine keys vals))
 
 let single_function_declaration name args expr =
   Function

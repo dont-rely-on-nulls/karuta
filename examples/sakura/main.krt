@@ -1,0 +1,3 @@
+:- import[db].
+
+db:public:attribute['public:function_predicate', Attr, Domain]?
