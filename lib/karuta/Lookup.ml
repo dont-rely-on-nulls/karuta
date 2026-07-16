@@ -3,6 +3,19 @@ include Shared.Lookup
 
 type t = state Shared.Compiler.t
 
+let rec print_module out externals =
+  BatMap.String.print BatInnerIO.write_string
+    (fun out { Location.content; _ } ->
+      match content with
+      | Shared.Compiler.Module { modules; predicates; _ } ->
+          print_module out modules;
+          Shared.Compiler.PredicateMap.print ~first:"|" ~last:"|"
+            (fun out h -> BatInnerIO.write_string out (Ast.show_head h))
+            (fun out _ -> BatInnerIO.write_string out "()")
+            out predicates
+      | Signature _ -> BatInnerIO.write_string out "<Sig>")
+    BatInnerIO.stderr externals
+
 let ancestors_of_compiler (compiler : t) : Shared.Compiler.scope =
   let open struct
     type ancestors_of_compiler =
@@ -16,6 +29,10 @@ let ancestors_of_compiler (compiler : t) : Shared.Compiler.scope =
     | Imports imports -> Some (imports, End)
     | Compiler { parent; env; state; externals; _ } ->
         let imports = state.imports in
+        (* BatMap.String.print BatInnerIO.write_string
+          (fun out _ -> BatInnerIO.write_string out "<Loc>")
+          BatInnerIO.stderr imports; *)
+        print_module BatInnerIO.stderr externals;
         Some
           ( env.modules,
             Option.fold
