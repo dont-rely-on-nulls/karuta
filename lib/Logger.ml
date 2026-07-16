@@ -1,10 +1,6 @@
 module Level = struct
   type t = Debug | Info | Warning | Error | Unreachable
   [@@deriving ord, enumerate, show]
-
-  let min_t : t ref = ref Debug
-  let set_min_level level = min_t := level
-  let should_log level = compare level !min_t >= 0
 end
 
 module type OUTPUT = sig
@@ -26,6 +22,14 @@ end
 
 module Make (Output : OUTPUT) = struct
   open Level
+
+  let current_min_level = External.Dynvar.dnew ~init:Debug ()
+
+  let with_min_level : 'a. Level.t -> (unit -> 'a) -> 'a =
+   fun level -> External.Dynvar.dlet current_min_level level
+
+  let should_log level =
+    Level.compare level (External.Dynvar.dref current_min_level) >= 0
 
   let unreachable_suffix =
     "This is a compiler bug. Please report it in \
@@ -176,11 +180,6 @@ module Terminal = Make (
   end :
     OUTPUT)
 
-type kind = Terminal | Server
-
-let current_kind = ref Terminal
-let set kind = current_kind := kind
-
 module type API = sig
   val error : Location.location -> string -> unit
   val simply_error : string -> unit
@@ -190,51 +189,52 @@ module type API = sig
   val simply_unreachable : string -> unit
   val info : Location.location -> string -> unit
   val simply_info : string -> unit
+  val with_min_level : 'a. Level.t -> (unit -> 'a) -> 'a
 
   (* TODO: Debug should receive location but location of THE SOURCE CODE OF THE COMPILER instead of Karuta source code. *)
   val debug : string -> unit
 end
 
-let kind2Module () =
-  match !current_kind with
-  | Terminal -> (module Terminal : API)
-  | Server ->
-      Terminal.simply_unreachable
-        "Server platform for logging is not implemented yet";
-      exit 1
+let current = External.Dynvar.dnew ~init:(module Terminal : API) ()
+let with_logger logger = External.Dynvar.dlet current logger
+let get_current_module () = External.Dynvar.dref current
 
 let simply_unreachable msg =
-  let (module L) = kind2Module () in
+  let (module L) = get_current_module () in
   L.simply_unreachable msg
 
 let unreachable loc msg =
-  let (module L) = kind2Module () in
+  let (module L) = get_current_module () in
   L.unreachable loc msg
 
 let simply_error msg =
-  let (module L) = kind2Module () in
+  let (module L) = get_current_module () in
   L.simply_error msg
 
 let error loc msg =
-  let (module L) = kind2Module () in
+  let (module L) = get_current_module () in
   L.error loc msg
 
 let simply_warning msg =
-  let (module L) = kind2Module () in
+  let (module L) = get_current_module () in
   L.simply_warning msg
 
 let warning loc msg =
-  let (module L) = kind2Module () in
+  let (module L) = get_current_module () in
   L.warning loc msg
 
 let simply_info msg =
-  let (module L) = kind2Module () in
+  let (module L) = get_current_module () in
   L.simply_info msg
 
 let info loc msg =
-  let (module L) = kind2Module () in
+  let (module L) = get_current_module () in
   L.info loc msg
 
 let debug msg =
-  let (module L) = kind2Module () in
+  let (module L) = get_current_module () in
   L.debug msg
+
+let with_min_level level =
+  let (module L) = get_current_module () in
+  L.with_min_level level
