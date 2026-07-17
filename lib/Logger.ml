@@ -1,6 +1,8 @@
 module Level = struct
   type t = Debug | Info | Warning | Error | Unreachable
   [@@deriving ord, enumerate, show]
+
+  let default = Info
 end
 
 module type OUTPUT = sig
@@ -23,13 +25,13 @@ end
 module Make (Output : OUTPUT) = struct
   open Level
 
-  let current_min_level = External.Dynvar.dnew ~init:Debug ()
+  let current_min_level = External.Dynvar.dnew ~init:Level.default ()
 
   let with_min_level : 'a. Level.t -> (unit -> 'a) -> 'a =
    fun level -> External.Dynvar.dlet current_min_level level
 
   let should_log level =
-    Level.compare level (External.Dynvar.dref current_min_level) >= 0
+    Level.compare (External.Dynvar.dref current_min_level) level <= 0
 
   let unreachable_suffix =
     "This is a compiler bug. Please report it in \
