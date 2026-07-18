@@ -24,7 +24,7 @@ let check_extensions (ext : BatSet.String.t) (files : string list) : unit =
 let run : cmd -> unit = function
   | Compile { files; artifact; output_path; log_level } ->
       (* TODO: Make sakura module name as an available CLI option with db being the default *)
-      Logger.Level.set_min_level log_level;
+      Logger.with_min_level log_level @@ fun () ->
       check_extensions (BatSet.String.of_list [ ".krt"; ".skr"; ".pl" ]) files;
       let open Shared.Compiler in
       let options : Options.t =

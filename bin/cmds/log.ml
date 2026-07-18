@@ -12,4 +12,4 @@ let term =
          unreachable. Levels lower than the chosen value are suppressed."
       ~docv:"LEVEL"
   in
-  Arg.value (Arg.opt conv Lib.Logger.Level.Debug info)
+  Arg.value (Arg.opt conv Lib.Logger.Level.default info)

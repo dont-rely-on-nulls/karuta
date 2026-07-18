@@ -34,6 +34,8 @@ you are crazy enough to use it.
 
 * References
 
+- [[http://webyrd.net/scheme-2013/papers/HemannMuKanren2013.pdf][μKanren: A Minimal Functional Core for Relational Programming]]
+- [[https://okmij.org/ftp/ML/index.html#dynvar][Dynamic scoping implementation using OCaml Effect handlers]]
 - [[https://www.erlang.org/doc/apps/erts/absform.html][BEAM Abstract Form]]
 - [[https://webperso.info.ucl.ac.be/~pvr/VanRoyHaridi2003-book.pdf][Computer, Techniques, and Models of Computer Programming]]
 - [[https://users.dimi.uniud.it/~marco.comini/Students/Documentation/wam-book.pdf][Warren's Abtract Machine]]
