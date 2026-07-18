@@ -47,6 +47,17 @@ and compiled_module = {
 
 and comptime = Module of compiled_module | Signature of compiled_signature
 
+let karuta_builtins : comptime Location.with_location =
+  Location.add_loc
+    (Module
+       {
+         query = None;
+         hidden = None;
+         modules = BatMap.String.empty;
+         predicates = PredicateMap.of_list [ ({ name = "eq"; arity = 2 }, ()) ];
+       })
+    Location.dummy
+
 type scope = comptime nested_env
 type sig_scope = signature nested_env
 
@@ -208,7 +219,7 @@ module Make (Config : COMPILER_CONFIG) :
           ~some:(fun p -> Config.merge_state mods p.state)
           parent;
       parent;
-      externals;
+      externals = BatMap.String.add "karuta" karuta_builtins externals;
       filename;
       module_name;
       header =
