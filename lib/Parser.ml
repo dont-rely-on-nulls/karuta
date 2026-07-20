@@ -455,13 +455,10 @@ and top_level :
  fun ({ loc = startl; _ } as state) ->
   state
   |> skip_whitespace_and_comments
-     @&& star
-           (parser_clause @>> capture
-           @@ fun result -> skip_whitespace_and_comments @&& return result)
+     @&& star (parser_clause @>> ignoring skip_whitespace_and_comments)
      @>> fun (result, ({ loc = endl; _ } as state)) ->
      Ok (Location.add_loc result { startl; endl }, state)
 
-(* TODO: Change output type of this to be a fingertree *)
 let parse (filepath : string) (source : string) =
   match
     {
