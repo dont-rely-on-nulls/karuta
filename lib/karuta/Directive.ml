@@ -14,7 +14,10 @@ let compile :
       let module Lookup = (val compiler.lookup) in
       let module_name' = (FT.empty, import_name) in
       let comptime_value = Lookup.ancestors_of_compiler compiler in
-      match Lookup.m0dule comptime_value module_name' with
+      match
+        Logger.with_min_level Logger.Level.Unreachable @@ fun () ->
+        Lookup.m0dule comptime_value module_name'
+      with
       | `Ok { loc; _ } | `UnexpectedSignature loc ->
           Logger.error import_name.loc "Import was already defined";
           Logger.error loc

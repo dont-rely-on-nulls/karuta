@@ -40,7 +40,10 @@ let rec compile : type state mods.
        } as module_) -> (
       let module_name' = (FT.empty, name) in
       let comptime_value = Lookup.ancestors_of_compiler compiler in
-      match Lookup.m0dule comptime_value module_name' with
+      match
+        Logger.with_min_level Logger.Level.Unreachable @@ fun () ->
+        Lookup.m0dule comptime_value module_name'
+      with
       | `Ok { loc; _ } | `UnexpectedSignature loc ->
           Logger.error module_loc "Failed to define module";
           Logger.error loc
@@ -80,7 +83,10 @@ let rec compile : type state mods.
       in
       let module_name' = (FT.empty, name) in
       let comptime_value = Lookup.ancestors_of_compiler compiler in
-      match Lookup.m0dule comptime_value module_name' with
+      match
+        Logger.with_min_level Logger.Level.Unreachable @@ fun () ->
+        Lookup.m0dule comptime_value module_name'
+      with
       | `Ok content ->
           {
             compiler with
@@ -109,6 +115,7 @@ let rec compile : type state mods.
       let module_name' = (FT.empty, name) in
       let comptime_value = Lookup.ancestors_of_compiler compiler in
       match
+        Logger.with_min_level Logger.Level.Unreachable @@ fun () ->
         ( Lookup.m0dule comptime_value module_name',
           Lookup.signature comptime_value signature_name )
       with
