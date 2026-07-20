@@ -114,7 +114,9 @@ let rec find_variables (element : Ast.Expr.base) : variable_set =
       FT.fold_left
         (fun acc element -> S.union acc (find_variables @@ strip_loc element))
         S.empty more_elements
-  | _ -> S.empty
+  | Cons (lhs, rhs) ->
+      S.union (find_variables lhs.content) (find_variables rhs.content)
+  | Nil | Integer _ -> S.empty
 
 type t = { filename : string; dependencies : DependencyGraph.t }
 
