@@ -45,6 +45,10 @@ let renamer ({ head = { elements; _ }; body } : Ast.ParserClause.decl) :
                function
                | "_" ->
                    let current_count = !discards in
+                   (* The # character is forbidden by the grammar in variable
+                      names, so we cannot collide with a name from the source
+                      program.
+                    *)
                    let new_name = "Discard#" ^ string_of_int current_count in
                    discards := current_count + 1;
                    new_name
