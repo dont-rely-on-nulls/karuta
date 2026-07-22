@@ -22,13 +22,38 @@ let rename_arg ({ loc; _ } as expr : Ast.Expr.t) (counter : int) :
 let renamer ({ head = { elements; _ }; body } : Ast.ParserClause.decl) :
     Ast.Module.decl =
   let arity = FT.size elements in
-  let _, new_body =
+  let new_body =
     FT.fold_right
       (fun (counter, body') arg ->
         let to_append = rename_arg arg counter in
         (counter - 1, FT.cons body' to_append))
       (arity - 1, body)
       elements
+    |> snd
+    |> FT.map
+       @@ Fun.compose
+            (Fun.compose
+               ( Location.fmap @@ function
+                 | Ast.Expr.Functor f -> f
+                 | _ ->
+                     Logger.simply_unreachable
+                       "This cannot be anything other than a functor";
+                     exit 1 )
+               (Ast.Expr.rename_vars
+               @@
+               let discards = ref 0 in
+               function
+               | "_" ->
+                   let current_count = !discards in
+                   (* The # character is forbidden by the grammar in variable
+                      names, so we cannot collide with a name from the source
+                      program.
+                    *)
+                   let new_name = "Discard#" ^ string_of_int current_count in
+                   discards := current_count + 1;
+                   new_name
+               | name -> name))
+            (Location.fmap (fun f -> Ast.Expr.Functor f))
   in
   { body = new_body; original_arg_list = elements }
 
@@ -83,7 +108,7 @@ let preprocess_query (loc : Location.location)
   let folder set call =
     S.union set (find_variables @@ Expr.Functor (strip_loc call))
   in
-  let variables = FT.fold_left folder S.empty calls in
+  let variables = FT.fold_left folder S.empty calls |> S.remove "_" in
   let list_variables = FT.of_list @@ S.to_list variables in
   let query_name = "" in
   let head : Expr.func =

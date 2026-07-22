@@ -56,6 +56,11 @@ let capture :
     ('b * parser_state, 'e) result =
  fun f (result, state) -> f result state
 
+let ignoring :
+    'a 'b 'e.
+    ('a, 'e) parser -> 'b * parser_state -> ('b * parser_state, 'e) result =
+ fun p -> capture @@ fun result -> p @&& return result
+
 let star : 'a 'e 'none. ('a, 'e) parser -> ('a FT.t, 'none) parser =
  fun p state ->
   state
@@ -297,12 +302,6 @@ and skip_whitespace_and_comments : 'e. (unit, ([> expr_errors ] as 'e)) parser =
 
 and list : 'e. (Ast.Expr.t, ([> expr_errors ] as 'e)) parser =
  fun ({ loc = startl; _ } as state) ->
-  let prefix_elements =
-    list_of ~start_delim:left_bracket
-      ~separator:(skip_whitespace_and_comments @&& comma)
-      ~end_delim:(skip_whitespace_and_comments @&& is right_bracket @|| is pipe)
-    @@ skip_whitespace_and_comments @&& expr
-  in
   let build_cons startl endl prefix (tail : Ast.Expr.t) : Ast.Expr.t =
     FT.fold_right
       (fun acc elem ->
@@ -313,27 +312,31 @@ and list : 'e. (Ast.Expr.t, ([> expr_errors ] as 'e)) parser =
     |> fun { loc; content } ->
     { Location.content; loc = { startl; endl = loc.endl } }
   in
-  let nil startl =
-    right_bracket @&& fun ({ loc = endl; _ } as state) ->
+  let nil startl endl =
+    { Location.content = Ast.Expr.Nil; loc = { Location.startl; endl } }
+  in
+  let rec list_tail acc =
+    ifte comma
+      (snd @> skip_whitespace_and_comments @&& expr @>> capture
+      @@ fun elem ->
+      skip_whitespace_and_comments @&& list_tail @@ FT.snoc acc elem)
+    @@ maybe (pipe @&& skip_whitespace_and_comments @&& expr)
+    @>> ignoring (skip_whitespace_and_comments @&& right_bracket)
+    @>> fun (tail_expr, ({ loc = endl; _ } as state)) ->
     Ok
-      ( { Location.content = Ast.Expr.Nil; loc = { Location.startl; endl } },
+      ( tail_expr
+        |> Option.fold ~none:(nil startl endl) ~some:Fun.id
+        |> build_cons startl endl acc,
         state )
   in
   state
-  |> prefix_elements @>> fun (prefix, state) ->
-     if FT.is_empty prefix then state |> right_bracket @&& nil startl
-     else
-       state
-       |> ifte pipe
-            (snd @> skip_whitespace_and_comments @&& expr
-            @>> fun (tail, state) ->
-            state
-            |> skip_whitespace_and_comments @&& right_bracket @>> snd
-               @> fun ({ loc = endl; _ } as state) ->
-               Ok (build_cons startl endl prefix tail, state))
-          @@ nil startl
-          @>> fun (tail, ({ loc = endl; _ } as state)) ->
-          Ok (build_cons startl endl prefix tail, state)
+  |> left_bracket @&& skip_whitespace_and_comments
+     @&& ifte right_bracket
+           ( snd @> fun ({ loc = endl; _ } as state) ->
+             Ok (nil startl endl, state) )
+     @@ expr @> replace FT.singleton
+     @>> ignoring skip_whitespace_and_comments
+     @>> capture list_tail
 
 and func :
     'e. (Ast.Expr.func Location.with_location, ([> expr_errors ] as 'e)) parser
@@ -377,15 +380,13 @@ let query :
       ([> expr_errors ] as 'e) )
     parser =
  fun first_element ->
-  (ifte question_mark (snd @> return (FT.singleton first_element))
-  @@
-  let space_comma : (unit, 'e) parser =
-    skip_whitespace_and_comments @&& comma
+  let rec query_loop elements =
+    ifte question_mark (snd @> return elements)
+    @@ skip_whitespace_and_comments @&& comma @&& skip_whitespace_and_comments
+    @&& func @>> capture
+    @@ fun f -> skip_whitespace_and_comments @&& query_loop (FT.snoc elements f)
   in
-  list_of ~start_delim:space_comma ~separator:space_comma
-    ~end_delim:(skip_whitespace_and_comments @&& question_mark)
-    (skip_whitespace_and_comments @&& func)
-  @> replace (Fun.flip FT.cons first_element))
+  query_loop (FT.singleton first_element)
   @> replace
   @@ fun l -> Location.add_loc l first_element.loc
 
@@ -396,13 +397,20 @@ let declaration :
       ([> expr_errors ] as 'e) )
     parser =
  fun { Location.content = head; loc } ->
-  (list_of ~start_delim:holds
-     ~separator:(skip_whitespace_and_comments @&& comma)
-     ~end_delim:(skip_whitespace_and_comments @&& period)
-     (skip_whitespace_and_comments @&& func)
-  @|| period @&& return FT.empty)
+  let rec body_loop elements =
+    func @>> capture
+    @@ fun elem ->
+    skip_whitespace_and_comments
+    @&& ifte comma
+          (snd @> skip_whitespace_and_comments @&& body_loop
+         @@ FT.snoc elements elem)
+    @@ return @@ FT.snoc elements elem
+  in
+  maybe (holds @&& skip_whitespace @&& body_loop FT.empty)
+  @>> ignoring (skip_whitespace_and_comments @&& period)
   @> replace
-  @@ fun body -> Location.add_loc { Ast.ParserClause.head; body } loc
+       ( Option.fold ~none:FT.empty ~some:Fun.id @> fun body ->
+         Location.add_loc { Ast.ParserClause.head; body } loc )
 
 let rec parser_clause :
     'e. (Ast.ParserClause.t, ([> expr_errors ] as 'e)) parser =
@@ -414,12 +422,12 @@ let rec parser_clause :
      @@ func @>> capture
      @@ fun first ->
      skip_whitespace_and_comments
-     @&& ifte (query first)
-           (mapl (Location.fmap Ast.ParserClause.query) @> Result.ok)
+     @&& ifte
+           (is @@ question_mark @|| comma)
+           (snd @> query first @> replace (Location.fmap Ast.ParserClause.query))
            (declaration first @> replace
            @@ Location.fmap Ast.ParserClause.declaration))
-     @>> capture
-     @@ fun ret -> skip_whitespace_and_comments @&& return ret
+     @>> ignoring skip_whitespace_and_comments
 
 and directive :
     'e.
@@ -434,13 +442,10 @@ and directive :
      state
      |> star
           (skip_whitespace_and_comments @&& left_curly_brace @&& top_level
-         @>> capture
-          @@ fun body ->
-          right_curly_brace @&& skip_whitespace_and_comments @&& return body)
-        @>> capture
-        @@ fun bodies ->
-        period @&& skip_whitespace_and_comments @&& return
-        @@ Location.add_loc (header, bodies) header.loc
+         @>> ignoring @@ right_curly_brace @&& skip_whitespace_and_comments)
+        @>> ignoring (period @&& skip_whitespace_and_comments)
+        @> replace
+        @@ fun bodies -> Location.add_loc (header, bodies) header.loc
 
 and top_level :
     'e.
@@ -450,13 +455,10 @@ and top_level :
  fun ({ loc = startl; _ } as state) ->
   state
   |> skip_whitespace_and_comments
-     @&& star
-           (parser_clause @>> capture
-           @@ fun result -> skip_whitespace_and_comments @&& return result)
+     @&& star (parser_clause @>> ignoring skip_whitespace_and_comments)
      @>> fun (result, ({ loc = endl; _ } as state)) ->
      Ok (Location.add_loc result { startl; endl }, state)
 
-(* TODO: Change output type of this to be a fingertree *)
 let parse (filepath : string) (source : string) =
   match
     {
