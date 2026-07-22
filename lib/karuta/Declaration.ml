@@ -25,8 +25,9 @@ let call_with_fresh (name : string) expr =
   Ukanren.call_with_fresh @@ Builder.lambda name expr
 
 let compile_declaration_bodies
-    ({ module_name; state; _ } : state Shared.Compiler.t)
+    ({ module_name; state; _ } as compiler : state Shared.Compiler.t)
     (clauses : Ast.Module.decl Location.with_location FT.t) =
+  let scope = Lookup.ancestors_of_compiler compiler in
   if FT.is_empty clauses then (
     Logger.simply_unreachable "Predicates must have at least one body";
     exit 1)
@@ -35,6 +36,16 @@ let compile_declaration_bodies
     let compile_single_body
         ({ content; _ } : Ast.Module.decl Location.with_location) :
         Builder.Expr.t =
+      FT.iter
+        (fun { Location.content = { Ast.Expr.name; elements } } ->
+          match Lookup.predicate scope name (FT.size elements) with
+          | `Ok () -> ()
+          | `Undefined _ -> exit 1
+          | `UnexpectedSignature loc ->
+              Logger.error loc
+                "Expected module name but found a signature instead";
+              exit 1)
+        content.body;
       let find_variables call =
         Shared.Preprocessor.find_variables (Functor call)
       in

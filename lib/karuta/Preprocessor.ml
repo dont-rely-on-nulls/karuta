@@ -2,7 +2,7 @@ include Types
 open Shared.Preprocessor
 
 let initial_mods = Fun.id
-let init_mods () = { imports = BatMap.String.empty }
+let init_mods () = { imports = BatMap.String.singleton "karuta" Location.dummy }
 
 let rename_arg ({ loc; _ } as expr : Ast.Expr.t) (counter : int) :
     Ast.Expr.func Location.with_location =
