@@ -107,6 +107,14 @@ module Expr = struct
 
   and t = base Location.with_location
 
+  let rec rename_vars f =
+    Location.fmap (function
+      | Variable name -> Variable (f name)
+      | Functor ({ elements } as func) ->
+          Functor { func with elements = FT.map (rename_vars f) elements }
+      | (Nil | Integer _) as atomic -> atomic
+      | Cons (lhs, rhs) -> Cons (rename_vars f lhs, rename_vars f rhs))
+
   let on f2 f1 v1 v2 = f2 (f1 v1) (f1 v2)
 
   let compare_func lhs rhs : int =
