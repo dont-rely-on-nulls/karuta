@@ -1,6 +1,6 @@
 module Level = struct
   type t = Debug | Info | Warning | Error | Unreachable
-  [@@deriving ord, enumerate, show]
+  [@@deriving ord, enumerate, show { with_path = false }]
 
   let default = Info
 end
