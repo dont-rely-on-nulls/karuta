@@ -2,10 +2,10 @@
   (export
     (fresh 1)
     (unify 3)
-    (discard 1)
     (deref 2)
     (is-variable 2)
-    (nat 1)
+    (int 1)
+    (plus 3)
     (call-with-fresh 1)
     (eq 2)
     (conj 1)
@@ -18,6 +18,7 @@
     (true 1)
     (false 1)
     (take-all 1)
+    (take 2)
     (deref-query-var 2)
     (deref-query 1)
     (query-variable 3)
@@ -30,14 +31,6 @@
 (defun fresh (bindings)
   (let ((var (make_ref)))
     (tuple var (mset bindings var 'unbound))))
-
-(defun discard
-  (((= (map 'discard discard-var) bindings))
-   (tuple discard-var bindings))
-  ((bindings)
-   (let ((discard-var (make_ref)))
-     (tuple discard-var
-       (mset bindings discard-var 'discard 'discard discard-var)))))
 
 (defun deref
   ((state var) (when (is_reference var))
@@ -184,16 +177,50 @@
     ((tuple 'ok res next) (cons res (take-all next)))
     ((tuple 'error 'no-result) '())))
 
+(defun take (n stream)
+  (if (=< n 0)
+    '()
+    (case (pull stream)
+      ((tuple 'ok res next) (cons res (take (- n 1) next)))
+      ((tuple 'error 'no-result) '()))))
+
 (defun eq (lhs rhs)
   (lambda (state) (unify state lhs rhs)))
 
-(defun nat (n)
+(defun next-int (n)
+  (if (< n 0)
+    (- n)
+    (erlang:bnot n)))
+
+(defun every-int (variable current)
+  (disj (eq variable current)
+        (every-int variable (next-int current))))
+
+(defun int (n)
   (lambda (state)
     (let* ((deref-n (deref state n))
-           (goal (conj
-                   (eq 'true (is_integer deref-n))
-                   (eq 'true (=< 0 deref-n)))))
+           (goal (if (is-variable deref-n state)
+                   (every-int deref-n 0)
+                   (eq 'true (is_integer deref-n)))))
       (funcall goal state))))
+
+(defun plus (lhs rhs out)
+  (lambda (state)
+    (let ((deref-lhs (deref state lhs))
+          (deref-rhs (deref state rhs))
+          (deref-out (deref state out)))
+      (funcall
+        (case (tuple (is-variable deref-lhs state)
+                (is-variable deref-rhs state)
+                (is-variable deref-out state))
+         ((tuple 'true 'true _) (eq deref-out (+ deref-lhs deref-rhs)))
+         ((tuple 'false 'true 'true) (eq deref-lhs (- deref-out deref-rhs)))
+         ((tuple 'true 'false 'true) (eq deref-rhs (- deref-out deref-lhs)))
+         ((tuple 'false _ _) (conj (int deref-lhs)
+                                   (plus deref-lhs deref-rhs deref-out)))
+         ((tuple 'true _ _) (conj (int deref-rhs)
+                                  (plus deref-lhs deref-rhs deref-out))))
+        state))))
 
 (defun true (state) (list state))
 (defun false (_) '())
