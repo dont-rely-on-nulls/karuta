@@ -6,6 +6,7 @@
     (is-variable 2)
     (int 1)
     (plus 3)
+    (divmod 4)
     (call-with-fresh 1)
     (eq 2)
     (conj 1)
@@ -17,6 +18,8 @@
     (start 2)
     (true 1)
     (false 1)
+    (t-dee 1)
+    (t-dum 1)
     (take-all 1)
     (take 2)
     (deref-query-var 2)
@@ -24,6 +27,56 @@
     (query-variable 3)
     (bind-results 2)
     (run-lazy 2)))
+
+(eval-when-compile
+  (defun gensym ()
+    (list_to_atom
+     (lc ((<- _ (lists:seq 1 128)))
+         (+ 96 (rand:uniform 26)))))
+
+  (defun tuple-pattern (size position-of-false)
+    (cond
+      ((=:= size 0) '())
+      ((< 0 size) (cons (if (=:= position-of-false 0) ''false '_)
+                        (tuple-pattern (- size 1) (- position-of-false 1))))))
+
+  (defun state-sym+args->arg-names+bindings+case-tuple+checks (state-sym args)
+    (let* ((arg-count (length args))
+           ((tuple arg-names bindings case-tuple predicate-checks _)
+            (lists:foldr
+             (lambda (arg-pair acc)
+               (let (((tuple name-acc bindings-acc case-acc checks-acc position) acc)
+                     ((list pred-name arg-name) arg-pair))
+                 (tuple (cons arg-name name-acc)
+                        (cons (list arg-name `(karuta:deref ,state-sym ,arg-name))
+                              bindings-acc)
+                        (cons `(karuta:is-variable ,arg-name ,state-sym)
+                              case-acc)
+                        (cons `((tuple ,@(tuple-pattern arg-count
+                                                        (+ arg-count position)))
+                                (when (not (,pred-name ,arg-name)))
+                                (fun karuta:false 1))
+                              checks-acc)
+                        (- position 1))))
+             (tuple '() '() '() '() -1)
+             args)))
+      (tuple arg-names bindings case-tuple predicate-checks))))
+
+(defmacro defpred
+  "Assumes that args is a list of lists of two atoms denoting a predicate
+  to apply to the argument and the argument's name."
+  (`[,name ,args . ,clauses]
+   (let* ((state-sym (gensym))
+          ((tuple arg-names bindings case-tuple predicate-checks)
+           (state-sym+args->arg-names+bindings+case-tuple+checks state-sym args)))
+     `(defun ,name ,arg-names
+        (lambda (,state-sym)
+          (let ,bindings
+            (funcall
+             (case (tuple ,@case-tuple)
+               ,@predicate-checks
+               ,@clauses)
+             ,state-sym)))))))
 
 (defun is-variable (var bindings)
   (and (is_reference var) (is_map_key var bindings)))
@@ -204,26 +257,36 @@
                    (eq 'true (is_integer deref-n)))))
       (funcall goal state))))
 
-(defun plus (lhs rhs out)
-  (lambda (state)
-    (let ((deref-lhs (deref state lhs))
-          (deref-rhs (deref state rhs))
-          (deref-out (deref state out)))
-      (funcall
-        (case (tuple (is-variable deref-lhs state)
-                (is-variable deref-rhs state)
-                (is-variable deref-out state))
-         ((tuple 'true 'true _) (eq deref-out (+ deref-lhs deref-rhs)))
-         ((tuple 'false 'true 'true) (eq deref-lhs (- deref-out deref-rhs)))
-         ((tuple 'true 'false 'true) (eq deref-rhs (- deref-out deref-lhs)))
-         ((tuple 'false _ _) (conj (int deref-lhs)
-                                   (plus deref-lhs deref-rhs deref-out)))
-         ((tuple 'true _ _) (conj (int deref-rhs)
-                                  (plus deref-lhs deref-rhs deref-out))))
-        state))))
+(defpred plus ((is_integer lhs) (is_integer rhs) (is_integer out))
+  ((tuple 'false 'false _) (eq out (+ lhs rhs)))
+  ((tuple 'true 'false 'false) (eq lhs (- out rhs)))
+  ((tuple 'false 'true 'false) (eq rhs (- out lhs)))
+  ((tuple 'true 'true 'false) (conj (int lhs) (plus lhs rhs out))) ; FIXME: generate pairs of operands from the target result
+  ((tuple 'true 'false 'true) (conj (int lhs) (plus lhs rhs out)))
+  ((tuple 'false 'true 'true) (conj (int rhs) (plus lhs rhs out)))
+  ((tuple 'true 'true 'true) (conj (int out) (plus lhs rhs out))))
+
+(defun divmod* (dividend divisor)
+  (let ((q (div dividend divisor))
+        (r (rem dividend divisor)))
+    (if (< r 0)
+      (if (> divisor 0)
+        (tuple (- q 1) (+ r divisor))
+        (tuple (+ q 1) (- r divisor)))
+      (tuple q r))))
+
+(defpred divmod ((is_integer dividend)
+                 (is_integer divisor)
+                 (is_integer quotient)
+                 (is_integer remainder))
+  ; TODO: implement the other cases
+  ((tuple 'true 'false 'false 'false)
+   (eq dividend (+ remainder (* divisor quotient)))))
 
 (defun true (state) (list state))
 (defun false (_) '())
+(defun t-dee (state) (list state))
+(defun t-dum (_) '())
 
 (defun call-with-fresh (f)
   (lambda (state)
