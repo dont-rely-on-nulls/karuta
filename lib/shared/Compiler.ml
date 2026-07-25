@@ -47,16 +47,25 @@ and compiled_module = {
 
 and comptime = Module of compiled_module | Signature of compiled_signature
 
-let karuta_builtins : comptime Location.with_location =
+let builtin_module predicates =
   Location.add_loc
     (Module
        {
          query = None;
          hidden = None;
          modules = BatMap.String.empty;
-         predicates = PredicateMap.of_list [ ({ name = "eq"; arity = 2 }, ()) ];
+         predicates = PredicateMap.of_list predicates;
        })
     Location.dummy
+
+let karuta_builtins : comptime Location.with_location =
+  builtin_module
+    [
+      ({ name = "eq"; arity = 2 }, ());
+      ({ name = "int"; arity = 1 }, ());
+      ({ name = "plus"; arity = 3 }, ());
+      ({ name = "divmod"; arity = 4 }, ());
+    ]
 
 type scope = comptime nested_env
 type sig_scope = signature nested_env
