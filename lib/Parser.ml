@@ -1,19 +1,56 @@
-type parser_state = { remaining : BatSubstring.t; loc : Location.t }
-type ('a, 'e) parser = parser_state -> ('a * parser_state, 'e) result
+type parser_state = {
+  remaining : BatSubstring.t;
+      (** Text still to be parsed. Generally a suffix of the original input. We
+          use a BatSubstring for O(1) slicing. *)
+  loc : Location.t;
+      (** Current location of the parser relative to the source text. *)
+}
+(** Type representing an immutable parser state. *)
 
+type ('a, 'e) parser = parser_state -> ('a * parser_state, 'e) result
+(** The parser type. A function taking the current parser state and returning
+    either an output and a new state, or an error. *)
+
+(** [l @> r] composes its right argument after its left argument.
+
+    Equivalent to Fun.compose r l.
+
+    @param l a function.
+    @param r a function.
+    @return the composition of r after l. *)
 let ( @> ) : 'a 'b 'c. ('a -> 'b) -> ('b -> 'c) -> 'a -> 'c =
  fun l r -> Fun.compose r l
 
+(** [l @>> r] is the composition of r after l under the Result monad.
+
+    This is a building block used to implement sequential composition of
+    parsers. Corresponds to the following parsing expression:
+
+    l r *)
 let ( @>> ) :
     'a 'b 'c 'e.
     ('a -> ('b, 'e) result) -> ('b -> ('c, 'e) result) -> 'a -> ('c, 'e) result
     =
  fun prefix suffix state -> Result.bind (prefix state) suffix
 
+(** [replace f] lifts f so it can apply to the output of a parser.
+
+    In categorical terms, this function together with type ('a, 'e) parser form
+    a functor.
+
+    Because the grammar does not specify what to do with the results of parsing,
+    this function does not correspond to anything in the grammar. *)
 let replace :
     'a 's 'b 'e. ('a -> 'b) -> ('a * 's, 'e) result -> ('b * 's, 'e) result =
  fun f -> Result.map (fun (a, s) -> (f a, s))
 
+(** [ifte test consequent alternative] constructs a parser that attempts to
+    parse test. On success, the parser commits to parsing consequent afterwards.
+    On failure, the parser backtracks and tries alternative instead.
+
+    Corresponds to the following parsing expression:
+
+    test consequent / !test alternative *)
 let ifte :
     'a 'b 'c 'et 'ec.
     ('a -> ('b, 'et) result) ->
@@ -25,11 +62,54 @@ let ifte :
   state
   |> test @> Result.fold ~ok:consequent ~error:(fun _ -> alternative state)
 
+(** [l @|| r] constructs a parser that attempts to parse l. On failure, the
+    parser backtracks and tries r instead.
+
+    Corresponds to the following parsing expression:
+
+    l / r
+
+    Note that if l is itself a sequential composition and r starts by negating a
+    prefix of l, ifte is more efficient. That is, instead of doing this:
+
+   (a @&& b) @|| (is_not a @&& c)
+
+   You should prefer this instead:
+
+   ifte a b c *)
 let ( @|| ) l r = ifte l Result.ok r
+
+(** [l @&& r] constructs a parser that attempts to parse l followed by r,
+    discarding the output of l.
+
+    Corresponds to the following parsing expression:
+
+    l r *)
 let ( @&& ) l r = l @> Result.map snd @>> r
-let return : 'a 'e. 'a -> ('a, 'e) parser = fun v state -> Ok (v, state)
+
+(** [return output] constructs a parser that succeeds without consuming any
+    input and outputs its argument.
+
+    Corresponds to the following parsing expression:
+
+    "" *)
+let return : 'a 'e. 'a -> ('a, 'e) parser =
+ fun output state -> Ok (output, state)
+
+(** A parser succeeds without consuming any input and outputs unit.
+
+    Corresponds to the following parsing expression:
+
+    "" *)
 let succeed : 'e. (unit, 'e) parser = return ()
 
+(** [is_not p] constructs a parser that attempts to parse p. On success, the
+    parser then fails. On failure, the parser backtracks and succeeds without
+    consuming input.
+
+    Corresponds to the following parsing expression:
+
+    !p *)
 let is_not :
     'a 'errin 'errout.
     ('a, 'errin) parser ->
@@ -40,15 +120,21 @@ let is_not :
     (fun (r, { loc = endl; _ }) -> Error (handler r { startl; endl }))
     succeed state
 
+(** [is p] constructs a parser that attempts to parse p. On success, the parser
+    then backtracks and succeeds without consuming input. On failure, the parser
+    fails.
+
+    Corresponds to the following parsing expression:
+
+    &p *)
 let is : 'a 'e. ('a, 'e) parser -> ('a, 'e) parser =
  fun p state -> state |> p @>> fun (r, _) -> Ok (r, state)
 
-let mapl f (a, b) = (f a, b)
-let injl v a = (v, a)
+(** [capture f] lifts a function returning a parser so it can apply to a
+    successful parser result.
 
-let maybe : 'a 'el 'er. ('a, 'el) parser -> ('a option, 'er) parser =
- fun p -> ifte p (mapl Option.some @> Result.ok) (return None)
-
+    Because the grammar does not specify what to do with the results of parsing,
+    this function does not correspond to anything in the grammar. *)
 let capture :
     'a 'b 'e.
     ('a -> ('b, 'e) parser) ->
@@ -56,11 +142,34 @@ let capture :
     ('b * parser_state, 'e) result =
  fun f (result, state) -> f result state
 
+(** [maybe p] constructs a parser that attempts to parse p. On success, the
+    parser succeeds. On failure, the parser backtracks and succeeds.
+
+    Corresponds to the following parsing expression:
+
+    p? *)
+let maybe : 'a 'el 'er. ('a, 'el) parser -> ('a option, 'er) parser =
+ fun p -> ifte p (capture @@ Option.some @> return) (return None)
+
+(** [ignoring p] augments a parser to capture the output of a previous parser,
+    continue parsing using the state, discard its output and replace it with the
+    captured output.
+
+    Because the grammar does not specify what to do with the results of parsing,
+    this corresponds to the following parsing expression:
+
+    p *)
 let ignoring :
     'a 'b 'e.
     ('a, 'e) parser -> 'b * parser_state -> ('b * parser_state, 'e) result =
  fun p -> capture @@ fun result -> p @&& return result
 
+(** [star p] constructs a parser that attempts to parse p repeatedly for as long
+    as it succeeds, accumulating its outputs into a BatFingerTree.
+
+    Corresponds to the following parsing expression:
+
+    p* *)
 let star : 'a 'e 'none. ('a, 'e) parser -> ('a FT.t, 'none) parser =
  fun p state ->
   state
@@ -70,6 +179,17 @@ let star : 'a 'e 'none. ('a, 'e) parser -> ('a FT.t, 'none) parser =
   in
   loop FT.empty
 
+(** [plus p] constructs a parser that attempts to parse p once, then attempts to
+    parse p repeatedly for as long as it succeeds, accumulating its outputs into
+    a BatFingerTree.
+
+    Corresponds to the following parsing expression:
+
+    p+
+
+    Which is equivalent to the following parsing expression:
+
+    p p* *)
 let plus p =
   p @>> capture @@ fun first -> star p @> replace @@ Fun.flip FT.cons first
 
@@ -247,7 +367,7 @@ let list_of :
     if allow_trailing then maybe separator @&& succeed else succeed
   in
   start_delim
-  @&& ifte end_delim (mapl (Fun.const empty) @> Result.ok)
+  @&& ifte end_delim (capture @@ Fun.const @@ return empty)
   @@ item @> replace singleton
   @>>
   let rec loop (acc, state) =
@@ -286,9 +406,9 @@ let rec expr : 'e. (Ast.Expr.t, ([> expr_errors ] as 'e)) parser =
  fun state ->
   state
   |> skip_whitespace_and_comments
-     @&& ifte integer (mapl (Location.fmap Ast.Expr.integer) @> Result.ok)
-     @@ ifte variable (mapl (Location.fmap Ast.Expr.variable) @> Result.ok)
-     @@ ifte func (mapl (Location.fmap Ast.Expr.functorr) @> Result.ok)
+     @&& ifte integer (capture @@ Location.fmap Ast.Expr.integer @> return)
+     @@ ifte variable (capture @@ Location.fmap Ast.Expr.variable @> return)
+     @@ ifte func (capture @@ Location.fmap Ast.Expr.functorr @> return)
      @@ list
 
 and skip_whitespace_and_comments : 'e. (unit, ([> expr_errors ] as 'e)) parser =
@@ -368,7 +488,7 @@ and func :
                 (Ast.Expr.func label.content args)
                 { startl; endl },
               state ))
-          (injl (Location.fmap Ast.Expr.atom label) @> Result.ok)
+        @@ return (Location.fmap Ast.Expr.atom label)
 
 (* TODO: for the composites below, the location around the result should encompass
    the entire text, not just the first element *)
