@@ -4,8 +4,11 @@
     (unify 3)
     (deref 2)
     (is-variable 2)
+    (boundedness 2)
     (int 1)
     (plus 3)
+    (mult 3)
+    (ifte 3)
     (divmod 4)
     (call-with-fresh 1)
     (eq 2)
@@ -34,11 +37,11 @@
      (lc ((<- _ (lists:seq 1 128)))
          (+ 96 (rand:uniform 26)))))
 
-  (defun tuple-pattern (size position-of-false)
+  (defun tuple-pattern (size position-of-bound)
     (cond
       ((=:= size 0) '())
-      ((< 0 size) (cons (if (=:= position-of-false 0) ''false '_)
-                        (tuple-pattern (- size 1) (- position-of-false 1))))))
+      ((< 0 size) (cons (if (=:= position-of-bound 0) ''bound '_)
+                        (tuple-pattern (- size 1) (- position-of-bound 1))))))
 
   (defun state-sym+args->arg-names+bindings+case-tuple+checks (state-sym args)
     (let* ((arg-count (length args))
@@ -50,7 +53,7 @@
                  (tuple (cons arg-name name-acc)
                         (cons (list arg-name `(karuta:deref ,state-sym ,arg-name))
                               bindings-acc)
-                        (cons `(karuta:is-variable ,arg-name ,state-sym)
+                        (cons `(karuta:boundedness ,arg-name ,state-sym)
                               case-acc)
                         (cons `((tuple ,@(tuple-pattern arg-count
                                                         (+ arg-count position)))
@@ -80,6 +83,11 @@
 
 (defun is-variable (var bindings)
   (and (is_reference var) (is_map_key var bindings)))
+
+(defun boundedness (var bindings)
+  (if (is-variable var bindings)
+    'unbound
+    'bound))
 
 (defun fresh (bindings)
   (let ((var (make_ref)))
@@ -240,14 +248,31 @@
 (defun eq (lhs rhs)
   (lambda (state) (unify state lhs rhs)))
 
+(defun ifte (test then else)
+  (lambda (state)
+    (let ((test-results (funcall test state)))
+      (case (pull test-results)
+        ((tuple 'ok res next) (bind (cons res next) then))
+        ((tuple 'error 'no-result) (funcall else state))))))
+
 (defun next-int (n)
   (if (< n 0)
     (- n)
     (erlang:bnot n)))
 
 (defun every-int (variable current)
-  (disj (eq variable current)
-        (every-int variable (next-int current))))
+  (disj
+   (list (eq variable current)
+     (lambda (state)
+       (funcall (every-int variable (next-int current)) state)))))
+
+(defun every-int (variable current limit)
+  (disj
+   (if (=< current limit)
+     (list (eq variable current)
+       (lambda (state)
+         (funcall (every-int variable (next-int current) limit) state)))
+     (list))))
 
 (defun int (n)
   (lambda (state)
@@ -257,14 +282,23 @@
                    (eq 'true (is_integer deref-n)))))
       (funcall goal state))))
 
+(defun int (n limit)
+  (lambda (state)
+    (let* ((deref-n (deref state n))
+           (goal (if (is-variable deref-n state)
+                   (every-int deref-n 0 (abs limit))
+                   (eq 'true (andalso (is_integer deref-n)
+                                      (=< n (abs limit)))))))
+      (funcall goal state))))
+
 (defpred plus ((is_integer lhs) (is_integer rhs) (is_integer out))
-  ((tuple 'false 'false _) (eq out (+ lhs rhs)))
-  ((tuple 'true 'false 'false) (eq lhs (- out rhs)))
-  ((tuple 'false 'true 'false) (eq rhs (- out lhs)))
-  ((tuple 'true 'true 'false) (conj (int lhs) (plus lhs rhs out))) ; FIXME: generate pairs of operands from the target result
-  ((tuple 'true 'false 'true) (conj (int lhs) (plus lhs rhs out)))
-  ((tuple 'false 'true 'true) (conj (int rhs) (plus lhs rhs out)))
-  ((tuple 'true 'true 'true) (conj (int out) (plus lhs rhs out))))
+  ((tuple 'bound 'bound _) (eq out (+ lhs rhs)))
+  ((tuple 'unbound 'bound 'bound) (eq lhs (- out rhs)))
+  ((tuple 'bound 'unbound 'bound) (eq rhs (- out lhs)))
+  ((tuple 'unbound 'unbound 'bound) (conj (int lhs) (plus lhs rhs out)))
+  ((tuple 'unbound 'bound 'unbound) (conj (int lhs) (plus lhs rhs out)))
+  ((tuple 'bound 'unbound 'unbound) (conj (int rhs) (plus lhs rhs out)))
+  ((tuple 'unbound 'unbound 'unbound) (conj (int out) (plus lhs rhs out))))
 
 (defun divmod* (dividend divisor)
   (let ((q (div dividend divisor))
@@ -275,12 +309,43 @@
         (tuple (+ q 1) (- r divisor)))
       (tuple q r))))
 
+(defpred mult ((is_integer lhs) (is_integer rhs) (is_integer out))
+  ((tuple 'bound 'bound _) (eq out (* lhs rhs)))
+  ((tuple 'unbound 'bound 'bound)
+   (ifte (eq rhs 0)
+     (conj (eq out 0) (int lhs))
+     (ifte (eq out 0)
+       (eq lhs 0)
+       (lambda (state)
+         (funcall (eq (tuple lhs 0) (divmod* out rhs)) state)))))
+  ((tuple 'bound 'unbound 'bound)
+   (ifte (eq lhs 0)
+     (conj (eq out 0) (int rhs))
+     (ifte (eq out 0)
+       (eq rhs 0)
+       (lambda (state)
+         (funcall (eq (tuple rhs 0) (divmod* out lhs)) state)))))
+  ((tuple 'unbound 'unbound 'bound)
+   (ifte (eq out 0)
+     (disj (conj (eq lhs 0) (int rhs))
+       (conj (eq rhs 0) (int lhs)))
+     (conj (int lhs out) (mult lhs rhs out))))
+  ((tuple 'unbound 'bound 'unbound)
+   (ifte (eq rhs 0)
+     (conj (eq out 0) (int lhs))
+     (conj (int lhs) (mult lhs rhs out))))
+  ((tuple 'bound 'unbound 'unbound)
+   (ifte (eq lhs 0)
+     (conj (eq out 0) (int rhs))
+     (conj (int rhs) (mult lhs rhs out))))
+  ((tuple 'unbound 'unbound 'unbound) (conj (int lhs) (mult lhs rhs out))))
+
 (defpred divmod ((is_integer dividend)
-                 (is_integer divisor)
+                 (is_integer divisor) ; TODO: check if this is zero
                  (is_integer quotient)
                  (is_integer remainder))
   ; TODO: implement the other cases
-  ((tuple 'true 'false 'false 'false)
+  ((tuple 'unbound 'bound 'bound 'bound)
    (eq dividend (+ remainder (* divisor quotient)))))
 
 (defun true (state) (list state))
