@@ -64,6 +64,7 @@ let karuta_builtins : comptime Location.with_location =
       ({ name = "eq"; arity = 2 }, ());
       ({ name = "int"; arity = 1 }, ());
       ({ name = "plus"; arity = 3 }, ());
+      ({ name = "mult"; arity = 3 }, ());
       ({ name = "divmod"; arity = 4 }, ());
     ]
 
