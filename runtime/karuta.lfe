@@ -2,10 +2,18 @@
   (export
     (fresh 1)
     (unify 3)
-    (discard 1)
     (deref 2)
     (is-variable 2)
+    (boundedness 2)
+    (leq 2)
+    (int 1)
     (nat 1)
+    (plus 3)
+    (minus 3)
+    (neg 2)
+    (mult 3)
+    (ifte 3)
+    (divmod 4)
     (call-with-fresh 1)
     (eq 2)
     (conj 1)
@@ -17,27 +25,77 @@
     (start 2)
     (true 1)
     (false 1)
+    (t-dee 1)
+    (t-dum 1)
     (take-all 1)
+    (take 2)
     (deref-query-var 2)
     (deref-query 1)
     (query-variable 3)
     (bind-results 2)
     (run-lazy 2)))
 
+(eval-when-compile
+  (defun gensym ()
+    (list_to_atom
+     (lc ((<- _ (lists:seq 1 128)))
+         (+ 96 (rand:uniform 26)))))
+
+  (defun tuple-pattern (size position-of-bound)
+    (cond
+      ((=:= size 0) '())
+      ((< 0 size) (cons (if (=:= position-of-bound 0) ''bound '_)
+                        (tuple-pattern (- size 1) (- position-of-bound 1))))))
+
+  (defun state-sym+args->arg-names+bindings+case-tuple+checks (state-sym args)
+    (let* ((arg-count (length args))
+           ((tuple arg-names bindings case-tuple predicate-checks _)
+            (lists:foldr
+             (lambda (arg-pair acc)
+               (let (((tuple name-acc bindings-acc case-acc checks-acc position) acc)
+                     ((list pred-name arg-name) arg-pair))
+                 (tuple (cons arg-name name-acc)
+                        (cons (list arg-name `(karuta:deref ,state-sym ,arg-name))
+                              bindings-acc)
+                        (cons `(karuta:boundedness ,arg-name ,state-sym)
+                              case-acc)
+                        (cons `((tuple ,@(tuple-pattern arg-count
+                                                        (+ arg-count position)))
+                                (when (not (,pred-name ,arg-name)))
+                                (fun karuta:false 1))
+                              checks-acc)
+                        (- position 1))))
+             (tuple '() '() '() '() -1)
+             args)))
+      (tuple arg-names bindings case-tuple predicate-checks))))
+
+(defmacro defpred
+  "Assumes that args is a list of lists of two atoms denoting a predicate
+  to apply to the argument and the argument's name."
+  (`[,name ,args . ,clauses]
+   (let* ((state-sym (gensym))
+          ((tuple arg-names bindings case-tuple predicate-checks)
+           (state-sym+args->arg-names+bindings+case-tuple+checks state-sym args)))
+     `(defun ,name ,arg-names
+        (lambda (,state-sym)
+          (let ,bindings
+            (funcall
+             (case (tuple ,@case-tuple)
+               ,@predicate-checks
+               ,@clauses)
+             ,state-sym)))))))
+
 (defun is-variable (var bindings)
   (and (is_reference var) (is_map_key var bindings)))
+
+(defun boundedness (var bindings)
+  (if (is-variable var bindings)
+    'unbound
+    'bound))
 
 (defun fresh (bindings)
   (let ((var (make_ref)))
     (tuple var (mset bindings var 'unbound))))
-
-(defun discard
-  (((= (map 'discard discard-var) bindings))
-   (tuple discard-var bindings))
-  ((bindings)
-   (let ((discard-var (make_ref)))
-     (tuple discard-var
-       (mset bindings discard-var 'discard 'discard discard-var)))))
 
 (defun deref
   ((state var) (when (is_reference var))
@@ -184,19 +242,187 @@
     ((tuple 'ok res next) (cons res (take-all next)))
     ((tuple 'error 'no-result) '())))
 
+(defun take (n stream)
+  (if (=< n 0)
+    '()
+    (case (pull stream)
+      ((tuple 'ok res next) (cons res (take (- n 1) next)))
+      ((tuple 'error 'no-result) '()))))
+
 (defun eq (lhs rhs)
   (lambda (state) (unify state lhs rhs)))
 
-(defun nat (n)
+(defun ifte (test then else)
   (lambda (state)
-    (let* ((deref-n (deref state n))
-           (goal (conj
-                   (eq 'true (is_integer deref-n))
-                   (eq 'true (=< 0 deref-n)))))
-      (funcall goal state))))
+    (let ((test-results (funcall test state)))
+      (case (pull test-results)
+        ((tuple 'ok res next) (bind (cons res next) then))
+        ((tuple 'error 'no-result) (funcall else state))))))
+
+(defun next-int (n)
+  (if (< n 0)
+    (- n)
+    (erlang:bnot n)))
+
+(defun next-nat (n) (+ n 1))
+
+(defun generate (next variable current)
+  (disj
+   (list (eq variable current)
+     (lambda (state)
+       (funcall (generate next variable (funcall next current)) state)))))
+
+(defun generate-while (pred next variable current)
+  (disj
+   (if (funcall pred current)
+     (list (eq variable current)
+       (lambda (state)
+         (funcall (generate-while pred next variable (funcall next current)) state)))
+     (list))))
+
+(defun every-int (variable current)
+  (generate (fun next-int 1) variable current))
+
+(defun every-int (variable current limit)
+  (generate-while
+    (lambda (current) (=< current limit))
+    (fun next-int 1)
+    variable
+    current))
+
+(defun every-nat (variable current)
+  (generate (fun next-nat 1) variable current))
+
+(defun every-nat (variable current limit)
+  (generate-while
+    (lambda (current) (< current limit))
+    (fun next-nat 1)
+    variable
+    current))
+
+(defun type (pred generate)
+  (lambda (v)
+    (lambda (state)
+      (let* ((deref-v (deref state v))
+             (goal (if (is-variable deref-v state)
+                     (funcall generate deref-v)
+                     (eq 'true (funcall pred deref-v)))))
+        (funcall goal state)))))
+
+(defun int (n)
+  (funcall (type (fun is_integer 1)
+                 (lambda (n) (every-int n 0)))
+           n))
+
+(defun int (n limit)
+  (funcall (type (lambda (n)
+                   (andalso (is_integer n)
+                     (=< n (abs limit))))
+                 (lambda (n) (every-int n 0 (abs limit))))
+           n))
+
+(defun nat (n)
+  (funcall (type (lambda (n) (andalso (is_integer n) (=< 0 n)))
+                 (lambda (n) (every-nat n 0)))
+           n))
+
+(defun nat (n limit)
+  (funcall (type (lambda (n)
+                   (andalso (is_integer n)
+                     (=< 0 n)
+                     (< n limit)))
+                 (lambda (n) (every-nat n 0 limit)))
+           n))
+
+(defpred leq ((is_integer lhs) (is_integer rhs))
+  ((tuple 'bound 'bound) (if (=< lhs rhs) (fun true 1) (fun false 1)))
+  ((tuple 'unbound 'unbound) (conj (int lhs) (leq lhs rhs)))
+  ((tuple _ _)
+   (call-with-fresh
+    (lambda (n)
+      (conj (nat n)
+        (plus lhs n rhs))))))
+
+(defpred plus ((is_integer lhs) (is_integer rhs) (is_integer out))
+  ((tuple 'bound 'bound _) (eq out (+ lhs rhs)))
+  ((tuple 'unbound 'bound 'bound) (eq lhs (- out rhs)))
+  ((tuple 'bound 'unbound 'bound) (eq rhs (- out lhs)))
+  ((tuple 'unbound 'unbound 'bound) (conj (int lhs) (plus lhs rhs out)))
+  ((tuple 'unbound 'bound 'unbound) (conj (int lhs) (plus lhs rhs out)))
+  ((tuple 'bound 'unbound 'unbound) (conj (int rhs) (plus lhs rhs out)))
+  ((tuple 'unbound 'unbound 'unbound) (conj (int out) (plus lhs rhs out))))
+
+(defun minus (lhs rhs out)
+  (plus rhs out lhs))
+
+(defun neg (n -n)
+  (plus n -n 0))
+
+(defun divmod (dividend divisor)
+  (let ((q (div dividend divisor))
+        (r (rem dividend divisor)))
+    (if (< r 0)
+      (if (> divisor 0)
+        (tuple (- q 1) (+ r divisor))
+        (tuple (+ q 1) (- r divisor)))
+      (tuple q r))))
+
+(defpred mult ((is_integer lhs) (is_integer rhs) (is_integer out))
+  ((tuple 'bound 'bound _) (eq out (* lhs rhs)))
+  ((tuple 'unbound 'bound 'bound)
+   (ifte (eq rhs 0)
+     (conj (eq out 0) (int lhs))
+     (ifte (eq out 0)
+       (eq lhs 0)
+       (lambda (state)
+         (funcall (eq (tuple lhs 0) (divmod out rhs)) state)))))
+  ((tuple 'bound 'unbound 'bound)
+   (ifte (eq lhs 0)
+     (conj (eq out 0) (int rhs))
+     (ifte (eq out 0)
+       (eq rhs 0)
+       (lambda (state)
+         (funcall (eq (tuple rhs 0) (divmod out lhs)) state)))))
+  ((tuple 'unbound 'unbound 'bound)
+   (ifte (eq out 0)
+     (disj (conj (eq lhs 0) (int rhs))
+       (conj (eq rhs 0) (every-int lhs -1)))
+     (conj (int lhs out) (mult lhs rhs out))))
+  ((tuple 'unbound 'bound 'unbound)
+   (ifte (eq rhs 0)
+     (conj (eq out 0) (int lhs))
+     (conj (int lhs) (mult lhs rhs out))))
+  ((tuple 'bound 'unbound 'unbound)
+   (ifte (eq lhs 0)
+     (conj (eq out 0) (int rhs))
+     (conj (int rhs) (mult lhs rhs out))))
+  ((tuple 'unbound 'unbound 'unbound) (conj (int lhs) (mult lhs rhs out))))
+
+(defmacro non_zero_integer (n)
+  `(andalso (is_integer ,n) (not (=:= ,n 0))))
+
+(defpred divmod ((is_integer dividend)
+                 (non_zero_integer divisor)
+                 (is_integer quotient)
+                 (is_integer remainder))
+  ((tuple 'bound 'bound _ _)
+   (eq (tuple quotient remainder) (divmod dividend divisor)))
+  ((tuple 'unbound 'bound 'bound 'bound)
+   (eq dividend (+ remainder (* divisor quotient))))
+  ((tuple 'unbound 'bound _ 'unbound)
+   (conj (nat remainder (abs divisor))
+     (divmod dividend divisor quotient remainder)))
+  ((tuple 'unbound 'bound 'unbound 'bound)
+   (conj (int quotient)
+     (divmod dividend divisor quotient remainder)))
+  ((tuple _ 'unbound _ _) ; TODO: revisit this when we have not-equals
+   (conj (int divisor)
+     (divmod dividend divisor quotient remainder))))
 
 (defun true (state) (list state))
 (defun false (_) '())
+(defun t-dee (state) (list state))
+(defun t-dum (_) '())
 
 (defun call-with-fresh (f)
   (lambda (state)

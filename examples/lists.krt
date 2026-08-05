@@ -8,10 +8,11 @@ add[[H1|Tail1], [H2|Tail2], [HR|TailOut]] :-
     plus[H1, H2, HR],
     add[Tail1, Tail2, TailOut].
 
-reverse[In, Out] :- 'reverse loop'[In, [], Out].
+reverse[In, Out] :- 'reverse loop'[In, Out, [], Out].
 
-'reverse loop'[[], Out, Out].
-'reverse loop'[[A | Tail], Acc, Out] :- 'reverse loop'[Tail, [A | Acc], Out].
+'reverse loop'[[], [], Out, Out].
+'reverse loop'[[Head | Tail], [Last | Init], Acc, Out] :-
+  'reverse loop'[Tail, Init, [Head | Acc], Out].
 
 partition[Length, List, Out] :-
   leq[1, Length],
