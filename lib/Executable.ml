@@ -10,7 +10,6 @@ type payload = {
 
 let emit { persist; query = { name; arity }; sakura; filename; root_module } =
   let shebang = "#!/usr/bin/env lfescript\n" in
-  (* FIXME: remove default config for Sakura when no Sakura files are given. *)
   let config_map =
     match sakura with
     | None -> "(map)"
