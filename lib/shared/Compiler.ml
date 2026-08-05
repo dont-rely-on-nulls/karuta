@@ -61,14 +61,16 @@ let builtin_module predicates =
 let karuta_builtins : comptime Location.with_location =
   builtin_module
     [
-      ({ name = "eq"; arity = 2 }, ());
-      ({ name = "leq"; arity = 2 }, ());
+      ({ name = "t-dee"; arity = 0 }, ());
+      ({ name = "t-dum"; arity = 0 }, ());
       ({ name = "int"; arity = 1 }, ());
       ({ name = "nat"; arity = 1 }, ());
-      ({ name = "plus"; arity = 3 }, ());
-      ({ name = "mult"; arity = 3 }, ());
-      ({ name = "minus"; arity = 3 }, ());
+      ({ name = "eq"; arity = 2 }, ());
+      ({ name = "leq"; arity = 2 }, ());
       ({ name = "neg"; arity = 2 }, ());
+      ({ name = "minus"; arity = 3 }, ());
+      ({ name = "mult"; arity = 3 }, ());
+      ({ name = "plus"; arity = 3 }, ());
       ({ name = "divmod"; arity = 4 }, ());
     ]
 
