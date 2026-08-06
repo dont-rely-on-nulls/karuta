@@ -38,6 +38,7 @@ type hidden_definitions = {
 }
 
 and compiled_module = {
+  qualifier : string FT.t;
   modules : comptime env;
   (* TODO: Later this will become something related to types *)
   predicates : unit PredicateMap.t;
@@ -47,10 +48,11 @@ and compiled_module = {
 
 and comptime = Module of compiled_module | Signature of compiled_signature
 
-let builtin_module predicates =
+let builtin_module name predicates =
   Location.add_loc
     (Module
        {
+         qualifier = FT.singleton name;
          query = None;
          hidden = None;
          modules = BatMap.String.empty;
@@ -59,7 +61,7 @@ let builtin_module predicates =
     Location.dummy
 
 let karuta_builtins : comptime Location.with_location =
-  builtin_module
+  builtin_module "karuta"
     [
       ({ name = "t-dee"; arity = 0 }, ());
       ({ name = "t-dum"; arity = 0 }, ());
@@ -140,7 +142,6 @@ type 'state t = {
   header : forms;
   output : forms;
   filename : string;
-  module_name : string;
   parent : 'state t option;
   env : compiled_module;
   persist : Persist.t;
@@ -229,15 +230,27 @@ module Make (Config : COMPILER_CONFIG) :
   let initialize_nested
       ({ persist; filename; externals; mods } : mods initialization) parent
       module_name : Config.state t =
+    let state, env =
+      Option.fold
+        ~none:
+          ( Config.init_state mods,
+            {
+              qualifier = FT.singleton module_name;
+              modules = BatMap.String.empty;
+              predicates = PredicateMap.empty;
+              hidden = None;
+              query = None;
+            } )
+        ~some:(fun p ->
+          ( Config.merge_state mods p.state,
+            { p.env with qualifier = FT.snoc p.env.qualifier module_name } ))
+        parent
+    in
     {
-      state =
-        Option.fold ~none:(Config.init_state mods)
-          ~some:(fun p -> Config.merge_state mods p.state)
-          parent;
+      state;
       parent;
       externals = BatMap.String.add "karuta" karuta_builtins externals;
       filename;
-      module_name;
       header =
         FT.of_list
           [
@@ -246,13 +259,7 @@ module Make (Config : COMPILER_CONFIG) :
             Beam.Builder.Attribute.module_ module_name;
           ];
       output = FT.empty;
-      env =
-        {
-          modules = BatMap.String.empty;
-          predicates = PredicateMap.empty;
-          hidden = None;
-          query = None;
-        };
+      env;
       persist;
       lookup = (module Config.Lookup);
     }
@@ -278,7 +285,8 @@ module Make (Config : COMPILER_CONFIG) :
       {
         compiler with
         externals =
-          BatMap.String.add compiler.module_name
+          BatMap.String.add
+            (FT.last_exn compiler.env.qualifier)
             (let open Location in
              add_loc (Module compiler.env)
              @@ double
@@ -323,3 +331,8 @@ module Make (Config : COMPILER_CONFIG) :
   let compile_files persist preprocessed_files =
     FT.fold_left @@ compile_one_file persist preprocessed_files
 end
+
+let join_qualifiers names : string =
+  BatIO.to_string
+    (FT.print ~first:"" ~last:"" ~sep:ModuleName.separator BatIO.nwrite)
+    names

@@ -148,6 +148,7 @@ let rec ascribe_to_module
       in
       Location.add_loc
         {
+          qualifier = given_module.qualifier;
           modules = public_comptimes;
           predicates = public_predicates;
           query = None;

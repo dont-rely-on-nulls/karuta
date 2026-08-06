@@ -1,13 +1,10 @@
 open Compiler
 
-let create_nested_module_name module_name parent : string =
-  parent.module_name ^ ModuleName.separator ^ module_name
-
 let initialize_from_parent (type state) (type mods) (type directives)
     ({ target_specific; name = { content = name; _ }; _ } :
       (directives, mods) Ast.Module.module_body)
     (initialize_nested : (state, mods) initialize_nested) parent : state t =
-  let inner_module_name = create_nested_module_name name parent in
+  let inner_module_name = join_qualifiers (FT.snoc parent.env.qualifier name) in
   let inner_filename =
     ModuleName.of_filepath parent.filename
     ^ "." ^ name

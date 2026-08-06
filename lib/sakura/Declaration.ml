@@ -12,8 +12,8 @@ let compile _ _ _ = failwith "TODO"
 let compile_persisted ({ name; arity } : Ast.head)
     ({ content = { original_arg_list; _ }; _ } :
       Ast.Module.decl Location.with_location)
-    ({ env; module_name; state; _ } as compiler : state Shared.Compiler.t) :
-    state Shared.Compiler.t =
+    ({ env = { qualifier; _ } as env; state; _ } as compiler :
+      state Shared.Compiler.t) : state Shared.Compiler.t =
   let find_invalid_argument =
     FT.find_opt @@ fun arg ->
     Ast.Expr.is_underscore arg || (not @@ Ast.Expr.is_variable arg)
@@ -28,7 +28,9 @@ let compile_persisted ({ name; arity } : Ast.head)
          persisted predicate"
       else "Every argument in a Sakura predicate definition must be a variable";
       exit 1);
-  let full_name = BatString.lchop ~n:3 module_name ^ ":" ^ name in
+  let full_name =
+    Shared.Compiler.join_qualifiers @@ FT.snoc (FT.tail_exn qualifier) name
+  in
   let declaration =
     let args =
       if arity = 0 then []
