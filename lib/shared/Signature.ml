@@ -165,7 +165,7 @@ let rec compile_nested : type a mods directive.
     Location.location ->
     (directive, mods) Ast.Module.signature_body ->
     a t ->
-    Compiler.sig_scope ->
+    compiled_signature Location.with_location ->
     compiled_signature Location.with_location =
  fun loc body ({ env = { modules; _ }; _ } as compiler) sig_scope ->
   let module Lookup = (val compiler.lookup) in
@@ -207,11 +207,8 @@ let rec compile_nested : type a mods directive.
           Location.add_loc (ModuleSignature payload) next.loc
         in
         let label = module_signature in
-        let scope : Compiler.scope = Lookup.ancestors_of_compiler compiler in
         match
-          Lookup.nested_signature
-            (Lookup.sig_env_to_sig_scope acc.modules)
-            scope label
+          Lookup.nested_signature (Location.add_loc acc loc) compiler label
         with
         | `Ok { content = PlainSignature payload; _ } ->
             signature_happy_case module_name @@ module_of_plain payload
@@ -250,7 +247,8 @@ let rec compile_nested : type a mods directive.
     | Signature { name = { content = signature_name; _ }; body } ->
         let compiled_sig =
           compile_nested next.loc body compiler
-            (Lookup.sig_cons sig_scope acc.modules)
+            (* TODO: (Lookup.sig_cons sig_scope acc.modules) *)
+            sig_scope
         in
         signature_happy_case signature_name
         @@ Location.fmap (fun v -> PlainSignature v) compiled_sig
@@ -304,4 +302,9 @@ and compile : type a mods directive.
     compiled_signature Location.with_location =
  fun loc body compiler ->
   let module Lookup = (val compiler.lookup) in
-  compile_nested loc body compiler Lookup.empty_signature
+  compile_nested loc body compiler
+  @@ Location.add_loc
+       (* TODO: check this. *)
+       ({ modules = BatMap.String.empty; predicates = Set.empty }
+         : compiled_signature)
+       loc

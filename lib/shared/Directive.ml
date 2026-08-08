@@ -4,7 +4,9 @@ let initialize_from_parent (type state) (type mods) (type directives)
     ({ target_specific; name = { content = name; _ }; _ } :
       (directives, mods) Ast.Module.module_body)
     (initialize_nested : (state, mods) initialize_nested) parent : state t =
-  let inner_module_name = join_qualifiers (FT.snoc parent.env.qualifier name) in
+  let inner_module_name =
+    join_qualifiers @@ FT.snoc (ft_of_original_module parent.env.qualifier) name
+  in
   let inner_filename =
     ModuleName.of_filepath parent.filename
     ^ "." ^ name
@@ -36,10 +38,9 @@ let rec compile : type state mods.
          _;
        } as module_) -> (
       let module_name' = (FT.empty, name) in
-      let comptime_value = Lookup.ancestors_of_compiler compiler in
       match
         Logger.with_min_level Logger.Level.Unreachable @@ fun () ->
-        Lookup.m0dule comptime_value module_name'
+        Lookup.m0dule compiler module_name'
       with
       | `Ok { loc; _ } | `UnexpectedSignature loc ->
           Logger.error module_loc "Failed to define module";
@@ -79,10 +80,9 @@ let rec compile : type state mods.
         compile directive_loc module_without_named_signature compiler runner
       in
       let module_name' = (FT.empty, name) in
-      let comptime_value = Lookup.ancestors_of_compiler compiler in
       match
         Logger.with_min_level Logger.Level.Unreachable @@ fun () ->
-        Lookup.m0dule comptime_value module_name'
+        Lookup.m0dule compiler module_name'
       with
       | `Ok content ->
           {
@@ -110,11 +110,10 @@ let rec compile : type state mods.
          _;
        } as module_) -> (
       let module_name' = (FT.empty, name) in
-      let comptime_value = Lookup.ancestors_of_compiler compiler in
       match
         Logger.with_min_level Logger.Level.Unreachable @@ fun () ->
-        ( Lookup.m0dule comptime_value module_name',
-          Lookup.signature comptime_value signature_name )
+        ( Lookup.m0dule compiler module_name',
+          Lookup.signature compiler signature_name )
       with
       | `Ok { loc; _ }, _ | `UnexpectedSignature loc, _ ->
           Logger.error module_loc "Failed to define module";

@@ -29,7 +29,10 @@ let compile_persisted ({ name; arity } : Ast.head)
       else "Every argument in a Sakura predicate definition must be a variable";
       exit 1);
   let full_name =
-    Shared.Compiler.join_qualifiers @@ FT.snoc (FT.tail_exn qualifier) name
+    Shared.Compiler.join_qualifiers
+    @@ FT.snoc
+         (FT.tail_exn (Shared.Compiler.ft_of_original_module qualifier))
+         name
   in
   let declaration =
     let args =
@@ -64,6 +67,8 @@ let compile_persisted ({ name; arity } : Ast.head)
       {
         env with
         predicates =
-          Shared.Compiler.PredicateMap.add { name; arity } () env.predicates;
+          Shared.Compiler.PredicateMap.add { name; arity }
+            Shared.Compiler.{ original_module = env.qualifier }
+            env.predicates;
       };
   }

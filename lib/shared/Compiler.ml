@@ -19,10 +19,15 @@ module Persist = struct
 end
 
 type functor_map = int PredicateMap.t
+type predicate = { original_module : string FT.t * string }
+
+let ft_of_original_module : string FT.t * string -> string FT.t =
+  BatPervasives.uncurry FT.snoc
 
 type sig_env = signature env
 
 and compiled_signature = {
+  (* TODO: note which things are actually locally defined *)
   modules : sig_env;
   predicates : predicate_name Set.t;
 }
@@ -34,14 +39,13 @@ and signature =
 
 type hidden_definitions = {
   modules : comptime env;
-  predicates : unit PredicateMap.t;
+  predicates : predicate PredicateMap.t;
 }
 
 and compiled_module = {
-  qualifier : string FT.t;
+  qualifier : string FT.t * string;
   modules : comptime env;
-  (* TODO: Later this will become something related to types *)
-  predicates : unit PredicateMap.t;
+  predicates : predicate PredicateMap.t;
   query : predicate_name Location.with_location option;
   hidden : hidden_definitions option;
 }
@@ -49,47 +53,44 @@ and compiled_module = {
 and comptime = Module of compiled_module | Signature of compiled_signature
 
 let builtin_module name predicates =
+  let qualifier = (FT.empty, name) in
   Location.add_loc
     (Module
        {
-         qualifier = FT.singleton name;
+         qualifier;
          query = None;
          hidden = None;
          modules = BatMap.String.empty;
-         predicates = PredicateMap.of_list predicates;
+         predicates =
+           PredicateMap.of_list
+           @@ List.map
+                (fun name -> (name, { original_module = qualifier }))
+                predicates;
        })
     Location.dummy
 
 let karuta_builtins : comptime Location.with_location =
   builtin_module "karuta"
     [
-      ({ name = "t-dee"; arity = 0 }, ());
-      ({ name = "t-dum"; arity = 0 }, ());
-      ({ name = "int"; arity = 1 }, ());
-      ({ name = "nat"; arity = 1 }, ());
-      ({ name = "eq"; arity = 2 }, ());
-      ({ name = "leq"; arity = 2 }, ());
-      ({ name = "neg"; arity = 2 }, ());
-      ({ name = "minus"; arity = 3 }, ());
-      ({ name = "mult"; arity = 3 }, ());
-      ({ name = "plus"; arity = 3 }, ());
-      ({ name = "divmod"; arity = 4 }, ());
+      { name = "t-dee"; arity = 0 };
+      { name = "t-dum"; arity = 0 };
+      { name = "int"; arity = 1 };
+      { name = "nat"; arity = 1 };
+      { name = "eq"; arity = 2 };
+      { name = "leq"; arity = 2 };
+      { name = "neg"; arity = 2 };
+      { name = "minus"; arity = 3 };
+      { name = "mult"; arity = 3 };
+      { name = "plus"; arity = 3 };
+      { name = "divmod"; arity = 4 };
     ]
-
-type scope = comptime nested_env
-type sig_scope = signature nested_env
 
 module type LOOKUP = sig
   type t
   type state
 
-  val empty_signature : sig_scope
-  val sig_env_to_sig_scope : sig_env -> sig_scope
-  val sig_cons : sig_scope -> sig_env -> sig_scope
-  val ancestors_of_compiler : t -> scope
-
   val signature :
-    scope ->
+    t ->
     Ast.Expr.func_label ->
     [> `Ok of compiled_signature Location.with_location
     | `Undefined of string Location.with_location
@@ -97,15 +98,15 @@ module type LOOKUP = sig
     | `UnexpectedSignature of Location.location ]
 
   val m0dule :
-    scope ->
+    t ->
     Ast.Expr.func_label ->
     [> `Ok of compiled_module Location.with_location
     | `Undefined of string Location.with_location
     | `UnexpectedSignature of Location.location ]
 
   val nested_signature :
-    sig_scope ->
-    scope ->
+    compiled_signature Location.with_location ->
+    t ->
     Ast.Expr.func_label ->
     [> `Ok of signature Location.with_location
     | `Undefined of string Location.with_location
@@ -113,10 +114,10 @@ module type LOOKUP = sig
     | `UnexpectedSignature of Location.location ]
 
   val predicate :
-    scope ->
+    t ->
     Ast.Expr.func_label ->
     int ->
-    [> `Ok of unit
+    [> `Ok of predicate
     | `Undefined of string Location.with_location
     | `UnexpectedSignature of Location.location ]
 end
@@ -235,7 +236,7 @@ module Make (Config : COMPILER_CONFIG) :
         ~none:
           ( Config.init_state mods,
             {
-              qualifier = FT.singleton module_name;
+              qualifier = (FT.empty, module_name);
               modules = BatMap.String.empty;
               predicates = PredicateMap.empty;
               hidden = None;
@@ -243,7 +244,10 @@ module Make (Config : COMPILER_CONFIG) :
             } )
         ~some:(fun p ->
           ( Config.merge_state mods p.state,
-            { p.env with qualifier = FT.snoc p.env.qualifier module_name } ))
+            {
+              p.env with
+              qualifier = (ft_of_original_module p.env.qualifier, module_name);
+            } ))
         parent
     in
     {
@@ -286,7 +290,7 @@ module Make (Config : COMPILER_CONFIG) :
         compiler with
         externals =
           BatMap.String.add
-            (FT.last_exn compiler.env.qualifier)
+            (snd compiler.env.qualifier)
             (let open Location in
              add_loc (Module compiler.env)
              @@ double
