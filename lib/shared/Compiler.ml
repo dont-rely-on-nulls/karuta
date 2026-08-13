@@ -6,6 +6,11 @@ type forms = Form.t FT.t
 type 'a env = 'a Location.with_location BatMap.String.t
 type 'a nested_env = 'a env BatLazyList.t
 
+let join_qualifiers names : string =
+  BatIO.to_string
+    (FT.print ~first:"" ~last:"" ~sep:ModuleName.separator BatIO.nwrite)
+    names
+
 module PredicateMap = BatMap.Make (struct
   type t = predicate_name [@@deriving show, ord]
 end)
@@ -87,10 +92,11 @@ let karuta_builtins : comptime Location.with_location =
 
 module type LOOKUP = sig
   type t
-  type state
+
+  val comptime_of_compiler : t -> comptime Location.with_location
 
   val signature :
-    t ->
+    comptime Location.with_location ->
     Ast.Expr.func_label ->
     [> `Ok of compiled_signature Location.with_location
     | `Undefined of string Location.with_location
@@ -98,7 +104,7 @@ module type LOOKUP = sig
     | `UnexpectedSignature of Location.location ]
 
   val m0dule :
-    t ->
+    comptime Location.with_location ->
     Ast.Expr.func_label ->
     [> `Ok of compiled_module Location.with_location
     | `Undefined of string Location.with_location
@@ -106,7 +112,7 @@ module type LOOKUP = sig
 
   val nested_signature :
     compiled_signature Location.with_location ->
-    t ->
+    comptime Location.with_location ->
     Ast.Expr.func_label ->
     [> `Ok of signature Location.with_location
     | `Undefined of string Location.with_location
@@ -114,7 +120,8 @@ module type LOOKUP = sig
     | `UnexpectedSignature of Location.location ]
 
   val predicate :
-    t ->
+    comptime Location.with_location ->
+    compiled_module ->
     Ast.Expr.func_label ->
     int ->
     [> `Ok of predicate
@@ -243,12 +250,16 @@ module Make (Config : COMPILER_CONFIG) :
               query = None;
             } )
         ~some:(fun p ->
-          ( Config.merge_state mods p.state,
-            {
-              p.env with
-              qualifier = (ft_of_original_module p.env.qualifier, module_name);
-            } ))
+          let qualifier =
+            (ft_of_original_module p.env.qualifier, module_name)
+          in
+          Logger.debug @@ FT.to_string BatIO.nwrite
+          @@ ft_of_original_module qualifier;
+          (Config.merge_state mods p.state, { p.env with qualifier }))
         parent
+    in
+    let full_module_name =
+      join_qualifiers @@ ft_of_original_module env.qualifier
     in
     {
       state;
@@ -260,7 +271,7 @@ module Make (Config : COMPILER_CONFIG) :
           [
             Beam.Builder.Attribute.file filename 1;
             (* TODO: this should be a proper atom *)
-            Beam.Builder.Attribute.module_ module_name;
+            Beam.Builder.Attribute.module_ full_module_name;
           ];
       output = FT.empty;
       env;
@@ -335,8 +346,3 @@ module Make (Config : COMPILER_CONFIG) :
   let compile_files persist preprocessed_files =
     FT.fold_left @@ compile_one_file persist preprocessed_files
 end
-
-let join_qualifiers names : string =
-  BatIO.to_string
-    (FT.print ~first:"" ~last:"" ~sep:ModuleName.separator BatIO.nwrite)
-    names

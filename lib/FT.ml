@@ -73,3 +73,8 @@ let partition (pred : 'a -> bool) : 'a t -> 'a t * 'a t =
     (fun (yes, no) elem ->
       if pred elem then (snoc yes elem, no) else (yes, snoc no elem))
     (empty, empty)
+
+let to_string ?(first = "[") ?(last = "]") ?(sep = ", ") val_printer ft =
+  let out = BatIO.output_string () in
+  print ~first ~last ~sep val_printer out ft;
+  BatIO.close_out out

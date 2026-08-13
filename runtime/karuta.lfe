@@ -185,7 +185,7 @@
     ((andalso (is_map a) (is_map b) (== (map_size a) (map_size b)))
      (unify-map state a b))
     ((andalso (is_tuple a) (is_tuple b) (== (tuple_size a) (tuple_size b)))
-      (unify-tuple state (tuple_size a) 1 a b))
+     (unify-tuple state (tuple_size a) 1 a b))
     ('true
      (case (tuple a b)
        ((tuple (cons ha ta) (cons hb tb))

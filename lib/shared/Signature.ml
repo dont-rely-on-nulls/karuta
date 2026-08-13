@@ -206,9 +206,10 @@ let rec compile_nested : type a mods directive.
         let module_of_plain payload =
           Location.add_loc (ModuleSignature payload) next.loc
         in
-        let label = module_signature in
         match
-          Lookup.nested_signature (Location.add_loc acc loc) compiler label
+          Lookup.nested_signature (Location.add_loc acc loc)
+            (Lookup.comptime_of_compiler compiler)
+            module_signature
         with
         | `Ok { content = PlainSignature payload; _ } ->
             signature_happy_case module_name @@ module_of_plain payload

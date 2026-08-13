@@ -15,7 +15,7 @@ let compile :
       let module_name' = (FT.empty, import_name) in
       match
         Logger.with_min_level Logger.Level.Unreachable @@ fun () ->
-        Lookup.m0dule compiler module_name'
+        Lookup.m0dule (Lookup.comptime_of_compiler compiler) module_name'
       with
       | `Ok { loc; _ } | `UnexpectedSignature loc ->
           Logger.error import_name.loc "Import was already defined";

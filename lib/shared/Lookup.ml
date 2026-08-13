@@ -33,14 +33,10 @@ let rec lookup_mod_sig (select : 'a selector)
           Logger.error sig_loc "Reference is here";
           unexpected)
 
-let comptime_of_compiler (compiler : 'a t) : comptime Location.with_location =
-  Location.add_loc (Module compiler.env) Location.dummy
-
-let signature (compiler : 'a t)
+let signature (comptime_env : comptime Location.with_location)
     ((qualifiers, unqualified_name) : Ast.Expr.func_label) =
   match
-    lookup_mod_sig comptime_select
-      (comptime_of_compiler compiler)
+    lookup_mod_sig comptime_select comptime_env
       (FT.snoc qualifiers unqualified_name)
   with
   | `Ok { content = Module m; loc } ->
@@ -50,11 +46,10 @@ let signature (compiler : 'a t)
   | `Ok { content = Signature found; loc } -> `Ok (Location.add_loc found loc)
   | (`Undefined _ | `UnexpectedSignature _) as other -> other
 
-let m0dule (compiler : 'a t)
+let m0dule (comptime_env : comptime Location.with_location)
     ((qualifiers, unqualified_name) : Ast.Expr.func_label) =
   match
-    lookup_mod_sig comptime_select
-      (comptime_of_compiler compiler)
+    lookup_mod_sig comptime_select comptime_env
       (FT.snoc qualifiers unqualified_name)
   with
   | `Ok { content = Module module'; loc } -> `Ok (Location.add_loc module' loc)
@@ -67,7 +62,7 @@ let m0dule (compiler : 'a t)
 
 let rec nested_signature
     (compiled_signature : compiled_signature Location.with_location)
-    (compiler : 'a t)
+    (comptime_env : comptime Location.with_location)
     ((qualifiers, unqualified_name) as names : Ast.Expr.func_label) =
   match
     lookup_mod_sig signature_select
@@ -76,14 +71,15 @@ let rec nested_signature
   with
   | `Ok _ as ok -> ok
   | `Undefined _ -> (
-      match signature compiler names with
+      match signature comptime_env names with
       | `Ok ok -> `Ok (Location.fmap (fun v -> PlainSignature v) ok)
       | (`Undefined _ | `UnexpectedModule _ | `UnexpectedSignature _) as error
         ->
           error)
   | `UnexpectedSignature _ as error -> error
 
-let predicate (compiler : 'a t)
+let predicate (comptime_env : comptime Location.with_location)
+    (runtime_env : compiled_module)
     ((qualifiers, ({ content = name; loc } as name_with_loc)) :
       Ast.Expr.func_label) (arity : int) =
   let local_predicate env =
@@ -94,8 +90,8 @@ let predicate (compiler : 'a t)
     | Some predicate -> `Ok predicate
   in
   match FT.front qualifiers with
-  | None -> local_predicate compiler.env
+  | None -> local_predicate runtime_env
   | Some module_name -> (
-      match m0dule compiler module_name with
+      match m0dule comptime_env module_name with
       | `Ok { content = comp_module; _ } -> local_predicate comp_module
       | (`Undefined _ | `UnexpectedSignature _) as other -> other)

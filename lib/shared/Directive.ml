@@ -3,10 +3,8 @@ open Compiler
 let initialize_from_parent (type state) (type mods) (type directives)
     ({ target_specific; name = { content = name; _ }; _ } :
       (directives, mods) Ast.Module.module_body)
-    (initialize_nested : (state, mods) initialize_nested) parent : state t =
-  let inner_module_name =
-    join_qualifiers @@ FT.snoc (ft_of_original_module parent.env.qualifier) name
-  in
+    (initialize_nested : (state, mods) initialize_nested) (parent : state t) :
+    state t =
   let inner_filename =
     ModuleName.of_filepath parent.filename
     ^ "." ^ name
@@ -19,7 +17,7 @@ let initialize_from_parent (type state) (type mods) (type directives)
       filename = inner_filename;
       mods = target_specific;
     }
-    (Some parent) inner_module_name
+    (Some parent) name
 
 let rec compile : type state mods.
     Location.location ->
@@ -40,7 +38,7 @@ let rec compile : type state mods.
       let module_name' = (FT.empty, name) in
       match
         Logger.with_min_level Logger.Level.Unreachable @@ fun () ->
-        Lookup.m0dule compiler module_name'
+        Lookup.m0dule (Lookup.comptime_of_compiler compiler) module_name'
       with
       | `Ok { loc; _ } | `UnexpectedSignature loc ->
           Logger.error module_loc "Failed to define module";
@@ -82,7 +80,7 @@ let rec compile : type state mods.
       let module_name' = (FT.empty, name) in
       match
         Logger.with_min_level Logger.Level.Unreachable @@ fun () ->
-        Lookup.m0dule compiler module_name'
+        Lookup.m0dule (Lookup.comptime_of_compiler compiler) module_name'
       with
       | `Ok content ->
           {
@@ -110,10 +108,11 @@ let rec compile : type state mods.
          _;
        } as module_) -> (
       let module_name' = (FT.empty, name) in
+      let comptime_env = Lookup.comptime_of_compiler compiler in
       match
         Logger.with_min_level Logger.Level.Unreachable @@ fun () ->
-        ( Lookup.m0dule compiler module_name',
-          Lookup.signature compiler signature_name )
+        ( Lookup.m0dule comptime_env module_name',
+          Lookup.signature comptime_env signature_name )
       with
       | `Ok { loc; _ }, _ | `UnexpectedSignature loc, _ ->
           Logger.error module_loc "Failed to define module";
