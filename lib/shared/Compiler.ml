@@ -24,7 +24,11 @@ module Persist = struct
 end
 
 type functor_map = int PredicateMap.t
-type predicate = { original_module : string FT.t * string }
+
+type predicate = {
+  original_module : string FT.t * string;
+  loc : Location.location;
+}
 
 let ft_of_original_module : string FT.t * string -> string FT.t =
   BatPervasives.uncurry FT.snoc
@@ -69,7 +73,8 @@ let builtin_module name predicates =
          predicates =
            PredicateMap.of_list
            @@ List.map
-                (fun name -> (name, { original_module = qualifier }))
+                (fun name ->
+                  (name, { original_module = qualifier; loc = Location.dummy }))
                 predicates;
        })
     Location.dummy
@@ -83,6 +88,7 @@ let karuta_builtins : comptime Location.with_location =
       { name = "nat"; arity = 1 };
       { name = "eq"; arity = 2 };
       { name = "leq"; arity = 2 };
+      { name = "lt"; arity = 2 };
       { name = "neg"; arity = 2 };
       { name = "minus"; arity = 3 };
       { name = "mult"; arity = 3 };
@@ -286,10 +292,37 @@ module Make (Config : COMPILER_CONFIG) :
 
   let rec step : (Config.state, Config.directives, Config.mods) step =
    fun ({ declarations; directives; query; _ }, compiler) ->
+    let forbid_shadowing _ lhs rhs =
+      match (lhs, rhs) with
+      | None, None -> None
+      | (Some _ as lhs), None -> lhs
+      | None, (Some _ as rhs) -> rhs
+      | Some { loc = lhs_loc; _ }, Some { loc = rhs_loc; _ } ->
+          Logger.error rhs_loc "Attempt to shadow a predicate";
+          Logger.error lhs_loc "Outer definition here";
+          exit 1
+    in
+    let local_predicates : predicate PredicateMap.t =
+      declarations |> BatMap.enum
+      |> BatEnum.map
+           (fun (k, (({ loc; _ }, _) : 'b Location.with_location * 'a)) ->
+             (k, { original_module = compiler.env.qualifier; loc }))
+      |> PredicateMap.of_enum
+    in
     let compiler =
       FT.fold_left
         (Config.compile_directive { step; initialize_nested })
-        compiler directives
+        {
+          compiler with
+          env =
+            {
+              compiler.env with
+              predicates =
+                PredicateMap.merge forbid_shadowing compiler.env.predicates
+                  local_predicates;
+            };
+        }
+        directives
       |> BatMap.foldi Config.compile_declaration declarations
       |> Config.compile_query query
     in

@@ -22,7 +22,11 @@ let comptime_of_compiler ({ env; state = { imports }; externals; _ } : t) :
       Shared.Compiler.comptime Location.with_location option =
     match (BatMap.String.find_opt key imports, parent_value) with
     | None, parent_value -> parent_value
-    | Some _, None -> external_value
+    | Some import_loc, None ->
+        Option.map
+          (fun { Location.content; _ } ->
+            { Location.content; loc = import_loc })
+          external_value
     | Some import_loc, Some { Location.loc; _ } ->
         Logger.error import_loc "Attempt to shadow an external import";
         Logger.error loc "Local definition here";

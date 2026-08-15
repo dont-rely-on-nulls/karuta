@@ -1,0 +1,40 @@
+% FIXME: This generates the same correct answer infinitely many times
+
+sort[[], []].
+sort[[H | T], [HSorted | TSorted]] :-
+  runs[[H | T], Runs],
+  merge_all[Runs, [HSorted | TSorted]].
+
+merge[[], Tail, Tail].
+merge[[HL | TL], [HR | TR], [HL | TO]] :-
+  karuta:leq[HL, HR],
+  merge[TL, [HR | TR], TO].
+merge[[HL | TL], [HR | TR], [HR | TO]] :-
+  karuta:lt[HR, HL],
+  merge[[HL | TL], TR, TO].
+merge[Tail, [], Tail].
+
+merge_all[[A], A].
+merge_all[[HL | TL], Merged] :-
+  merge_layer[[HL | TL], LayerRemoved],
+  merge_all[LayerRemoved, Merged].
+
+merge_layer[[], []].
+merge_layer[[A], [A]].
+merge_layer[[A, B | More], [AB | Merged]] :-
+  merge[A, B, AB],
+  merge_layer[More, Merged].
+
+first_run[[A], [A], []].
+first_run[[First, Second | Remaining], [First | More], Tail] :-
+  karuta:leq[First, Second],
+  first_run[[Second | Remaining], More, Tail].
+first_run[[First, Second | Remaining], [First], [Second | Remaining]] :-
+  karuta:lt[Second, First].
+
+runs[[], []].
+runs[[H | T], [First | More]] :-
+  first_run[[H | T], First, Tail],
+  runs[Tail, More].
+
+sort[[37, 11, 1000, 0, 3], Sorted]?

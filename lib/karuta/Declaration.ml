@@ -99,12 +99,4 @@ let compile ({ name; arity } : Ast.head)
   {
     compiler with
     output = FT.cons (FT.snoc compiler.output declaration) export;
-    env =
-      {
-        env with
-        predicates =
-          Shared.Compiler.PredicateMap.add { name; arity }
-            Shared.Compiler.{ original_module = env.qualifier }
-            env.predicates;
-      };
   }

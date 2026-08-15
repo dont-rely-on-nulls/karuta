@@ -12,8 +12,8 @@ let compile _ _ _ = failwith "TODO"
 let compile_persisted ({ name; arity } : Ast.head)
     ({ content = { original_arg_list; _ }; _ } :
       Ast.Module.decl Location.with_location)
-    ({ env = { qualifier; _ } as env; state; _ } as compiler :
-      state Shared.Compiler.t) : state Shared.Compiler.t =
+    ({ env = { qualifier; _ }; state; _ } as compiler : state Shared.Compiler.t)
+    : state Shared.Compiler.t =
   let find_invalid_argument =
     FT.find_opt @@ fun arg ->
     Ast.Expr.is_underscore arg || (not @@ Ast.Expr.is_variable arg)
@@ -63,12 +63,4 @@ let compile_persisted ({ name; arity } : Ast.head)
   {
     compiler with
     output = FT.cons (FT.snoc compiler.output declaration) export;
-    env =
-      {
-        env with
-        predicates =
-          Shared.Compiler.PredicateMap.add { name; arity }
-            Shared.Compiler.{ original_module = env.qualifier }
-            env.predicates;
-      };
   }
