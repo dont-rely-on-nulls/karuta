@@ -342,6 +342,10 @@ let rec whitespace : 'e. (unit, 'e) parser =
      @>> snd
      @> ifte newline (snd @> whitespace) succeed
 
+(** [ident_like is_start is_character fallthrough] constructs a parser that
+    attempts to parse a sequence of characters where the first character
+    satisfies the predicate [is_start], while every other character satisfies
+    [is_character]. *)
 let ident_like is_start is_character fallthrough { remaining = current; loc } =
   match first current with
   | None -> Error `UnexpectedEOF
@@ -428,28 +432,30 @@ let integer :
        (snd @> positive_integer @> replace @@ Location.fmap Int.neg)
        positive_integer
 
+(** [list_of ~start_delim ~separator ~end_delim item] constructs a parser with
+    the following structure:
+
+    items <- start_delim (end_delim / !end_delim item item_loop)
+
+    item_loop <- separator item item_loop / !(separator item) end_delim *)
 let list_of :
     'a 'e.
-    ?allow_trailing:bool ->
     start_delim:(unit, 'e) parser ->
     separator:(unit, 'e) parser ->
     end_delim:(unit, 'e) parser ->
     ('a, 'e) parser ->
     ('a FT.t, 'e) parser =
- fun ?(allow_trailing = false) ~start_delim ~separator ~end_delim item ->
+ fun ~start_delim ~separator ~end_delim item ->
   let open FT in
-  let trailing =
-    if allow_trailing then maybe separator @&& succeed else succeed
-  in
   start_delim
-  @&& ifte end_delim (capture @@ Fun.const @@ return empty)
+  @&& ifte end_delim (snd @> return empty)
   @@ item @> replace singleton
   @>>
   let rec loop acc =
     ifte
       (separator @&& item @> replace (snoc acc))
       (capture loop)
-      (trailing @&& end_delim @> replace @@ Fun.const acc)
+      (end_delim @&& return acc)
   in
   capture loop
 
@@ -555,15 +561,18 @@ and list : 'e. (Ast.Expr.t, ([> expr_errors ] as 'e)) parser =
     func <- func_label ((&left_bracket / &left_paren) (prolog_elements /
     karuta_elements) / !(&left_bracket / &left_paren))
 
-    karuta_elements <- left_bracket whitespace_and_comments right_bracket /
-    !(whitespace_and_comments right_bracket) sigle_element karuta_elements_loop
+    single_element <- whitespace_and_comments expr
+
+    karuta_elements <- left_bracket (whitespace_and_comments right_bracket /
+    !(whitespace_and_comments right_bracket) single_element
+    karuta_elements_loop)
 
     karuta_elements_loop <- whitespace_and_comments comma expr
     karuta_elements_loop / !(whitespace_and_comments comma expr)
     whitespace_and_comments right_bracket
 
-    prolog_elements <- left_paren whitespace_and_comments right_paren /
-    !(whitespace_and_comments right_paren) sigle_element prolog_elements_loop
+    prolog_elements <- left_paren (whitespace_and_comments right_paren /
+    !(whitespace_and_comments right_paren) single_element prolog_elements_loop)
 
     prolog_elements_loop <- whitespace_and_comments comma expr
     prolog_elements_loop / !(whitespace_and_comments comma expr)
