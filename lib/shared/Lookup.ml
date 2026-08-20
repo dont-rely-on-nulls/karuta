@@ -89,7 +89,7 @@ let predicate (comptime_env : comptime Location.with_location)
         `Undefined name_with_loc
     | Some predicate -> `Ok predicate
   in
-  match FT.front qualifiers with
+  match FT.rear qualifiers with
   | None -> local_predicate runtime_env
   | Some module_name -> (
       match m0dule comptime_env module_name with
