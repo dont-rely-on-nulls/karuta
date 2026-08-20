@@ -118,7 +118,7 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
                {
                  persist = persist.executable;
                  query = query.content;
-                 sakura;
+                 sakura = (if FT.is_empty sakura_files then None else sakura);
                  filename;
                  root_module;
                }))
