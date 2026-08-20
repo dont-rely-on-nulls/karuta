@@ -9,11 +9,11 @@ let compile _ _ _ = failwith "TODO"
 (*   let v = Atomic.get a in *)
 (*   if Atomic.compare_and_set a v (f v) then () else swap a f *)
 
-let compile_persisted ({ name; arity } : Ast.head)
-    ({ content = { original_arg_list; _ }; _ } :
+let compile_persisted ({ name; arity } as head : Ast.head)
+    ({ content = { original_arg_list; _ }; loc } :
       Ast.Module.decl Location.with_location)
-    ({ env = { qualifier; _ }; state; _ } as compiler : state Shared.Compiler.t)
-    : state Shared.Compiler.t =
+    ({ env = { qualifier; _ } as env; state; _ } as compiler :
+      state Shared.Compiler.t) : state Shared.Compiler.t =
   let find_invalid_argument =
     FT.find_opt @@ fun arg ->
     Ast.Expr.is_underscore arg || (not @@ Ast.Expr.is_variable arg)
@@ -63,4 +63,12 @@ let compile_persisted ({ name; arity } : Ast.head)
   {
     compiler with
     output = FT.cons (FT.snoc compiler.output declaration) export;
+    env =
+      {
+        env with
+        predicates =
+          Shared.Compiler.PredicateMap.add head
+            { Shared.Compiler.original_module = qualifier; loc }
+            env.predicates;
+      };
   }

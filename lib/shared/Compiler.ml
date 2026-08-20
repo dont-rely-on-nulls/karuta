@@ -259,8 +259,6 @@ module Make (Config : COMPILER_CONFIG) :
           let qualifier =
             (ft_of_original_module p.env.qualifier, module_name)
           in
-          Logger.debug @@ FT.to_string BatIO.nwrite
-          @@ ft_of_original_module qualifier;
           (Config.merge_state mods p.state, { p.env with qualifier }))
         parent
     in
