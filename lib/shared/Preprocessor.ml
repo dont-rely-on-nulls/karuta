@@ -454,8 +454,6 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                    (ModuleName.of_filepath filename)
                    Location.dummy;
                signature = None;
-               (* TODO: insert forward declarations so the order of predicates
-                  stops mattering. *)
                declarations = BatMap.empty;
                directives = FT.empty;
                target_specific = Config.init_mods ();
