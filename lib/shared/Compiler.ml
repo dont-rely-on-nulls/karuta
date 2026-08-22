@@ -36,7 +36,6 @@ let ft_of_original_module : string FT.t * string -> string FT.t =
 type sig_env = signature env
 
 and compiled_signature = {
-  (* TODO: note which things are actually locally defined *)
   modules : sig_env;
   predicates : predicate_name Set.t;
 }
@@ -117,7 +116,7 @@ module type LOOKUP = sig
     | `UnexpectedSignature of Location.location ]
 
   val nested_signature :
-    compiled_signature Location.with_location ->
+    sig_env Location.with_location ->
     comptime Location.with_location ->
     Ast.Expr.func_label ->
     [> `Ok of signature Location.with_location

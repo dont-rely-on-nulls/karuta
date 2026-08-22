@@ -1,18 +1,20 @@
 open Compiler
 
 type 'a choice =
-  [ `NestedLookup of 'a env | `UnexpectedSignature of Location.location ]
+  | NestedLookup of 'a env
+  | Leaf of 'a Location.with_location
+  | UnexpectedSignature of Location.location
 
 type 'a selector = 'a Location.with_location -> 'a choice
 
 let (comptime_select : comptime selector) = function
-  | { content = Module { modules; _ }; _ } -> `NestedLookup modules
-  | { content = Signature _; loc = sig_loc } -> `UnexpectedSignature sig_loc
+  | { content = Module { modules; _ }; _ } -> NestedLookup modules
+  | { content = Signature _; loc = sig_loc } -> UnexpectedSignature sig_loc
 
 let (signature_select : signature selector) = function
-  | { content = ModuleSignature { modules; _ }; _ } -> `NestedLookup modules
-  | { content = PlainSignature _ | Abstract _; loc = sig_loc } ->
-      `UnexpectedSignature sig_loc
+  | { content = ModuleSignature { modules; _ }; _ } -> NestedLookup modules
+  | { content = PlainSignature _ } as ret -> Leaf ret
+  | { content = Abstract _; loc = sig_loc } -> UnexpectedSignature sig_loc
 
 let rec lookup_mod_sig (select : 'a selector)
     (value : 'a Location.with_location)
@@ -21,17 +23,18 @@ let rec lookup_mod_sig (select : 'a selector)
   | None -> `Ok value
   | Some (more, qualifier) -> (
       match select value with
-      | `NestedLookup modules -> (
+      | Leaf a when FT.is_empty more -> `Ok a
+      | NestedLookup modules -> (
           match BatMap.String.find_opt qualifier.content modules with
           | None ->
               Logger.error qualifier.loc "Undefined qualifier";
               `Undefined qualifier
           | Some env -> lookup_mod_sig select env more)
-      | `UnexpectedSignature sig_loc as unexpected ->
+      | UnexpectedSignature sig_loc | Leaf { loc = sig_loc; _ } ->
           Logger.error qualifier.loc
             "Qualifiers reference signature instead of module";
           Logger.error sig_loc "Reference is here";
-          unexpected)
+          `UnexpectedSignature sig_loc)
 
 let signature (comptime_env : comptime Location.with_location)
     ((qualifiers, unqualified_name) : Ast.Expr.func_label) =
@@ -60,13 +63,14 @@ let m0dule (comptime_env : comptime Location.with_location)
   | `UnexpectedSignature _ as other -> other
   | `Undefined _ as other -> other
 
-let rec nested_signature
-    (compiled_signature : compiled_signature Location.with_location)
+let nested_signature (sig_env : sig_env Location.with_location)
     (comptime_env : comptime Location.with_location)
     ((qualifiers, unqualified_name) as names : Ast.Expr.func_label) =
   match
     lookup_mod_sig signature_select
-      (Location.fmap (fun s -> PlainSignature s) compiled_signature)
+      (Location.fmap
+         (fun s -> PlainSignature { modules = s; predicates = Set.empty })
+         sig_env)
       (FT.snoc qualifiers unqualified_name)
   with
   | `Ok _ as ok -> ok

@@ -1,5 +1,14 @@
 open Compiler
 
+let sig_env_cons :
+    sig_env Location.with_location ->
+    compiled_signature ->
+    sig_env Location.with_location =
+ fun lhs rhs ->
+  Location.fmap
+    (fun lhs -> BatMap.String.union (fun _ _ rhs -> Some rhs) lhs rhs.modules)
+    lhs
+
 module Diff : sig
   val predicates :
     predicate_name BatSet.t ->
@@ -42,6 +51,8 @@ end = struct
       @@ "The following predicates are missing implementation: " ^ error_msg;
       exit 1)
 
+  (* FIXME: something seems to be wrong when we nest a signature inside of another
+     then ascribe the outer signature to a module. *)
   let comptimes (provided : comptime env) (required : sig_env)
       (module_loc : Location.location) (sig_loc : Location.location) : unit =
     let provided_comptimes_set =
@@ -165,13 +176,13 @@ let rec compile_nested : type a mods directive.
     Location.location ->
     (directive, mods) Ast.Module.signature_body ->
     a t ->
-    compiled_signature Location.with_location ->
+    sig_env Location.with_location ->
     compiled_signature Location.with_location =
- fun loc body ({ env = { modules; _ }; _ } as compiler) sig_scope ->
+ fun loc body ({ env = { modules; _ }; _ } as compiler) sig_env ->
   let module Lookup = (val compiler.lookup) in
   let directive_step (acc : compiled_signature)
       (next : (directive, mods) Ast.Module.directive Location.with_location) =
-    let signature_happy_case (comptime_name : string)
+    let happy_case (comptime_name : string)
         (definition : signature Location.with_location) =
       {
         acc with
@@ -207,14 +218,14 @@ let rec compile_nested : type a mods directive.
           Location.add_loc (ModuleSignature payload) next.loc
         in
         match
-          Lookup.nested_signature (Location.add_loc acc loc)
+          Lookup.nested_signature (sig_env_cons sig_env acc)
             (Lookup.comptime_of_compiler compiler)
             module_signature
         with
         | `Ok { content = PlainSignature payload; _ } ->
-            signature_happy_case module_name @@ module_of_plain payload
+            happy_case module_name @@ module_of_plain payload
         | `Ok { content = Abstract _; _ } ->
-            signature_happy_case module_name module_of_abstract
+            happy_case module_name module_of_abstract
         | `UnexpectedModule { loc = outer; _ }
         | `Ok { content = ModuleSignature _; loc = outer } ->
             report_module_as_signature module_signature_loc outer
@@ -227,7 +238,7 @@ let rec compile_nested : type a mods directive.
     | Module
         {
           name = { content = atom_module_name; _ };
-          signature = Some { content = Inlined inline_signature; _ };
+          signature = Some { content = Inlined inline_signature; loc = sig_loc };
           directives;
           declarations;
           _;
@@ -242,16 +253,17 @@ let rec compile_nested : type a mods directive.
               "There's already a module or signature with the same name";
             exit 1
         | None ->
-            let compiled_module_sig = compile loc inline_signature compiler in
-            signature_happy_case atom_module_name
+            let compiled_module_sig =
+              compile_nested sig_loc inline_signature compiler
+              @@ sig_env_cons sig_env acc
+            in
+            happy_case atom_module_name
               (Location.fmap (fun m -> ModuleSignature m) compiled_module_sig))
     | Signature { name = { content = signature_name; _ }; body } ->
         let compiled_sig =
-          compile_nested next.loc body compiler
-            (* TODO: (Lookup.sig_cons sig_scope acc.modules) *)
-            sig_scope
+          compile_nested next.loc body compiler @@ sig_env_cons sig_env acc
         in
-        signature_happy_case signature_name
+        happy_case signature_name
         @@ Location.fmap (fun v -> PlainSignature v) compiled_sig
     | Module
         {
@@ -302,10 +314,5 @@ and compile : type a mods directive.
     a t ->
     compiled_signature Location.with_location =
  fun loc body compiler ->
-  let module Lookup = (val compiler.lookup) in
   compile_nested loc body compiler
-  @@ Location.add_loc
-       (* TODO: check this. *)
-       ({ modules = BatMap.String.empty; predicates = Set.empty }
-         : compiled_signature)
-       loc
+  @@ Location.add_loc BatMap.String.empty Location.dummy
