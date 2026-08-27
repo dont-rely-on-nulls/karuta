@@ -45,20 +45,26 @@ and signature =
   | Abstract of int
   | ModuleSignature of compiled_signature
 
-type hidden_definitions = {
-  modules : comptime env;
-  predicates : predicate PredicateMap.t;
-}
-
 and compiled_module = {
   qualifier : string FT.t * string;
   modules : comptime env;
   predicates : predicate PredicateMap.t;
   query : predicate_name Location.with_location option;
-  hidden : hidden_definitions option;
 }
 
 and comptime = Module of compiled_module | Signature of compiled_signature
+
+let rec signature_equal lhs rhs =
+  match (lhs, rhs) with
+  | PlainSignature lhs, PlainSignature rhs
+  | ModuleSignature lhs, ModuleSignature rhs ->
+      Set.equal lhs.predicates rhs.predicates
+      && BatMap.String.equal
+           (fun { Location.content = lhs; _ } { content = rhs; _ } ->
+             signature_equal lhs rhs)
+           lhs.modules rhs.modules
+  | Abstract lhs, Abstract rhs -> lhs = rhs
+  | _ -> false
 
 let builtin_module name predicates =
   let qualifier = (FT.empty, name) in
@@ -67,7 +73,6 @@ let builtin_module name predicates =
        {
          qualifier;
          query = None;
-         hidden = None;
          modules = BatMap.String.empty;
          predicates =
            PredicateMap.of_list
@@ -251,7 +256,6 @@ module Make (Config : COMPILER_CONFIG) :
               qualifier = (FT.empty, module_name);
               modules = BatMap.String.empty;
               predicates = PredicateMap.empty;
-              hidden = None;
               query = None;
             } )
         ~some:(fun p ->

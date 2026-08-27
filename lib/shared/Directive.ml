@@ -91,7 +91,6 @@ let rec compile : type state mods.
                 modules =
                   BatMap.String.add module_name
                     (inline_sig
-                    |> Location.fmap (fun s -> PlainSignature s)
                     |> Signature.ascribe_to_module content
                     |> Location.fmap (fun m -> Module m))
                     modules;
@@ -128,7 +127,6 @@ let rec compile : type state mods.
           in
           let compiled_module =
             signature
-            |> Location.fmap (fun v -> PlainSignature v)
             |> Signature.ascribe_to_module comptime
             |> Location.fmap (fun v -> Module v)
           in
