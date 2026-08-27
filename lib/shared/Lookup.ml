@@ -2,7 +2,6 @@ open Compiler
 
 type 'a choice =
   | NestedLookup of 'a env
-  | Leaf of 'a Location.with_location
   | UnexpectedSignature of Location.location
 
 type 'a selector = 'a Location.with_location -> 'a choice
@@ -12,8 +11,11 @@ let (comptime_select : comptime selector) = function
   | { content = Signature _; loc = sig_loc } -> UnexpectedSignature sig_loc
 
 let (signature_select : signature selector) = function
-  | { content = ModuleSignature { modules; _ }; _ } -> NestedLookup modules
-  | { content = PlainSignature _ } as ret -> Leaf ret
+  | {
+      content = ModuleSignature { modules; _ } | PlainSignature { modules; _ };
+      _;
+    } ->
+      NestedLookup modules
   | { content = Abstract _; loc = sig_loc } -> UnexpectedSignature sig_loc
 
 let rec lookup_mod_sig (select : 'a selector)
@@ -23,14 +25,13 @@ let rec lookup_mod_sig (select : 'a selector)
   | None -> `Ok value
   | Some (more, qualifier) -> (
       match select value with
-      | Leaf a when FT.is_empty more -> `Ok a
       | NestedLookup modules -> (
           match BatMap.String.find_opt qualifier.content modules with
           | None ->
               Logger.error qualifier.loc "Undefined qualifier";
               `Undefined qualifier
           | Some env -> lookup_mod_sig select env more)
-      | UnexpectedSignature sig_loc | Leaf { loc = sig_loc; _ } ->
+      | UnexpectedSignature sig_loc ->
           Logger.error qualifier.loc
             "Qualifiers reference signature instead of module";
           Logger.error sig_loc "Reference is here";
