@@ -1,4 +1,6 @@
-:- module[a] { my_plus[_, _, _]. } {
+:- module[a] {
+    my_plus[_, _, _].
+} {
     my_plus[LHS, RHS, Res] :- private[LHS, RHS, Res].
 
     private[LHS, RHS, Res] :- karuta:plus[LHS, RHS, Res].

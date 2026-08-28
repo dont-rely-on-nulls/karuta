@@ -1,0 +1,17 @@
+:- signature[outer] {
+    :- signature[inner] {
+        p[_].
+    }.
+    :- module[m, inner] {}.
+}.
+
+:- module[m, outer] {
+    :- signature[inner] {
+        p[_].
+    }.
+    :- module[m, inner] {
+        p[413].
+    }.
+}.
+
+m:m:p[N]?
