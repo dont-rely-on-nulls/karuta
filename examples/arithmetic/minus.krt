@@ -1,0 +1,3 @@
+minus[InL, InR, Out] :- karuta:plus[InR, Out, InL].
+
+minus[LHS, RHS, 0]?

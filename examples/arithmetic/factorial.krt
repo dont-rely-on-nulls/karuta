@@ -1,0 +1,10 @@
+factorial[X, Out] :- karuta:nat[X], 'factorial loop'[X, 1, Out].
+
+'factorial loop'[0, Out, Out] :- karuta:nat[Out].
+'factorial loop'[N, Acc, Out] :-
+    karuta:nat[N],
+    karuta:mult[N, Acc, NewAcc],
+    karuta:minus[N, 1, Prev],
+    'factorial loop'[Prev, NewAcc, Out].
+
+factorial[5, Out]?

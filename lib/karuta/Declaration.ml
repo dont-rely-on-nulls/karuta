@@ -25,9 +25,8 @@ let call_with_fresh (name : string) expr =
   Ukanren.call_with_fresh @@ Builder.lambda name expr
 
 let compile_declaration_bodies
-    ({ module_name; state; _ } as compiler : state Shared.Compiler.t)
+    ({ state; env; _ } as compiler : state Shared.Compiler.t)
     (clauses : Ast.Module.decl Location.with_location FT.t) =
-  let scope = Lookup.ancestors_of_compiler compiler in
   if FT.is_empty clauses then (
     Logger.simply_unreachable "Predicates must have at least one body";
     exit 1)
@@ -36,16 +35,6 @@ let compile_declaration_bodies
     let compile_single_body
         ({ content; _ } : Ast.Module.decl Location.with_location) :
         Builder.Expr.t =
-      FT.iter
-        (fun { Location.content = { Ast.Expr.name; elements } } ->
-          match Lookup.predicate scope name (FT.size elements) with
-          | `Ok () -> ()
-          | `Undefined _ -> exit 1
-          | `UnexpectedSignature loc ->
-              Logger.error loc
-                "Expected module name but found a signature instead";
-              exit 1)
-        content.body;
       let find_variables call =
         Shared.Preprocessor.find_variables (Functor call)
       in
@@ -60,45 +49,30 @@ let compile_declaration_bodies
       let body =
         (* TODO: We should use locations when calling Beam helpers. They don't use
            locations yet, hence they are not being sent as arguments *)
-        let make_function { content = call; loc } =
-          let { Ast.Expr.name; elements } = call in
-          let arity = FT.size elements in
-          let args = FT.map compile_expr elements in
-          if Ast.Expr.match_func call [ "karuta"; "eq" ] && arity = 2 then (
-            match FT.to_list args with
-            | [ expr1; expr2 ] -> Ukanren.eq expr1 expr2
-            | _ ->
-                Logger.unreachable loc
-                  "Mismatch between arity and length of elements in builtin \
-                   'eq'";
-                exit 1)
-          else if Ast.Expr.match_func call [ "karuta"; "nat" ] && arity = 1 then (
-            match FT.to_list args with
-            | [ expr1 ] -> Ukanren.nat expr1
-            | _ ->
-                Logger.unreachable loc
-                  "Mismatch between arity and length of elements in builtin \
-                   'nat'";
-                exit 1)
-          else
-            let path, { content = fun_name; _ } = name in
-            match FT.head path with
-            | None ->
-                Builder.call (Builder.atom @@ Ast.Expr.extract_func_label call)
-                @@ FT.to_list args
-            | Some head ->
-                Builder.call_with_module
-                  (Builder.atom
-                  @@ flat_module_name
-                       (let suffix =
-                          FT.to_list @@ FT.map Location.strip_loc path
-                        in
-                        if BatMap.String.mem head.content state.imports then
-                          suffix
-                        else module_name :: suffix))
-                  (Builder.atom fun_name) (FT.to_list args)
+        let make_function { content = { Ast.Expr.name; elements } as call; loc }
+            =
+          match
+            Lookup.predicate
+              (Lookup.comptime_of_compiler compiler)
+              compiler.env name (FT.size elements)
+          with
+          | `Undefined _ -> exit 1
+          | `UnexpectedSignature loc ->
+              Logger.error loc
+                "Expected module name but found a signature instead";
+              exit 1
+          | `Ok { original_module } when original_module = env.qualifier ->
+              let args = FT.map compile_expr elements in
+              Builder.call (Builder.atom @@ Ast.Expr.extract_func_label call)
+              @@ FT.to_list args
+          | `Ok { original_module } ->
+              let args = FT.map compile_expr elements in
+              let _, { content = fun_name; _ } = name in
+              Builder.call_with_module
+                (original_module |> Shared.Compiler.ft_of_original_module
+               |> FT.to_list |> flat_module_name |> Builder.atom)
+                (Builder.atom fun_name) (FT.to_list args)
         in
-
         content.body |> FT.map make_function |> FT.to_list |> Ukanren.conj
       in
       BatSet.fold call_with_fresh vars body
@@ -125,10 +99,4 @@ let compile ({ name; arity } : Ast.head)
   {
     compiler with
     output = FT.cons (FT.snoc compiler.output declaration) export;
-    env =
-      {
-        env with
-        predicates =
-          Shared.Compiler.PredicateMap.add { name; arity } () env.predicates;
-      };
   }

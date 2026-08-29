@@ -16,26 +16,26 @@ let rec print_module externals =
       | Signature _ -> BatInnerIO.write_string out "<Sig>")
     BatInnerIO.stderr externals
 
-let ancestors_of_compiler (compiler : t) : Shared.Compiler.scope =
-  let open struct
-    type ancestors_of_compiler =
-      | Compiler of t
-      | Imports of Shared.Compiler.comptime Shared.Compiler.env
-      | End
-  end in
-  let open BatLazyList in
-  unfold (Compiler compiler) (function
-    | End -> None
-    | Imports imports -> Some (imports, End)
-    | Compiler { parent; env; state; externals; _ } ->
-        let imports = state.imports in
-        Some
-          ( env.modules,
-            Option.fold
-              ~none:
-                (Imports
-                   (BatMap.String.filter
-                      (fun k _ -> BatMap.String.mem k imports)
-                      externals))
-              ~some:(fun c -> Compiler c)
-              parent ))
+let comptime_of_compiler ({ env; state = { imports }; externals; _ } : t) :
+    Shared.Compiler.comptime Location.with_location =
+  let forbid_shadowing key parent_value external_value :
+      Shared.Compiler.comptime Location.with_location option =
+    match (BatMap.String.find_opt key imports, parent_value) with
+    | None, parent_value -> parent_value
+    | Some import_loc, None ->
+        Option.map
+          (fun { Location.content; _ } ->
+            { Location.content; loc = import_loc })
+          external_value
+    | Some import_loc, Some { Location.loc; _ } ->
+        Logger.error import_loc "Attempt to shadow an external import";
+        Logger.error loc "Local definition here";
+        exit 1
+  in
+  let local_env =
+    {
+      env with
+      modules = BatMap.String.merge forbid_shadowing env.modules externals;
+    }
+  in
+  Location.add_loc (Shared.Compiler.Module local_env) Location.dummy

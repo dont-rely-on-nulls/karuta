@@ -1,5 +1,0 @@
-:- module[coffee-shop] {
-  :- sakura:persisted {
-    order[Id] :- int[Id].
-  }.
-}.

@@ -1,13 +1,10 @@
 open Compiler
 
-let create_nested_module_name module_name parent : string =
-  parent.module_name ^ ModuleName.separator ^ module_name
-
 let initialize_from_parent (type state) (type mods) (type directives)
     ({ target_specific; name = { content = name; _ }; _ } :
       (directives, mods) Ast.Module.module_body)
-    (initialize_nested : (state, mods) initialize_nested) parent : state t =
-  let inner_module_name = create_nested_module_name name parent in
+    (initialize_nested : (state, mods) initialize_nested) (parent : state t) :
+    state t =
   let inner_filename =
     ModuleName.of_filepath parent.filename
     ^ "." ^ name
@@ -20,7 +17,7 @@ let initialize_from_parent (type state) (type mods) (type directives)
       filename = inner_filename;
       mods = target_specific;
     }
-    (Some parent) inner_module_name
+    (Some parent) name
 
 let rec compile : type state mods.
     Location.location ->
@@ -39,10 +36,9 @@ let rec compile : type state mods.
          _;
        } as module_) -> (
       let module_name' = (FT.empty, name) in
-      let comptime_value = Lookup.ancestors_of_compiler compiler in
       match
         Logger.with_min_level Logger.Level.Unreachable @@ fun () ->
-        Lookup.m0dule comptime_value module_name'
+        Lookup.m0dule (Lookup.comptime_of_compiler compiler) module_name'
       with
       | `Ok { loc; _ } | `UnexpectedSignature loc ->
           Logger.error module_loc "Failed to define module";
@@ -82,10 +78,9 @@ let rec compile : type state mods.
         compile directive_loc module_without_named_signature compiler runner
       in
       let module_name' = (FT.empty, name) in
-      let comptime_value = Lookup.ancestors_of_compiler compiler in
       match
         Logger.with_min_level Logger.Level.Unreachable @@ fun () ->
-        Lookup.m0dule comptime_value module_name'
+        Lookup.m0dule (Lookup.comptime_of_compiler compiler) module_name'
       with
       | `Ok content ->
           {
@@ -96,7 +91,6 @@ let rec compile : type state mods.
                 modules =
                   BatMap.String.add module_name
                     (inline_sig
-                    |> Location.fmap (fun s -> PlainSignature s)
                     |> Signature.ascribe_to_module content
                     |> Location.fmap (fun m -> Module m))
                     modules;
@@ -113,11 +107,11 @@ let rec compile : type state mods.
          _;
        } as module_) -> (
       let module_name' = (FT.empty, name) in
-      let comptime_value = Lookup.ancestors_of_compiler compiler in
+      let comptime_env = Lookup.comptime_of_compiler compiler in
       match
         Logger.with_min_level Logger.Level.Unreachable @@ fun () ->
-        ( Lookup.m0dule comptime_value module_name',
-          Lookup.signature comptime_value signature_name )
+        ( Lookup.m0dule comptime_env module_name',
+          Lookup.signature comptime_env signature_name )
       with
       | `Ok { loc; _ }, _ | `UnexpectedSignature loc, _ ->
           Logger.error module_loc "Failed to define module";
@@ -133,7 +127,6 @@ let rec compile : type state mods.
           in
           let compiled_module =
             signature
-            |> Location.fmap (fun v -> PlainSignature v)
             |> Signature.ascribe_to_module comptime
             |> Location.fmap (fun v -> Module v)
           in

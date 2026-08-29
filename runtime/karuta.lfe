@@ -6,6 +6,7 @@
     (is-variable 2)
     (boundedness 2)
     (leq 2)
+    (lt 2)
     (int 1)
     (nat 1)
     (plus 3)
@@ -185,7 +186,7 @@
     ((andalso (is_map a) (is_map b) (== (map_size a) (map_size b)))
      (unify-map state a b))
     ((andalso (is_tuple a) (is_tuple b) (== (tuple_size a) (tuple_size b)))
-      (unify-tuple state (tuple_size a) 1 a b))
+     (unify-tuple state (tuple_size a) 1 a b))
     ('true
      (case (tuple a b)
        ((tuple (cons ha ta) (cons hb tb))
@@ -342,6 +343,17 @@
     (lambda (n)
       (conj (nat n)
         (plus lhs n rhs))))))
+
+(defpred lt ((is_integer lhs) (is_integer rhs))
+  ((tuple 'bound 'bound) (if (< lhs rhs) (fun true 1) (fun false 1)))
+  ((tuple 'unbound 'unbound) (conj (int lhs) (lt lhs rhs)))
+  ((tuple _ _)
+   (call-with-fresh
+    (lambda (n)
+      (conj (nat n)
+        (ifte (eq n 0)
+          (fun false 1)
+          (plus lhs n rhs)))))))
 
 (defpred plus ((is_integer lhs) (is_integer rhs) (is_integer out))
   ((tuple 'bound 'bound _) (eq out (+ lhs rhs)))

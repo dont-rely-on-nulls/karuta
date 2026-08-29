@@ -3,8 +3,5 @@ include Types
 
 type t = state Shared.Compiler.t
 
-let ancestors_of_compiler (compiler : t) : scope =
-  let open BatLazyList in
-  unfold (Some compiler) (function
-    | None -> None
-    | Some { parent; env; _ } -> Some (env.modules, parent))
+let comptime_of_compiler (compiler : t) =
+  Location.add_loc (Shared.Compiler.Module compiler.env) Location.dummy
