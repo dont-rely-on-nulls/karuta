@@ -26,6 +26,7 @@ end
 type functor_map = int PredicateMap.t
 
 type predicate = {
+  (* TODO: add type information *)
   original_module : string FT.t * string;
   loc : Location.location;
 }
