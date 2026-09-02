@@ -1,0 +1,11 @@
+multyply[N, 0, 0] :- karuta:int[N].
+multyply[0, N, 0] :- karuta:int[N].
+multyply[X, Y, Out] :- karuta:int[X], karuta:int[Y], multyply[X, Y, 0, Out].
+
+multyply[1, Y, Acc, Out] :- karuta:plus[Acc, Y, Out].
+multyply[N, Y, Acc, Out] :-
+    karuta:plus[Acc, Y, NewAcc],
+    karuta:plus[N, -1, Prev],
+    multyply[Prev, Y, NewAcc, Out].
+
+multyply[4, 3, Out], karuta:mult[LHS, RHS, Out]?

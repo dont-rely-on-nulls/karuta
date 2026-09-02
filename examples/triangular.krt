@@ -1,9 +1,0 @@
-triangle[N, Out] :- leq[0, N], triangle[N, 0, Out].
-
-triangle[0, Out, Out] :- int[Out].
-triangle[N, Acc, Out] :-
-    plus[N, Acc, NewAcc],
-    plus[N, -1, Prev],
-    triangle[Prev, NewAcc, Out].
-
-triangle[5, Out]?

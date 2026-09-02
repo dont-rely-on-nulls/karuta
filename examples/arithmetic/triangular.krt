@@ -1,0 +1,10 @@
+triangle[N, Out] :- karuta:nat[N], triangle[N, 0, Out].
+
+triangle[0, Out, Out] :- karuta:nat[Out].
+triangle[N, Acc, Out] :-
+    karuta:nat[N],
+    karuta:plus[N, Acc, NewAcc],
+    karuta:minus[N, 1, Prev],
+    triangle[Prev, NewAcc, Out].
+
+triangle[5, Out]?

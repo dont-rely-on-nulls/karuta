@@ -1,72 +1,47 @@
 open Compiler
 
-type 'a nested_env = 'a env BatLazyList.t
-type scope = comptime nested_env
-type sig_scope = signature nested_env
-
 type 'a choice =
-  [ `NestedLookup of 'a env | `UnexpectedSignature of Location.location ]
+  | NestedLookup of 'a env
+  | UnexpectedSignature of Location.location
 
 type 'a selector = 'a Location.with_location -> 'a choice
 
 let (comptime_select : comptime selector) = function
-  | { content = Module { modules; _ }; _ } -> `NestedLookup modules
-  | { content = Signature _; loc = sig_loc } -> `UnexpectedSignature sig_loc
+  | { content = Module { modules; _ }; _ } -> NestedLookup modules
+  | { content = Signature _; loc = sig_loc } -> UnexpectedSignature sig_loc
 
 let (signature_select : signature selector) = function
-  | { content = ModuleSignature { modules; _ }; _ } -> `NestedLookup modules
-  | { content = PlainSignature _ | Abstract _; loc = sig_loc } ->
-      `UnexpectedSignature sig_loc
+  | {
+      content = ModuleSignature { modules; _ } | PlainSignature { modules; _ };
+      _;
+    } ->
+      NestedLookup modules
+  | { content = Abstract _; loc = sig_loc } -> UnexpectedSignature sig_loc
 
-let rec lookup_mod_sig (envs : 'a env BatLazyList.t)
-    (names : string Location.with_location FT.t) (select : 'a selector) =
-  let rec lookup_mod_sig_qualified (rest : string Location.with_location FT.t)
-      (value : 'a Location.with_location) =
-    match FT.front rest with
-    | None -> `Ok value
-    | Some (more, qualifier) -> (
-        match select value with
-        | `NestedLookup modules -> (
-            match BatMap.String.find_opt qualifier.content modules with
-            | None ->
-                Logger.error qualifier.loc "Undefined qualifier";
-                `Undefined qualifier
-            | Some env -> lookup_mod_sig_qualified more env)
-        | `UnexpectedSignature sig_loc as unexpected ->
-            Logger.error qualifier.loc
-              "Qualifiers reference signature instead of module";
-            Logger.error sig_loc "Reference is here";
-            unexpected)
-  in
+let rec lookup_mod_sig (select : 'a selector)
+    (value : 'a Location.with_location)
+    (names : string Location.with_location FT.t) =
   match FT.front names with
-  | None ->
-      Logger.simply_unreachable "There should be names in lookup_mod_sig";
-      exit 1
-  | Some (rest, first) -> (
-      match Lazy.force envs with
-      | BatLazyList.Cons (env, parent) -> (
-          match BatMap.String.find_opt first.content env with
-          | None -> lookup_mod_sig parent names select
-          | Some value -> lookup_mod_sig_qualified rest value)
-      | BatLazyList.Nil ->
-          Logger.error first.loc "Undefined in current scope";
-          `Undefined first)
+  | None -> `Ok value
+  | Some (more, qualifier) -> (
+      match select value with
+      | NestedLookup modules -> (
+          match BatMap.String.find_opt qualifier.content modules with
+          | None ->
+              Logger.error qualifier.loc "Undefined qualifier";
+              `Undefined qualifier
+          | Some env -> lookup_mod_sig select env more)
+      | UnexpectedSignature sig_loc ->
+          Logger.error qualifier.loc
+            "Qualifiers reference signature instead of module";
+          Logger.error sig_loc "Reference is here";
+          `UnexpectedSignature sig_loc)
 
-(* TODO: Supress log levels to avoid reporting false negatives to the user
-   These functions can report their own errors, but they don't know when to exit 1*)
-
-let empty_signature : sig_scope = BatLazyList.nil
-
-let sig_env_to_sig_scope (env : signature env) : sig_scope =
-  BatLazyList.of_list [ env ]
-
-let sig_cons (scope : sig_scope) (env : sig_env) : sig_scope =
-  BatLazyList.cons env scope
-
-let signature (scope : scope)
+let signature (comptime_env : comptime Location.with_location)
     ((qualifiers, unqualified_name) : Ast.Expr.func_label) =
   match
-    lookup_mod_sig scope (FT.snoc qualifiers unqualified_name) comptime_select
+    lookup_mod_sig comptime_select comptime_env
+      (FT.snoc qualifiers unqualified_name)
   with
   | `Ok { content = Module m; loc } ->
       Logger.error unqualified_name.loc "Found module instead of signature";
@@ -75,10 +50,11 @@ let signature (scope : scope)
   | `Ok { content = Signature found; loc } -> `Ok (Location.add_loc found loc)
   | (`Undefined _ | `UnexpectedSignature _) as other -> other
 
-let m0dule (scope : scope)
+let m0dule (comptime_env : comptime Location.with_location)
     ((qualifiers, unqualified_name) : Ast.Expr.func_label) =
   match
-    lookup_mod_sig scope (FT.snoc qualifiers unqualified_name) comptime_select
+    lookup_mod_sig comptime_select comptime_env
+      (FT.snoc qualifiers unqualified_name)
   with
   | `Ok { content = Module module'; loc } -> `Ok (Location.add_loc module' loc)
   | `Ok { content = Signature _; loc } ->
@@ -88,34 +64,39 @@ let m0dule (scope : scope)
   | `UnexpectedSignature _ as other -> other
   | `Undefined _ as other -> other
 
-let nested_signature (compiled_signatures : sig_scope) (scope : scope)
+let nested_signature (sig_env : sig_env Location.with_location)
+    (comptime_env : comptime Location.with_location)
     ((qualifiers, unqualified_name) as names : Ast.Expr.func_label) =
   match
-    lookup_mod_sig compiled_signatures
+    lookup_mod_sig signature_select
+      (Location.fmap
+         (fun s -> PlainSignature { modules = s; predicates = Set.empty })
+         sig_env)
       (FT.snoc qualifiers unqualified_name)
-      signature_select
   with
   | `Ok _ as ok -> ok
   | `Undefined _ -> (
-      match signature scope names with
+      match signature comptime_env names with
       | `Ok ok -> `Ok (Location.fmap (fun v -> PlainSignature v) ok)
       | (`Undefined _ | `UnexpectedModule _ | `UnexpectedSignature _) as error
         ->
           error)
   | `UnexpectedSignature _ as error -> error
 
-let predicate (scope : scope)
+let predicate (comptime_env : comptime Location.with_location)
+    (runtime_env : compiled_module)
     ((qualifiers, ({ content = name; loc } as name_with_loc)) :
       Ast.Expr.func_label) (arity : int) =
-  match lookup_mod_sig scope qualifiers comptime_select with
-  | `Ok { content = Module comp_module; _ } -> (
-      match PredicateMap.find_opt { name; arity } comp_module.predicates with
-      | None ->
-          Logger.error loc "Undefined predicate";
-          `Undefined name_with_loc
-      | Some predicate -> `Ok predicate)
-  | `Ok { content = Signature _; loc = sig_loc } ->
-      Logger.error loc "Qualifiers reference signature instead of module";
-      Logger.error sig_loc "Reference is here";
-      `UnexpectedSignature sig_loc
-  | (`Undefined _ | `UnexpectedSignature _) as other -> other
+  let local_predicate env =
+    match PredicateMap.find_opt { name; arity } env.predicates with
+    | None ->
+        Logger.error loc "Undefined predicate";
+        `Undefined name_with_loc
+    | Some predicate -> `Ok predicate
+  in
+  match FT.rear qualifiers with
+  | None -> local_predicate runtime_env
+  | Some module_name -> (
+      match m0dule comptime_env module_name with
+      | `Ok { content = comp_module; _ } -> local_predicate comp_module
+      | (`Undefined _ | `UnexpectedSignature _) as other -> other)
