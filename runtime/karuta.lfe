@@ -482,32 +482,37 @@
 
 (defun pretty-print-tuple (t)
   (let ((tuple-size (erlang:tuple_size t)))
-        (cond
-         ((=:= tuple-size 1) (erlang:error (tuple 'compiler_error "Unreachable: Singleton tuples should be impossible in Karuta values")))
-         ((=:= tuple-size 0) (erlang:error (tuple 'compiler_error "Unreachable: Nullary tuples are not supported as values in Karuta")))
-         ('true
-          (let (((cons head tail) (erlang:tuple_to_list t)))
-            (list (erlang:atom_to_list head) (pretty-print-term tail)))))))
+    (cond
+     ((=:= tuple-size 1) (erlang:error (tuple 'compiler_error "Unreachable: Singleton tuples should be impossible in Karuta values")))
+     ((=:= tuple-size 0) (erlang:error (tuple 'compiler_error "Unreachable: Nullary tuples are not supported as values in Karuta")))
+     ('true
+      (let (((cons head tail) (erlang:tuple_to_list t)))
+        (list (erlang:atom_to_list head) (pretty-print-term tail)))))))
 
 (defun pretty-print-term (term)
   (cond
    ((erlang:is_map term) (erlang:error (tuple 'compiler_error "Unreachable: Maps are not supported as values in Karuta yet")))
    ((erlang:is_atom term) (erlang:atom_to_list term))
    ((erlang:is_list term)
-     (list "["
-           (clj:->> term
-                    (lists:map (fun pretty-print-term 1))
-                    (lists:join ", "))
-           "]"))
-   ((is_tuple term)   (pretty-print-tuple term))
+    (list "["
+          (clj:->> term
+                   (lists:map (fun pretty-print-term 1))
+                   (lists:join ", "))
+          "]"))
+   ((is_tuple term) (pretty-print-tuple term))
    ((is_integer term) (erlang:integer_to_list term))
-   ('true              (erlang:error (tuple 'compiler_error "Unreachable: Unsupported term in Karuta yet")))))
+   ((is_reference term)
+    ;; TODO: figure out a nice way to distinguish variables from non-variables
+    (list "Var" (integer_to_list (lists:foldl (fun + 2) 0 (erlang:ref_to_list term)))))
+   ('true (erlang:error (tuple 'compiler_error "Unreachable: Unsupported term in Karuta yet")))))
 
 (defun pretty-print-single (solution)
   (if (erlang:is_map solution)
-      (list "---------\n" (maps:fold
-       (lambda (key value acc) (list (atom_to_list key) " = " (pretty-print-term value) "\n" acc))
-       "" solution))
+      (list "---------\n"
+        (maps:fold
+          (lambda (key value acc)
+            (list acc (atom_to_list key) " = " (pretty-print-term value) "\n"))
+          "" (maps:iterator solution 'ordered)))
     (erlang:error (tuple 'compiler_error "Unreachable: Kanren solution returned something that is not a map"))))
 
 (defun pretty-print-all (output) (lists:map (fun pretty-print-single 1) output))
