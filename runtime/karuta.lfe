@@ -503,7 +503,10 @@
    ((is_integer term) (erlang:integer_to_list term))
    ((is_reference term)
     ;; TODO: figure out a nice way to distinguish variables from non-variables
-    (list "Var" (integer_to_list (lists:foldl (fun + 2) 0 (erlang:ref_to_list term)))))
+    (list "Var" (integer_to_list (lists:foldl (lambda (elem acc)
+                                                (+ (* acc 256) elem))
+                                              0
+                                              (erlang:ref_to_list term)))))
    ('true (erlang:error (tuple 'compiler_error "Unreachable: Unsupported term in Karuta yet")))))
 
 (defun pretty-print-single (solution)
