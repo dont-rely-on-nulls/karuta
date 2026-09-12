@@ -1,40 +1,36 @@
-% FIXME: This generates the same correct answer infinitely many times
-
 sort[[], []].
 sort[[H | T], [HSorted | TSorted]] :-
   runs[[H | T], Runs],
   merge_all[Runs, [HSorted | TSorted]].
 
-merge[[], Tail, Tail].
+merge[[], [], []].
+merge[[], [H | T], [H | T]].
+merge[[H | T], [], [H | T]].
 merge[[HL | TL], [HR | TR], [HL | TO]] :-
-  karuta:leq[HL, HR],
-  merge[TL, [HR | TR], TO].
+  merge[TL, [HR | TR], TO],
+  karuta:leq[HL, HR].
 merge[[HL | TL], [HR | TR], [HR | TO]] :-
-  karuta:lt[HR, HL],
-  merge[[HL | TL], TR, TO].
-merge[Tail, [], Tail].
+  merge[[HL | TL], TR, TO],
+  karuta:lt[HR, HL].
 
-merge_all[[A], A].
-merge_all[[HL | TL], Merged] :-
-  merge_layer[[HL | TL], LayerRemoved],
-  merge_all[LayerRemoved, Merged].
+% FIXME: merge_all loops forever when you try to run it backwards
+merge_all[[[H | T]], [H | T]].
+merge_all[[A, B | More], [H | T]] :-
+  merge_layer[[A, B | More], Merged],
+  merge_all[Merged, [H | T]].
 
 merge_layer[[], []].
-merge_layer[[A], [A]].
-merge_layer[[A, B | More], [AB | Merged]] :-
-  merge[A, B, AB],
+merge_layer[[[H | T]], [[H | T]]].
+merge_layer[[[HA | TA], [HB | TB] | More], [AB | Merged]] :-
+  merge[[HA | TA], [HB | TB], AB],
   merge_layer[More, Merged].
 
-first_run[[A], [A], []].
-first_run[[First, Second | Remaining], [First | More], Tail] :-
-  karuta:leq[First, Second],
-  first_run[[Second | Remaining], More, Tail].
-first_run[[First, Second | Remaining], [First], [Second | Remaining]] :-
-  karuta:lt[Second, First].
-
-runs[[], []].
-runs[[H | T], [First | More]] :-
-  first_run[[H | T], First, Tail],
-  runs[Tail, More].
+runs[[A], [[A]]].
+runs[[A, B | More], [[A | T] | Runs]] :-
+  runs[[B | More], [T | Runs]],
+  karuta:leq[A, B].
+runs[[A, B | More], [[A] | Runs]] :-
+  runs[[B | More], Runs],
+  karuta:lt[B, A].
 
 sort[[37, 11, 1000, 0, 3], Sorted]?
