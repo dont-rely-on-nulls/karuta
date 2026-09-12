@@ -1,7 +1,7 @@
 append[[], [], []].
-append[[], Out, Out].
-append[Out, [], Out].
-append[[H|Tail], Second, [H|Mid]] :- append[Tail, Second, Mid].
+append[[], [H | T], [H | T]].
+append[[H | T], [], [H | T]].
+append[[H | Tail], [HS | TS], [H | Mid]] :- append[Tail, [HS | TS], Mid].
 
 add[[], [], []].
 add[[H1|Tail1], [H2|Tail2], [HR|TailOut]] :-
