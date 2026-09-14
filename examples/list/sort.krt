@@ -1,11 +1,15 @@
-sort[[], []].
-sort[[H | T], [HSorted | TSorted]] :-
-  runs[[H | T], Runs],
-  merge_all[Runs, [HSorted | TSorted]].
+sort[In, Out] :-
+  % Reorder these calls if you want to run this backwards
+  runs[In, Runs],
+  merge_all[Runs, Out].
+
+sorted[[]].
+sorted[[_]].
+sorted[[First, Second | More]] :- karuta:leq[First, Second], sorted[[Second | More]].
 
 merge[[], [], []].
-merge[[], [H | T], [H | T]].
-merge[[H | T], [], [H | T]].
+merge[[], [H | T], [H | T]] :- sorted[[H | T]].
+merge[[H | T], [], [H | T]] :- sorted[[H | T]].
 merge[[HL | TL], [HR | TR], [HL | TO]] :-
   merge[TL, [HR | TR], TO],
   karuta:leq[HL, HR].
@@ -13,18 +17,15 @@ merge[[HL | TL], [HR | TR], [HR | TO]] :-
   merge[[HL | TL], TR, TO],
   karuta:lt[HR, HL].
 
-% FIXME: merge_all loops forever when you try to run it backwards
-merge_all[[[H | T]], [H | T]].
-merge_all[[A, B | More], [H | T]] :-
-  merge_layer[[A, B | More], Merged],
-  merge_all[Merged, [H | T]].
+merge_all[In, Out] :- merge_all_loop[In, Out, Out].
 
-merge_layer[[], []].
-merge_layer[[[H | T]], [[H | T]]].
-merge_layer[[[HA | TA], [HB | TB] | More], [AB | Merged]] :-
+merge_all_loop[[A], _, A] :- sorted[A].
+merge_all_loop[[[HA | TA], [HB | TB] | More], [_ | Continue], [H | T]] :-
+  % Reorder these calls if you want to run this backwards
   merge[[HA | TA], [HB | TB], AB],
-  merge_layer[More, Merged].
+  merge_all_loop[[AB | More], Continue, [H | T]].
 
+runs[[], [[]]].
 runs[[A], [[A]]].
 runs[[A, B | More], [[A | T] | Runs]] :-
   runs[[B | More], [T | Runs]],
