@@ -656,7 +656,7 @@ let declaration :
           (snd @> whitespace_and_comments @&& body_loop @@ FT.snoc elements elem)
     @@ return @@ FT.snoc elements elem
   in
-  maybe (holds @&& whitespace @&& body_loop FT.empty)
+  maybe (holds @&& whitespace_and_comments @&& body_loop FT.empty)
   @>> ignoring (whitespace_and_comments @&& period)
   @> replace
        ( Option.fold ~none:FT.empty ~some:Fun.id @> fun body ->
