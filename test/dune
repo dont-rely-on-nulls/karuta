@@ -1,4 +1,8 @@
+(include_subdirs qualified)
+
 (test
- (name examples)
- (modules examples)
- (libraries lib alcotest))
+ (deps
+  (source_tree "../examples/")
+  "../runtime/karuta.beam")
+ (name runner)
+ (libraries lib alcotest bin))

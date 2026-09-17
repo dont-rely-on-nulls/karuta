@@ -6,7 +6,12 @@ type t =
   | EmptyFile of string
   | InvalidExtension of string
   | DependencyCycle of string list
-[@@deriving show, ord]
+  | FailedToRunExternalProgram of string * Unix.process_status
+
+let process_status_message = function
+  | Unix.WEXITED n -> "exited with code " ^ string_of_int n
+  | Unix.WSIGNALED n | Unix.WSTOPPED n ->
+      "interrupted by signal " ^ Sys.signal_to_string n
 
 let display : t -> string = function
   | CouldNotPreprocess filepath -> "Could not preprocess file " ^ filepath
@@ -16,8 +21,12 @@ let display : t -> string = function
   | DependencyCycle files ->
       "Dependency cycle detected across these files: "
       ^ String.concat ", " files
+  | FailedToRunExternalProgram (filepath, process_status) ->
+      "Failed to run " ^ filepath ^ "("
+      ^ process_status_message process_status
+      ^ ")\n"
 
-type 'a attempt = ('a, t) result [@@deriving show, ord]
+type 'a attempt = ('a, t) result
 
 let ok = ok
 let error = error

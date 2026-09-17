@@ -34,3 +34,8 @@ let emit { persist; query = { name; arity }; sakura; filename; root_module } =
   in
   let main = "(defun main (args)\n" ^ body ^ ")\n" in
   persist filename @@ shebang ^ main
+
+let create_file full_name body =
+  Out_channel.with_open_text full_name (fun c ->
+      Out_channel.output_string c body);
+  Unix.chmod full_name 0o755

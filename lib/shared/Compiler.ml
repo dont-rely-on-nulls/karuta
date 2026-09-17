@@ -146,10 +146,8 @@ module Options = struct
   let initialize_sakura ?(root_module = "db") ~address ~port () : sakura =
     { root_module; address; port }
 
-  type artifact =
-    | Library
-    | Executable of { root_module : string; filename : string }
-
+  type executable = { root_module : string; filename : string }
+  type artifact = Library | Executable of executable
   type t = { sakura : sakura option; artifact : artifact }
 
   let initialize ?(sakura = None) ~artifact () : t = { sakura; artifact }

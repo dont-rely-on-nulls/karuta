@@ -1,0 +1,3 @@
+(library
+ (name cmds)
+ (libraries lib cmdliner))

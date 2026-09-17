@@ -1,6 +1,7 @@
-open Cmd
+open Bin.Cmd
 open Lib
 open Error
+module Erl = Bin.Erl
 
 (* let show_clauses (clauses : Ast.clause list) : string = *)
 (*   let folder acc clause = acc ^ Ast.show_clause clause in *)
@@ -40,11 +41,9 @@ let run : cmd -> unit = function
                (fun name forms ->
                  Erl.compile output_path name @@ BatFingerTree.to_list forms);
              executable =
-               (fun name body ->
-                 let full_name = output_path ^ "/" ^ name in
-                 Out_channel.with_open_text full_name (fun c ->
-                     Out_channel.output_string c body);
-                 Unix.chmod full_name 0o755);
+               (fun name ->
+                 Logger.simply_info name;
+                 Executable.create_file (output_path ^ "/" ^ name));
            }
            files
 
