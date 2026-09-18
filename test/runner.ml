@@ -18,16 +18,16 @@ let examples : t list =
   ]
 
 let make_test { name; expected; limit; root_module; filepaths } =
+  Unix.chdir "../runtime";
   let prefix file = "../examples/" ^ file in
   match
     Lib.Executor.run ~limit
-      { filename = "../runtime/play"; root_module }
+      { filename = "./play"; root_module }
       {
         beam =
           (fun name forms ->
-            Bin.Erl.compile "../runtime" name @@ BatFingerTree.to_list forms);
-        executable =
-          (fun name -> Lib.Executable.create_file ("../runtime/" ^ name));
+            Bin.Erl.compile "" name @@ BatFingerTree.to_list forms);
+        executable = Lib.Executable.create_file;
       }
       (List.map prefix filepaths)
   with
