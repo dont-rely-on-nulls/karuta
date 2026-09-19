@@ -22,6 +22,7 @@ you are crazy enough to use it.
 - [X] Comments
 - [X] BEAM runtime library (logic variables, backtracking)
 - [X] Compilation
+- [X] Atom Literals  
 - [X] Integer Literals
 - [X] List Literals
 - [X] Implement toolchain (i.e. compile to BEAM assembly, call ~erlc~ on that)
