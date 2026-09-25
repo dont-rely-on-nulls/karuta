@@ -6,7 +6,21 @@ let tests : Outcome.t BatMap.String.t =
           Outcome.filepaths = [ "lists/main.krt" ];
           root_module = "main";
           limit = Some 2;
-          expected = [ [ ("AddOut", "[4, 6]"); ("AppendOut", "[1, 2, 3, 4]"); ("MainOut", "[]"); ("RevOut", "[4, 3, 2, 1]") ]; [("AddOut", "[4, 6]"); ("AppendOut", "[1, 2, 3, 4]"); ("MainOut", "[[1000, 999]]"); ("RevOut", "[4, 3, 2, 1]")] ];
+          expected =
+            [
+              [
+                ("AddOut", "[4, 6]");
+                ("AppendOut", "[1, 2, 3, 4]");
+                ("MainOut", "[]");
+                ("RevOut", "[4, 3, 2, 1]");
+              ];
+              [
+                ("AddOut", "[4, 6]");
+                ("AppendOut", "[1, 2, 3, 4]");
+                ("MainOut", "[[1000, 999]]");
+                ("RevOut", "[4, 3, 2, 1]");
+              ];
+            ];
         } );
       ( "sort",
         {
