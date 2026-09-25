@@ -14,17 +14,38 @@ you are crazy enough to use it.
 * Requirements
 
 ** [[https://minikanren.org/][Kanren]]
+
+*** Basic Feature Set
+
 - [X] Parsing
 - [X] Query Conjunction
 - [X] Comments
 - [X] BEAM runtime library (logic variables, backtracking)
 - [X] Compilation
+- [X] Atom Literals  
 - [X] Integer Literals
 - [X] List Literals
 - [X] Implement toolchain (i.e. compile to BEAM assembly, call ~erlc~ on that)
 - [X] Modules
+- [ ] Integration Testing (testing Karuta programs directly)
+- [ ] Unit Testing (testing stages of the compiler)
+
+*** Advanced Features
+
+- [ ] Static Type System
+- [ ] Mode System
 - [ ] ML Functors
-- [ ] Type checking
+- [ ] Constraint-based
+- [ ] Effect System  
+- [ ] Build System
+- [ ] REPL
+- [ ] Concurrency
+
+*** Challenges
+
+- [ ] Higher Order Predicates
+- [ ] Full Database Support (all operations)
+- [ ] Embeddable VM Compilation
 
 ** [[https://github.com/dont-rely-on-nulls/sakura][Sakura]]
 - [ ] AST nodes for Sakura interaction.
