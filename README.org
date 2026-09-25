@@ -27,7 +27,7 @@ you are crazy enough to use it.
 - [X] List Literals
 - [X] Implement toolchain (i.e. compile to BEAM assembly, call ~erlc~ on that)
 - [X] Modules
-- [ ] Integration Testing (testing Karuta programs directly)
+- [X] Integration Testing (testing Karuta programs directly)
 - [ ] Unit Testing (testing stages of the compiler)
 
 *** Advanced Features
