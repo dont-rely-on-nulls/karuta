@@ -54,6 +54,7 @@
                 (nix-filter.lib.inDirectory "test")
                 (nix-filter.lib.inDirectory "ppx_strip_payload")
                 (nix-filter.lib.inDirectory "examples")
+                (nix-filter.lib.inDirectory "runtime")
               ];
             };
 

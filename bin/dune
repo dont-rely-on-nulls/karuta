@@ -3,14 +3,18 @@
 ; - https://dune.readthedocs.io/en/stable/concepts.html#executables
 ; - https://dune.readthedocs.io/en/stable/dune-files.html#executable
 
-(include_subdirs qualified)
+(library
+ (name bin)
+ (libraries lib num cmds)
+ (modules erl cmd)
+ (preprocess
+  (pps ppx_deriving.show ppx_enumerate)))
 
 (executable
  (name main)
  (public_name karuta)
- (libraries lib cmdliner num)
- (preprocess
-  (pps ppx_deriving.show ppx_enumerate))
+ (libraries bin)
+ (modules main)
  (modes exe)
  ; (flags -g)
  (package karuta))
