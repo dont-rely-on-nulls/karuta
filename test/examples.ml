@@ -1,9 +1,9 @@
-open Helpers
+open Integration
 
 let tests : (string * Outcome.t BatMap.String.t) list =
   [
-    ("Arithmetic", Arithmetic.tests);
-    ("Basic", Basic.tests);
-    ("Lists", Lists.tests);
-    ("Module System", Module_system.tests);
+    ("Examples - Arithmetic", Arithmetic.tests);
+    ("Examples - Basic", Basic.tests);
+    ("Examples - Lists", Lists.tests);
+    ("Examples - Module System", Module_system.tests);
   ]

@@ -106,3 +106,6 @@ let double (loc : t) : location = { startl = loc; endl = loc }
 
 (** Full dummy location based on Lexing.position (half-location). *)
 let dummy = double @@ Lexing.dummy_pos
+
+(** Half dummy location based on Lexing.position *)
+let half_dummy = Lexing.dummy_pos
