@@ -32,26 +32,15 @@ let succeeds () =
         resulting_state.loc.pos_bol
 
 let fails_when_parser_fails () =
-  let p : (string, string) parser =
-    fun _state ->
-      Error "p failed"
-  in
+  let p : (string, string) parser = fun _state -> Error "p failed" in
 
   let state : parser_state =
-    {
-      remaining = BatSubstring.of_string "hello";
-      loc = half_dummy;
-    }
+    { remaining = BatSubstring.of_string "hello"; loc = half_dummy }
   in
 
   match is p state with
-  | Ok _ ->
-      fail "is should fail when p fails"
-  | Error error ->
-      check string
-        "propagates parser error"
-        "p failed"
-        error
+  | Ok _ -> fail "is should fail when p fails"
+  | Error error -> check string "propagates parser error" "p failed" error
 
 let tests =
   [
