@@ -1,7 +1,8 @@
 let tests =
-  [
-    ("Parser - Operators", Operators.tests);
-    ("Parser - ifte", Ifte.tests);
-    ("Parser - is_not", Is_not.tests);
-    ("Parser - is", Is.tests);
-  ]
+  Helpers.add_section_name "Parser"
+    [
+      ("Operators", Operators.tests);
+      ("ifte", Ifte.tests);
+      ("is_not", Is_not.tests);
+      ("is", Is.tests);
+    ]
