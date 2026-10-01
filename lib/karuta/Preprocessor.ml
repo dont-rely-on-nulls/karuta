@@ -77,10 +77,8 @@ let preprocess_directive :
       match FT.front head.content.elements with
       | Some (rest, singleton) when FT.is_empty rest ->
           let external_dep = Ast.Expr.extract_unqualified_atom singleton in
-          let dependencies = BatSet.String.singleton external_dep in
           Update
             {
-              dependencies;
               action =
                 (fun { imports } ->
                   { imports = BatMap.String.add external_dep head.loc imports });

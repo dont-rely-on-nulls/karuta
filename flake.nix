@@ -88,6 +88,7 @@
               ocamlPackages.batteries
               ocamlPackages.cmdliner
               ocamlPackages.earlybird
+              ocamlPackages.eio
               ocamlPackages.findlib
               ocamlPackages.lambda-term
               ocamlPackages.lwt

@@ -41,9 +41,7 @@ let run : cmd -> unit = function
                (fun name forms ->
                  Erl.compile output_path name @@ BatFingerTree.to_list forms);
              executable =
-               (fun name ->
-                 Logger.simply_info name;
-                 Executable.create_file (output_path ^ "/" ^ name));
+               (fun name -> Executable.create_file (output_path ^ "/" ^ name));
            }
            files
 

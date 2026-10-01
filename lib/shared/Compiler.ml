@@ -153,9 +153,11 @@ module Options = struct
   let initialize ?(sakura = None) ~artifact () : t = { sakura; artifact }
 end
 
+type externals = comptime Eio.Lazy.t env
+
 type 'state t = {
   state : 'state;
-  externals : comptime env;
+  externals : externals;
   header : forms;
   output : forms;
   filename : string;
@@ -168,7 +170,7 @@ type 'state t = {
 type 'mods initialization = {
   persist : Persist.t;
   filename : string;
-  externals : comptime env;
+  externals : externals;
   mods : 'mods;
 }
 
@@ -176,7 +178,7 @@ type ('state, 'mods) initialize_nested =
   'mods initialization -> 'state t option -> string -> 'state t
 
 type ('state, 'directives, 'mods) step =
-  ('directives, 'mods) Ast.Module.module_body * 'state t -> 'state t
+  ('directives, 'mods) Ast.Module.module_body * 'state t -> compiled_module
 
 type ('state, 'directives, 'mods) runner = {
   step : ('state, 'directives, 'mods) step;
@@ -228,9 +230,7 @@ module type COMPILER = sig
   val compile_files :
     Persist.both ->
     (directives, mods) Ast.Module.module_body BatMap.String.t ->
-    comptime env ->
-    string FT.t ->
-    comptime env
+    externals
 
   val initialize : mods initialization -> state t
 end
@@ -270,7 +270,10 @@ module Make (Config : COMPILER_CONFIG) :
     {
       state;
       parent;
-      externals = BatMap.String.add "karuta" karuta_builtins externals;
+      externals =
+        BatMap.String.add "karuta"
+          (Location.fmap Eio.Lazy.from_val karuta_builtins)
+          externals;
       filename;
       header =
         FT.of_list
@@ -329,25 +332,7 @@ module Make (Config : COMPILER_CONFIG) :
     if not @@ FT.is_empty compiler.output then
       compiler.persist compiler.filename
         (FT.append compiler.header compiler.output);
-    if Option.is_none compiler.parent then
-      {
-        compiler with
-        externals =
-          BatMap.String.add
-            (snd compiler.env.qualifier)
-            (let open Location in
-             add_loc (Module compiler.env)
-             @@ double
-                  (* TODO: make the endl actually point to the end of the file *)
-                  {
-                    pos_fname = compiler.filename;
-                    pos_lnum = 1;
-                    pos_bol = 0;
-                    pos_cnum = 1;
-                  })
-            compiler.externals;
-      }
-    else compiler
+    compiler.env
 
   let preprocess_clauses =
     let module TargetPreprocessor :
@@ -358,24 +343,39 @@ module Make (Config : COMPILER_CONFIG) :
     in
     TargetPreprocessor.preprocess_clauses
 
-  let compile_one_file (persist : Persist.both) preprocessed externals filepath
-      =
-    match BatMap.String.find_opt filepath preprocessed with
-    | None ->
-        Logger.simply_unreachable "We hit a file that doesn't exist";
-        exit 1
-    | Some body ->
-        (step
-           ( body,
-             initialize
-               {
-                 persist = persist.beam;
-                 filename = filepath;
-                 externals;
-                 mods = body.target_specific;
-               } ))
-          .externals
-
-  let compile_files persist preprocessed_files =
-    FT.fold_left @@ compile_one_file persist preprocessed_files
+  let compile_files :
+      Persist.both ->
+      (directives, mods) Ast.Module.module_body BatMap.String.t ->
+      externals =
+   fun persist preprocessed ->
+    let (env, bind_env) : externals Eio.Promise.t * externals Eio.Promise.u =
+      Eio.Promise.create ()
+    in
+    let compile_one filepath body acc =
+      let module_name = ModuleName.of_filepath filepath in
+      let step () =
+        step
+          ( body,
+            initialize
+              {
+                persist = persist.beam;
+                filename = filepath;
+                externals = Eio.Promise.await env;
+                mods = body.target_specific;
+              } )
+      in
+      let new_module =
+        Eio.Lazy.from_fun ~cancel:`Record @@ fun () -> Module (step ())
+      in
+      BatMap.String.add module_name
+        (Location.add_loc new_module
+        @@ Location.double
+             (* TODO: make the endl actually point to the end of the file *)
+             { pos_fname = filepath; pos_lnum = 1; pos_bol = 0; pos_cnum = 1 })
+        acc
+    in
+    BatMap.String.empty
+    |> BatMap.String.fold compile_one preprocessed
+    |> Eio.Promise.resolve bind_env;
+    Eio.Promise.await env
 end

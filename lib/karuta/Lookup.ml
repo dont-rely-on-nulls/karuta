@@ -18,14 +18,16 @@ let rec print_module externals =
 
 let comptime_of_compiler ({ env; state = { imports }; externals; _ } : t) :
     Shared.Compiler.comptime Location.with_location =
-  let forbid_shadowing key parent_value external_value :
+  let forbid_shadowing key (parent_value : 'a Location.with_location option)
+      (external_value : 'a Eio.Lazy.t Location.with_location option) :
       Shared.Compiler.comptime Location.with_location option =
     match (BatMap.String.find_opt key imports, parent_value) with
     | None, parent_value -> parent_value
     | Some import_loc, None ->
         Option.map
           (fun { Location.content; _ } ->
-            { Location.content; loc = import_loc })
+            (* TODO: cycle detection *)
+            { Location.content = Eio.Lazy.force content; loc = import_loc })
           external_value
     | Some import_loc, Some { Location.loc; _ } ->
         Logger.error import_loc "Attempt to shadow an external import";

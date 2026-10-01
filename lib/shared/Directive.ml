@@ -51,7 +51,7 @@ let rec compile : type state mods.
             compiler |> initialize_from_parent module_ initialize_nested
             |> fun c ->
             step (module_, c) |> fun c ->
-            Location.add_loc (Module c.env) directive_loc
+            Location.add_loc (Module c) directive_loc
           in
           {
             compiler with
@@ -123,7 +123,7 @@ let rec compile : type state mods.
           let comptime =
             compiler |> initialize_from_parent module_ initialize_nested
             |> fun c ->
-            step (module_, c) |> fun c -> Location.add_loc c.env directive_loc
+            step (module_, c) |> fun c -> Location.add_loc c directive_loc
           in
           let compiled_module =
             signature

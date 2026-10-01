@@ -14,6 +14,7 @@
  (libraries
   batteries
   sexplib
+  eio
   lwt
   lwt.unix
   lwt-exit
