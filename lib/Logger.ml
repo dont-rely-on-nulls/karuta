@@ -87,19 +87,19 @@ module Terminal = Make (
   struct
     open Format
 
-    type color = Red | Yellow | White | Blue | Magenta
+    type color = Red | Yellow | Blue | Magenta | Foreground
 
     let color_code : color -> string = function
       | Red -> "\027[31m"
       | Yellow -> "\027[33m"
-      | White -> "\027[97m"
+      | Foreground -> "\027[0m"
       | Blue -> "\027[34m"
       | Magenta -> "\027[35m"
 
     let make_bold (str : string) = "\027[1m" ^ str ^ "\027[0m"
 
     let add_color (c : color) (str : string) =
-      color_code c ^ str ^ color_code White
+      color_code c ^ str ^ color_code Foreground
 
     let get_column ({ pos_cnum; pos_bol; _ } : Location.t) : int =
       pos_cnum - pos_bol
@@ -176,7 +176,7 @@ module Terminal = Make (
       format_diverse_message (make_bold prefix) Blue locMay msg
 
     let format_debug_message prefix msg =
-      let color = White in
+      let color = Foreground in
       let prefix = prefix |> make_bold |> add_color color in
       prefix ^ msg
   end :
