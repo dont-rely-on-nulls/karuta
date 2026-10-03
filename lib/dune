@@ -15,6 +15,7 @@
   batteries
   sexplib
   eio
+  eio_main
   lwt
   lwt.unix
   lwt-exit

@@ -24,9 +24,11 @@ let parse : string -> Ast.ParserClause.t FT.t attempt = function
 let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
     (persist : Shared.Compiler.Persist.both) (filepaths : string list) :
     unit attempt =
+  Eio_main.run @@ fun _ ->
   let sakura_files, karuta_files =
     FT.partition Sakura.Preprocessor.is_sakura_file @@ FT.of_list filepaths
   in
+  let check_dependency_cycle = Karuta.Lookup.check_dependency_cycle in
   let module Sakura : Shared.Compiler.COMPILER =
     Shared.Compiler.Make (Sakura.Module)
   in
@@ -87,7 +89,10 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
             "Root module for the executable could not be found";
           exit 1
       | Some { content; loc } -> (
-          match Eio.Lazy.force content with
+          match
+            check_dependency_cycle loc.startl.pos_fname @@ fun () ->
+            Lazy.force content
+          with
           | Signature _ ->
               Logger.error loc
                 "Expected a module as the entry point but found a signature";

@@ -4,7 +4,6 @@ module Set = BatSet
 type predicate_name = Ast.head [@@deriving show, ord]
 type forms = Form.t FT.t
 type 'a env = 'a Location.with_location BatMap.String.t
-type 'a nested_env = 'a env BatLazyList.t
 
 let join_qualifiers names : string =
   BatIO.to_string
@@ -153,7 +152,7 @@ module Options = struct
   let initialize ?(sakura = None) ~artifact () : t = { sakura; artifact }
 end
 
-type externals = comptime Eio.Lazy.t env
+type externals = comptime Lazy.t env
 
 type 'state t = {
   state : 'state;
@@ -192,6 +191,7 @@ module type COMPILER_CONFIG = sig
 
   val init_state : mods -> state
   val merge_state : mods -> state -> state
+  val check_dependency_cycle : 'a. string -> (unit -> 'a) -> 'a
 
   val compile_declaration :
     Ast.head ->
@@ -272,7 +272,7 @@ module Make (Config : COMPILER_CONFIG) :
       parent;
       externals =
         BatMap.String.add "karuta"
-          (Location.fmap Eio.Lazy.from_val karuta_builtins)
+          (Location.fmap Lazy.from_val karuta_builtins)
           externals;
       filename;
       header =
@@ -364,9 +364,7 @@ module Make (Config : COMPILER_CONFIG) :
                 mods = body.target_specific;
               } )
       in
-      let new_module =
-        Eio.Lazy.from_fun ~cancel:`Record @@ fun () -> Module (step ())
-      in
+      let new_module = Lazy.from_fun @@ fun () -> Module (step ()) in
       BatMap.String.add module_name
         (Location.add_loc new_module
         @@ Location.double

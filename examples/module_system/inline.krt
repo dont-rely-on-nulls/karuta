@@ -6,4 +6,6 @@
     private[LHS, RHS, Res] :- karuta:plus[LHS, RHS, Res].
 }.
 
+:- import[nested].
+
 a:my_plus[413, 612, Out]?

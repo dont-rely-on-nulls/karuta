@@ -1,6 +1,20 @@
 include Types
 include Shared.Lookup
 
+let files_being_compiled = External.Dynvar.dnew ~init:BatSet.String.empty ()
+
+let check_dependency_cycle (filepath : string) (f : unit -> 'a) : 'a =
+  Logger.debug @@ "Cycle check: " ^ filepath;
+  let dependents = External.Dynvar.dref files_being_compiled in
+  if BatSet.String.mem filepath dependents then (
+    Logger.simply_error @@ "Dependency cycle detected while compiling "
+    ^ filepath;
+    exit 1)
+  else
+    External.Dynvar.dlet files_being_compiled
+      (BatSet.String.add filepath dependents)
+      f
+
 type t = state Shared.Compiler.t
 
 let rec print_module externals =
@@ -16,18 +30,22 @@ let rec print_module externals =
       | Signature _ -> BatInnerIO.write_string out "<Sig>")
     BatInnerIO.stderr externals
 
-let comptime_of_compiler ({ env; state = { imports }; externals; _ } : t) :
+let comptime_of_compiler
+    ({ env; state = { imports }; externals; filename; _ } : t) :
     Shared.Compiler.comptime Location.with_location =
   let forbid_shadowing key (parent_value : 'a Location.with_location option)
-      (external_value : 'a Eio.Lazy.t Location.with_location option) :
+      (external_value : 'a Lazy.t Location.with_location option) :
       Shared.Compiler.comptime Location.with_location option =
     match (BatMap.String.find_opt key imports, parent_value) with
     | None, parent_value -> parent_value
     | Some import_loc, None ->
         Option.map
-          (fun { Location.content; _ } ->
-            (* TODO: cycle detection *)
-            { Location.content = Eio.Lazy.force content; loc = import_loc })
+          (fun { Location.content; loc } ->
+            if Lazy.is_done content then
+              { Location.content = Lazy.force content; loc = import_loc }
+            else
+              check_dependency_cycle loc.startl.pos_fname @@ fun () ->
+              { Location.content = Lazy.force content; loc = import_loc })
           external_value
     | Some import_loc, Some { Location.loc; _ } ->
         Logger.error import_loc "Attempt to shadow an external import";
