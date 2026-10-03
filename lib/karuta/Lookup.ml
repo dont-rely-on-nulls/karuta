@@ -7,6 +7,7 @@ let check_dependency_cycle (filepath : string) (f : unit -> 'a) : 'a =
   Logger.debug @@ "Cycle check: " ^ filepath;
   let dependents = External.Dynvar.dref files_being_compiled in
   if BatSet.String.mem filepath dependents then (
+    Logger.with_min_level Logger.Level.Error @@ fun () ->
     Logger.simply_error @@ "Dependency cycle detected while compiling "
     ^ filepath;
     exit 1)
