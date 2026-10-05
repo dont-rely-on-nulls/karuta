@@ -28,7 +28,7 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
   let sakura_files, karuta_files =
     FT.partition Sakura.Preprocessor.is_sakura_file @@ FT.of_list filepaths
   in
-  let check_dependency_cycle = Karuta.Lookup.check_dependency_cycle in
+  let module Lookup = Karuta.Lookup in
   let module Sakura : Shared.Compiler.COMPILER =
     Shared.Compiler.Make (Sakura.Module)
   in
@@ -90,7 +90,7 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
           exit 1
       | Some { content; loc } -> (
           match
-            check_dependency_cycle loc.startl.pos_fname @@ fun () ->
+            Lookup.check_dependency_cycle loc.startl.pos_fname @@ fun () ->
             Lazy.force content
           with
           (* TODO: allow the use of queries from nested modules *)
