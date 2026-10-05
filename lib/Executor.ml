@@ -93,14 +93,11 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
             check_dependency_cycle loc.startl.pos_fname @@ fun () ->
             Lazy.force content
           with
-          | Signature _ ->
-              Logger.error loc
-                "Expected a module as the entry point but found a signature";
-              exit 1
-          | Module { query = None; _ } ->
+          (* TODO: allow the use of queries from nested modules *)
+          | { query = None; _ } ->
               Logger.error loc "Module does not have a query";
               exit 1
-          | Module { query = Some query; _ } ->
+          | { query = Some query; _ } ->
               Ok
                 (Executable.emit
                    {

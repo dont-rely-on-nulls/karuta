@@ -34,19 +34,24 @@ let rec print_module externals =
 let comptime_of_compiler
     ({ env; state = { imports }; externals; filename; _ } : t) :
     Shared.Compiler.comptime Location.with_location =
-  let forbid_shadowing key (parent_value : 'a Location.with_location option)
-      (external_value : 'a Lazy.t Location.with_location option) :
+  let forbid_shadowing key (parent_value : _ Location.with_location option)
+      (external_value : _ Lazy.t Location.with_location option) :
       Shared.Compiler.comptime Location.with_location option =
     match (BatMap.String.find_opt key imports, parent_value) with
     | None, parent_value -> parent_value
     | Some import_loc, None ->
+        let compiled content =
+          {
+            Location.content = Shared.Compiler.Module (Lazy.force content);
+            loc = import_loc;
+          }
+        in
         Option.map
           (fun { Location.content; loc } ->
-            if Lazy.is_done content then
-              { Location.content = Lazy.force content; loc = import_loc }
+            if Lazy.is_done content then compiled content
             else
               check_dependency_cycle loc.startl.pos_fname @@ fun () ->
-              { Location.content = Lazy.force content; loc = import_loc })
+              compiled content)
           external_value
     | Some import_loc, Some { Location.loc; _ } ->
         Logger.error import_loc "Attempt to shadow an external import";

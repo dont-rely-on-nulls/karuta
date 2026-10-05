@@ -69,21 +69,20 @@ let rec signature_equal lhs rhs =
 let builtin_module name predicates =
   let qualifier = (FT.empty, name) in
   Location.add_loc
-    (Module
-       {
-         qualifier;
-         query = None;
-         modules = BatMap.String.empty;
-         predicates =
-           PredicateMap.of_list
-           @@ List.map
-                (fun name ->
-                  (name, { original_module = qualifier; loc = Location.dummy }))
-                predicates;
-       })
+    {
+      qualifier;
+      query = None;
+      modules = BatMap.String.empty;
+      predicates =
+        PredicateMap.of_list
+        @@ List.map
+             (fun name ->
+               (name, { original_module = qualifier; loc = Location.dummy }))
+             predicates;
+    }
     Location.dummy
 
-let karuta_builtins : comptime Location.with_location =
+let karuta_builtins : compiled_module Location.with_location =
   builtin_module "karuta"
     [
       { name = "t-dee"; arity = 0 };
@@ -152,7 +151,7 @@ module Options = struct
   let initialize ?(sakura = None) ~artifact () : t = { sakura; artifact }
 end
 
-type externals = comptime Lazy.t env
+type externals = compiled_module Lazy.t env
 
 type 'state t = {
   state : 'state;
@@ -364,7 +363,7 @@ module Make (Config : COMPILER_CONFIG) :
                 mods = body.target_specific;
               } )
       in
-      let new_module = Lazy.from_fun @@ fun () -> Module (step ()) in
+      let new_module = Lazy.from_fun step in
       BatMap.String.add module_name
         (Location.add_loc new_module
         @@ Location.double
