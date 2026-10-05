@@ -190,7 +190,6 @@ module type COMPILER_CONFIG = sig
 
   val init_state : mods -> state
   val merge_state : mods -> state -> state
-  val check_dependency_cycle : 'a. string -> (unit -> 'a) -> 'a
 
   val compile_declaration :
     Ast.head ->

@@ -1,6 +1,6 @@
 type mods = { imports : Location.location BatMap.String.t }
 type state = mods
-type directives = Import of string Location.with_location
+type directives = |
 
 let init_state = Fun.id
 
