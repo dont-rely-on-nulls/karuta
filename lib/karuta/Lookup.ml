@@ -14,7 +14,6 @@ let files_being_compiled : cycle_detection External.Dynvar.dynvar =
     ()
 
 let check_dependency_cycle (filepath : string) (f : unit -> 'a) : 'a =
-  Logger.debug @@ "Cycle check: " ^ filepath;
   let { dependents; trace } = External.Dynvar.dref files_being_compiled in
   match BatMap.String.find_opt filepath dependents with
   | Some { index } ->
@@ -57,10 +56,6 @@ let nested_env ({ env; state = { imports }; externals; filename; _ } : t) :
   let import_without_shadowing import_name (import_loc : Location.location)
       (module_env : Shared.Compiler.comptime Shared.Compiler.env) :
       Shared.Compiler.comptime Shared.Compiler.env =
-    Logger.debug @@ "import name: " ^ import_name;
-    Logger.debug @@ "import filename: " ^ import_loc.startl.pos_fname;
-    Logger.debug @@ "import filename length: "
-    ^ string_of_int (String.length import_loc.startl.pos_fname);
     match
       ( BatMap.String.find_opt import_name externals,
         BatMap.String.find_opt import_name module_env )
