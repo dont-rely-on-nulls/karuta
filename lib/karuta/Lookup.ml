@@ -52,37 +52,49 @@ let rec print_module externals =
       | Signature _ -> BatInnerIO.write_string out "<Sig>")
     BatInnerIO.stderr externals
 
-let comptime_of_compiler
-    ({ env; state = { imports }; externals; filename; _ } : t) :
-    Shared.Compiler.comptime Location.with_location =
-  let forbid_shadowing key (parent_value : _ Location.with_location option)
-      (external_value : _ Lazy.t Location.with_location option) :
-      Shared.Compiler.comptime Location.with_location option =
-    match (BatMap.String.find_opt key imports, parent_value) with
-    | None, parent_value -> parent_value
-    | Some import_loc, None ->
-        let compiled content =
+let nested_env ({ env; state = { imports }; externals; filename; _ } : t) :
+    Shared.Compiler.compiled_module =
+  let import_without_shadowing import_name (import_loc : Location.location)
+      (module_env : Shared.Compiler.comptime Shared.Compiler.env) :
+      Shared.Compiler.comptime Shared.Compiler.env =
+    Logger.debug @@ "import name: " ^ import_name;
+    Logger.debug @@ "import filename: " ^ import_loc.startl.pos_fname;
+    Logger.debug @@ "import filename length: "
+    ^ string_of_int (String.length import_loc.startl.pos_fname);
+    match
+      ( BatMap.String.find_opt import_name externals,
+        BatMap.String.find_opt import_name module_env )
+    with
+    | None, _ ->
+        Logger.error import_loc "Attempt to import a file that does not exist";
+        exit 1
+    | Some { content = dependency; loc }, None ->
+        let compiled () =
           {
-            Location.content = Shared.Compiler.Module (Lazy.force content);
+            Location.content = Shared.Compiler.Module (Lazy.force dependency);
             loc = import_loc;
           }
         in
-        Option.map
-          (fun { Location.content; loc } ->
-            if Lazy.is_done content then compiled content
-            else
-              check_dependency_cycle loc.startl.pos_fname @@ fun () ->
-              compiled content)
-          external_value
-    | Some import_loc, Some { Location.loc; _ } ->
-        Logger.error import_loc "Attempt to shadow an external import";
-        Logger.error loc "Local definition here";
+        BatMap.String.add import_name
+          (if Lazy.is_done dependency then compiled ()
+           else check_dependency_cycle loc.startl.pos_fname compiled)
+          module_env
+    | Some _, Some { Location.loc; _ } when import_loc = Location.dummy ->
+        (* If the import does not have a location, that means the compiler inserted it
+           for a builtin module. This is inserted in all scopes, so we must not error out.
+           If the user tries to shadow it there will be an error elsewhere. *)
+        module_env
+    | Some _, Some { Location.loc; _ } ->
+        Logger.error import_loc
+          "Attempt to shadow an existing name with an import";
+        if BatSet.String.mem import_name Shared.Compiler.builtin_module_names
+        then
+          Logger.simply_error @@ "Attempt to shadow " ^ import_name
+          ^ ", which is a builtin"
+        else Logger.error loc "Previous definition here";
         exit 1
   in
-  let local_env =
-    {
-      env with
-      modules = BatMap.String.merge forbid_shadowing env.modules externals;
-    }
-  in
-  Location.add_loc (Shared.Compiler.Module local_env) Location.dummy
+  {
+    env with
+    modules = BatMap.String.fold import_without_shadowing imports env.modules;
+  }

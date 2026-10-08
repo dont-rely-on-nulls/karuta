@@ -81,7 +81,20 @@ let preprocess_directive :
             {
               action =
                 (fun { imports } ->
-                  { imports = BatMap.String.add external_dep head.loc imports });
+                  match BatMap.String.find_opt external_dep imports with
+                  | Some previous_loc ->
+                      Logger.error head.loc
+                        "Cannot import the same module twice";
+                      if previous_loc = Location.dummy then
+                        Logger.simply_info @@ external_dep
+                        ^ " is a builtin module"
+                      else Logger.error previous_loc "Previous import";
+                      exit 1
+                  | None ->
+                      {
+                        imports =
+                          BatMap.String.add external_dep head.loc imports;
+                      });
             }
       | None ->
           Logger.error head.loc "Directive 'import' cannot be an empty functor";

@@ -3,12 +3,4 @@ type state = mods
 type directives = |
 
 let init_state = Fun.id
-
-let merge_state ({ imports = mods_imports } : mods) { imports = state_imports }
-    : state =
-  {
-    imports =
-      BatMap.String.union
-        (fun _ import _ -> Some import)
-        mods_imports state_imports;
-  }
+let merge_state = Fun.const

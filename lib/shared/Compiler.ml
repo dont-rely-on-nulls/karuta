@@ -82,6 +82,8 @@ let builtin_module name predicates =
     }
     Location.dummy
 
+let builtin_module_names = BatSet.String.of_list [ "karuta"; "sakura" ]
+
 let karuta_builtins : compiled_module Location.with_location =
   builtin_module "karuta"
     [
@@ -102,10 +104,10 @@ let karuta_builtins : compiled_module Location.with_location =
 module type LOOKUP = sig
   type t
 
-  val comptime_of_compiler : t -> comptime Location.with_location
+  val nested_env : t -> compiled_module
 
   val signature :
-    comptime Location.with_location ->
+    compiled_module ->
     Ast.Expr.func_label ->
     [> `Ok of compiled_signature Location.with_location
     | `Undefined of string Location.with_location
@@ -113,7 +115,7 @@ module type LOOKUP = sig
     | `UnexpectedSignature of Location.location ]
 
   val m0dule :
-    comptime Location.with_location ->
+    compiled_module ->
     Ast.Expr.func_label ->
     [> `Ok of compiled_module Location.with_location
     | `Undefined of string Location.with_location
@@ -121,7 +123,7 @@ module type LOOKUP = sig
 
   val nested_signature :
     sig_env Location.with_location ->
-    comptime Location.with_location ->
+    compiled_module ->
     Ast.Expr.func_label ->
     [> `Ok of signature Location.with_location
     | `Undefined of string Location.with_location
@@ -129,7 +131,6 @@ module type LOOKUP = sig
     | `UnexpectedSignature of Location.location ]
 
   val predicate :
-    comptime Location.with_location ->
     compiled_module ->
     Ast.Expr.func_label ->
     int ->
@@ -265,26 +266,29 @@ module Make (Config : COMPILER_CONFIG) :
     let full_module_name =
       join_qualifiers @@ ft_of_original_module env.qualifier
     in
-    {
-      state;
-      parent;
-      externals =
-        BatMap.String.add "karuta"
-          (Location.fmap Lazy.from_val karuta_builtins)
-          externals;
-      filename;
-      header =
-        FT.of_list
-          [
-            Beam.Builder.Attribute.file filename 1;
-            (* TODO: this should be a proper atom *)
-            Beam.Builder.Attribute.module_ full_module_name;
-          ];
-      output = FT.empty;
-      env;
-      persist;
-      lookup = (module Config.Lookup);
-    }
+    let nested_compiler =
+      {
+        state;
+        parent;
+        externals =
+          BatMap.String.add "karuta"
+            (Location.fmap Lazy.from_val karuta_builtins)
+            externals;
+        filename;
+        header =
+          FT.of_list
+            [
+              Beam.Builder.Attribute.file filename 1;
+              (* TODO: this should be a proper atom *)
+              Beam.Builder.Attribute.module_ full_module_name;
+            ];
+        output = FT.empty;
+        env;
+        persist;
+        lookup = (module Config.Lookup);
+      }
+    in
+    { nested_compiler with env = Config.Lookup.nested_env nested_compiler }
 
   let initialize ({ filename; _ } as init : mods initialization) :
       Config.state t =
