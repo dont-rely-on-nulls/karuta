@@ -191,8 +191,7 @@ let rec compile_nested : type a mods directive.
           Location.add_loc (ModuleSignature payload) next.loc
         in
         match
-          Lookup.nested_signature (sig_env_cons sig_env acc)
-            (Lookup.comptime_of_compiler compiler)
+          Lookup.nested_signature (sig_env_cons sig_env acc) compiler.env
             module_signature
         with
         | `Ok { content = PlainSignature payload; _ } ->

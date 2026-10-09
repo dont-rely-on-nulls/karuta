@@ -77,13 +77,24 @@ let preprocess_directive :
       match FT.front head.content.elements with
       | Some (rest, singleton) when FT.is_empty rest ->
           let external_dep = Ast.Expr.extract_unqualified_atom singleton in
-          let dependencies = BatSet.String.singleton external_dep in
           Update
             {
-              dependencies;
               action =
                 (fun { imports } ->
-                  { imports = BatMap.String.add external_dep head.loc imports });
+                  match BatMap.String.find_opt external_dep imports with
+                  | Some previous_loc ->
+                      Logger.error head.loc
+                        "Cannot import the same module twice";
+                      if previous_loc = Location.dummy then
+                        Logger.simply_info @@ external_dep
+                        ^ " is a builtin module"
+                      else Logger.error previous_loc "Previous import";
+                      exit 1
+                  | None ->
+                      {
+                        imports =
+                          BatMap.String.add external_dep head.loc imports;
+                      });
             }
       | None ->
           Logger.error head.loc "Directive 'import' cannot be an empty functor";
