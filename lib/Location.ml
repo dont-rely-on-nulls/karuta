@@ -31,20 +31,20 @@ type 'a with_location = {
 (** Parametric type to add a location to any other type. Used to indicate the
     source code region where the payload originated. *)
 
-(** [step n loc] advances offset position by provided amount.
+(** [step n coordinate] advances offset position by provided amount.
     @param n amount to advance offset.
-    @param loc coordinate to be updated.
+    @param coordinate coordinate to be updated.
     @return updated coordinate. *)
 let step n coordinate = { coordinate with offset = coordinate.offset + n }
 
-(** [jump_n n loc] adds n to the line number and resets the line offset.
+(** [jump_n n coordinate] adds n to the line number and resets the line offset.
 
     If the provided n is zero, no changes are applied to the coordinate. The
     reset is performed by updating line_offset to be the provided location's
     offset.
 
     @param n amount to advance line number.
-    @param loc coordinate to be updated.
+    @param coordinate to be updated.
     @return updated coordinate. *)
 let jump_n n coordinate =
   if n = 0 then coordinate
@@ -55,17 +55,17 @@ let jump_n n coordinate =
       line = coordinate.line + n;
     }
 
-(** [plus_str str loc] step and jump combined based on the provided str
+(** [plus_str str coordinate] step and jump combined based on the provided str
     argument.
 
-    We step through the location based on the length of the provide string. We
-    then jump_n using the number of new lines in the provided string.
+    We step the coordinate based on the length of the provided string. We then
+    jump_n using the number of new lines in the provided string.
 
     @param str string to be inspected.
-    @param loc coordinate to be updated.
+    @param coordinate to be updated.
     @return updated coordinate. *)
-let plus_str str loc =
-  loc
+let plus_str str coordinate =
+  coordinate
   |> step (String.length str)
   |> jump_n
        (String.fold_left (fun n -> function '\n' -> n + 1 | _ -> n) 0 str)
