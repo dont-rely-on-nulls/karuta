@@ -371,7 +371,7 @@ module Make (Config : COMPILER_CONFIG) :
         (Location.add_loc new_module
         @@ Location.double filepath
              (* TODO: make the endl actually point to the end of the file *)
-             { line = 1; line_offset = 0; offset = 0 })
+             Location.origin)
         acc
     in
     BatMap.String.empty
