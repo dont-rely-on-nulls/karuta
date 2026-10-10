@@ -44,9 +44,9 @@ let step n coordinate = { coordinate with offset = coordinate.offset + n }
 
     @param loc location to be updated.
     @return updated location. *)
-let jump { filename; coordinate } =
+let jump ({ coordinate; _ } as point) =
   {
-    filename;
+    point with
     coordinate =
       {
         coordinate with
@@ -103,8 +103,8 @@ let fmap f { content = a; loc } = { content = f a; loc }
     @param p2 end of location.
     @param v value of a type without location.
     @return updated value with new location. *)
-let add { filename; coordinate = p1 } { coordinate = p2; _ } v =
-  { content = v; loc = { filename; startl = p1; endl = p2 } }
+let add { filename; coordinate = startl } { coordinate = endl; _ } v =
+  { content = v; loc = { filename; startl; endl } }
 
 (** [strip_loc v] Removes location from a value of type with location.
     @param v value of type with location.
