@@ -763,6 +763,7 @@ let parse (filename : string) (source : string) =
     }
     |> top_level @>> capture
        @@ fun file ->
+       (* TODO: reparse clause instead of just returning ExpectedEOF *)
        is_not some (fun () loc -> `ExpectedEOF (file, loc)) @&& return file
   with
   | Ok (parsed, _) -> parsed.content
