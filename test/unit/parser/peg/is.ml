@@ -3,7 +3,7 @@ open Lib.Location
 open Alcotest
 
 let succeeds () =
-  let startl = Lexing.dummy_pos in
+  let startl = zero_half in
   let endl = step 5 startl in
 
   let p : (string, string) parser =

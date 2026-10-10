@@ -109,3 +109,6 @@ let dummy = double @@ Lexing.dummy_pos
 
 (** Half dummy location based on Lexing.position *)
 let half_dummy = Lexing.dummy_pos
+
+(** Zero half dummy location based on Lexing.position *)
+let zero_half = { pos_fname = ""; pos_lnum = 0; pos_bol = 0; pos_cnum = 0 }

@@ -8,7 +8,7 @@ let fails_when_parser_succeeds () =
   let handler value _loc = "unexpectedly matched: " ^ value in
 
   let state : parser_state =
-    { remaining = BatSubstring.of_string "hello"; loc = half_dummy }
+    { remaining = BatSubstring.of_string "hello"; loc = zero_half }
   in
 
   let actual = is_not p handler state in
@@ -24,7 +24,7 @@ let succeeds_when_parser_fails () =
   let handler _value _loc = "handler should not be called" in
 
   let state : parser_state =
-    { remaining = BatSubstring.of_string "hello"; loc = half_dummy }
+    { remaining = BatSubstring.of_string "hello"; loc = zero_half }
   in
 
   match is_not p handler state with
@@ -43,7 +43,7 @@ let succeeds_when_parser_fails () =
         resulting_state.loc.pos_bol
 
 let handler_receives_correct_location () =
-  let startl = Lexing.dummy_pos in
+  let startl = zero_half in
   let endl = step 5 startl in
 
   let p : (string, string) parser =
@@ -77,7 +77,7 @@ let does_not_call_handler_when_parser_fails () =
   let handler _value _loc = failwith "handler should not be called" in
 
   let state : parser_state =
-    { remaining = BatSubstring.of_string "hello"; loc = half_dummy }
+    { remaining = BatSubstring.of_string "hello"; loc = zero_half }
   in
 
   match is_not p handler state with
