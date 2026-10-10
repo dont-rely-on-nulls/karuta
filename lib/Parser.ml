@@ -2,7 +2,7 @@ type parser_state = {
   remaining : BatSubstring.t;
       (** Text still to be parsed. Generally a suffix of the original input. We
           use a BatSubstring for O(1) slicing. *)
-  loc : Location.t;
+  loc : Location.point;
       (** Current location of the parser relative to the source text. *)
 }
 (** Type representing an immutable parser state. *)
@@ -118,12 +118,13 @@ let succeed : 'e. (unit, 'e) parser = return ()
 let is_not :
     'a 'errin 'errout.
     ('a, 'errin) parser ->
-    ('a -> Location.location -> 'errout) ->
+    ('a -> Location.region -> 'errout) ->
     (unit, 'errout) parser =
- fun p handler ({ loc = startl; _ } as state) ->
+ fun p handler ({ loc = { filename; coordinate = startl }; _ } as state) ->
   state
   |> ifte p
-       (fun (r, { loc = endl; _ }) -> Error (handler r { startl; endl }))
+       (fun (r, { loc = { coordinate = endl; _ }; _ }) ->
+         Error (handler r { filename; startl; endl }))
        succeed
 
 (** [is p] constructs a parser that attempts to parse p. On success, the parser
@@ -218,19 +219,31 @@ let some : 'e. (unit, ([> `UnexpectedEOF ] as 'e)) parser = function
       match first remaining with
       | None -> Error `UnexpectedEOF
       | Some _ ->
-          Ok ((), { remaining = triml 1 remaining; loc = Location.step 1 loc }))
+          Ok
+            ( (),
+              {
+                remaining = triml 1 remaining;
+                loc = { loc with coordinate = Location.step 1 loc.coordinate };
+              } ))
 
 (** Grammar rule:
 
     horizontal_whitespace <- (' ' / '\t')+ *)
 let horizontal_whitespace :
-    'e. (unit, ([> `ExpectedHorizontalWhitespace of Location.t ] as 'e)) parser
+    'e.
+    (unit, ([> `ExpectedHorizontalWhitespace of Location.point ] as 'e)) parser
     =
  fun { remaining = current; loc } ->
   let remaining = dropl (function ' ' | '\t' -> true | _ -> false) current in
   match stride current remaining with
   | 0 -> Error (`ExpectedHorizontalWhitespace loc)
-  | dropped -> Ok ((), { remaining; loc = Location.step dropped loc })
+  | dropped ->
+      Ok
+        ( (),
+          {
+            remaining;
+            loc = { loc with coordinate = Location.step dropped loc.coordinate };
+          } )
 
 (** [literal l] constructs a parser that matches l with the prefix of the
     remaining text.
@@ -242,7 +255,7 @@ let literal l { remaining; loc } =
       ( (),
         {
           remaining = triml (String.length l) remaining;
-          loc = Location.plus_str l loc;
+          loc = { loc with coordinate = Location.plus_str l loc.coordinate };
         } )
   else Error (`WrongPrefix (loc, l))
 
@@ -351,9 +364,14 @@ let ident_like is_start is_character fallthrough { remaining = current; loc } =
   | None -> Error `UnexpectedEOF
   | Some c when is_start c ->
       let atom, remaining = splitl is_character current in
-      let next_loc = Location.step (stride current remaining) loc in
+      let next_loc =
+        {
+          loc with
+          coordinate = Location.step (stride current remaining) loc.coordinate;
+        }
+      in
       Ok
-        ( Location.add_loc (to_string atom) { startl = loc; endl = next_loc },
+        ( Location.delimit loc next_loc (to_string atom),
           { remaining; loc = next_loc } )
   | Some _ -> Error (fallthrough loc)
 
@@ -363,7 +381,7 @@ let ident_like is_start is_character fallthrough { remaining = current; loc } =
 let atom :
     'e.
     ( string Location.with_location,
-      ([> `UnexpectedEOF | `ExpectedLowercase of Location.t ] as 'e) )
+      ([> `UnexpectedEOF | `ExpectedLowercase of Location.point ] as 'e) )
     parser =
   ident_like BatChar.is_lowercase
     (fun c -> BatChar.is_letter c || BatChar.is_digit c || c = '_' || c = '-')
@@ -375,8 +393,9 @@ let atom :
 let variable :
     'e.
     ( string Location.with_location,
-      ([> `ExpectedUppercaseOrUnderscore of Location.t | `UnexpectedEOF ] as 'e)
-    )
+      ([> `ExpectedUppercaseOrUnderscore of Location.point | `UnexpectedEOF ]
+       as
+       'e) )
     parser =
   ident_like
     (function
@@ -386,11 +405,11 @@ let variable :
 
 (** Grammar rule:
 
-    quoted_atom <- '\'' (!'\'' !'\n' .)* '\'' *)
+    quoted_atom <- "'" (!"'" !'\n' .)* "'" *)
 let quoted_atom :
     'e.
     ( string Location.with_location,
-      ([> `UnexpectedEOF | `WrongPrefix of Location.t * string ] as 'e) )
+      ([> `UnexpectedEOF | `WrongPrefix of Location.point * string ] as 'e) )
     parser =
  fun { remaining = current; loc } ->
   match getc current with
@@ -398,11 +417,15 @@ let quoted_atom :
       let atom_name, remaining =
         splitl (function '\'' | '\n' -> false | _ -> true) remaining
       in
-      let next_loc = Location.step (stride current remaining) loc in
+      let next_loc =
+        {
+          loc with
+          coordinate = Location.step (stride current remaining) loc.coordinate;
+        }
+      in
       { remaining; loc = next_loc }
       |> single_quote @>> fun ((), ({ loc = endl; _ } as state)) ->
-         Ok
-           (Location.add_loc (to_string atom_name) { startl = loc; endl }, state)
+         Ok (Location.delimit loc endl (to_string atom_name), state)
   | Some _ | None -> Error (`WrongPrefix (loc, "\'"))
 
 (** Grammar rule:
@@ -411,7 +434,7 @@ let quoted_atom :
 let integer :
     'e.
     ( int Location.with_location,
-      ([> `NotADigit of Location.t | `UnexpectedEOF ] as 'e) )
+      ([> `NotADigit of Location.point | `UnexpectedEOF ] as 'e) )
     parser =
  fun ({ loc = startl; _ } as state) ->
   let positive_integer { remaining = current; loc = after_minus } =
@@ -419,12 +442,18 @@ let integer :
     | 0 -> Error `UnexpectedEOF
     | _ -> (
         let digits, remaining = splitl BatChar.is_digit current in
-        let endl = Location.step (stride current remaining) after_minus in
+        let endl =
+          {
+            after_minus with
+            coordinate =
+              Location.step (stride current remaining) after_minus.coordinate;
+          }
+        in
         match to_string digits with
         | "" -> Error (`NotADigit after_minus)
         | digits ->
             Ok
-              ( Location.add_loc (int_of_string digits) { startl; endl },
+              ( Location.delimit startl endl (int_of_string digits),
                 { remaining; loc = endl } ))
   in
   state
@@ -466,8 +495,8 @@ let func_label :
     'e.
     ( Ast.Expr.func_label Location.with_location,
       ([> `UnexpectedEOF
-       | `ExpectedLowercase of Location.t
-       | `WrongPrefix of Location.t * string ]
+       | `ExpectedLowercase of Location.point
+       | `WrongPrefix of Location.point * string ]
        as
        'e) )
     parser =
@@ -478,12 +507,12 @@ let func_label :
      @@ fun qualifiers ->
      (quoted_atom @|| atom)
      @>> fun (label_name, ({ loc = endl; _ } as state)) ->
-     Ok (Location.add_loc (qualifiers, label_name) { startl; endl }, state)
+     Ok (Location.delimit startl endl (qualifiers, label_name), state)
 
 type expr_errors =
-  [ `ExpectedLowercase of Location.t
+  [ `ExpectedLowercase of Location.point
   | `UnexpectedEOF
-  | `WrongPrefix of Location.t * string ]
+  | `WrongPrefix of Location.point * string ]
 
 (** Grammar rule:
 
@@ -521,19 +550,22 @@ and whitespace_and_comments : 'e. (unit, ([> expr_errors ] as 'e)) parser =
     whitespace_and_comments right_bracket *)
 and list : 'e. (Ast.Expr.t, ([> expr_errors ] as 'e)) parser =
  fun ({ loc = startl; _ } as state) ->
-  let build_cons startl endl prefix (tail : Ast.Expr.t) : Ast.Expr.t =
+  let build_cons (startl : Location.point) (endl : Location.point)
+      (prefix : Ast.Expr.t FT.t) (tail : Ast.Expr.t) : Ast.Expr.t =
     FT.fold_right
-      (fun acc elem ->
-        Location.add_loc
-          (Ast.Expr.Cons (elem, acc))
-          { startl = elem.loc.startl; endl })
+      (fun acc (elem : Ast.Expr.t) ->
+        Location.delimit
+          { filename = startl.filename; coordinate = elem.loc.startl }
+          endl
+          (Ast.Expr.Cons (elem, acc)))
       tail prefix
     |> fun { loc; content } ->
-    { Location.content; loc = { startl; endl = loc.endl } }
+    {
+      Location.content;
+      loc = { loc with startl = startl.coordinate; endl = loc.endl };
+    }
   in
-  let nil startl endl =
-    { Location.content = Ast.Expr.Nil; loc = { Location.startl; endl } }
-  in
+  let nil startl endl = Location.delimit startl endl Ast.Expr.Nil in
   let rec list_tail acc =
     ifte comma
       (snd @> whitespace_and_comments @&& expr @>> capture
@@ -603,9 +635,8 @@ and func :
        @> (prolog_elements @|| karuta_elements)
        @>> fun (args, ({ loc = endl; _ } as state)) ->
        Ok
-         ( Location.add_loc
-             (Ast.Expr.func Location.(label.content) args)
-             { startl; endl },
+         ( Location.delimit startl endl
+             (Ast.Expr.func Location.(label.content) args),
            state ))
      @@ return (Location.fmap Ast.Expr.atom label)
 
@@ -720,19 +751,20 @@ and top_level :
   |> whitespace_and_comments
      @&& star (parser_clause @>> ignoring whitespace_and_comments)
      @>> fun (result, ({ loc = endl; _ } as state)) ->
-     Ok (Location.add_loc result { startl; endl }, state)
+     Ok (Location.delimit startl endl result, state)
 
 (** Grammar rule:
 
     start <- top_level !. *)
-let parse (filepath : string) (source : string) =
+let parse (filename : string) (source : string) =
   match
     {
       remaining = BatSubstring.all source;
-      loc = { pos_fname = filepath; pos_lnum = 1; pos_bol = 0; pos_cnum = 0 };
+      loc = { filename; coordinate = Location.origin };
     }
     |> top_level @>> capture
        @@ fun file ->
+       (* TODO: reparse clause instead of just returning ExpectedEOF *)
        is_not some (fun () loc -> `ExpectedEOF (file, loc)) @&& return file
   with
   | Ok (parsed, _) -> parsed.content
@@ -740,14 +772,19 @@ let parse (filepath : string) (source : string) =
       (match e with
       | `ExpectedEOF (_, loc) ->
           Logger.error loc "Expected the file to end, but it continued"
-      | `ExpectedLowercase loc ->
-          Logger.error (Location.double loc)
+      | `ExpectedLowercase { filename; coordinate } ->
+          Logger.error
+            (Location.double filename coordinate)
             "Expected a lower case letter, but got something else"
       | `UnexpectedEOF ->
           Logger.simply_error "File ended, but we expected it to continue"
-      | `WrongPrefix (loc, expected_prefix) ->
+      | `WrongPrefix ({ coordinate; filename }, expected_prefix) ->
           Logger.error
-            { startl = loc; endl = Location.plus_str expected_prefix loc }
+            {
+              filename;
+              startl = coordinate;
+              endl = Location.plus_str expected_prefix coordinate;
+            }
           @@ "We were expecting a '"
           ^ String.escaped expected_prefix
           ^ "', but got this instead.");

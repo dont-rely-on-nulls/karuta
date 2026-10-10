@@ -110,7 +110,7 @@ let preprocess_directive :
     Logger.error head.loc "Unknown Karuta directive";
     exit 1)
 
-let preprocess_query (loc : Location.location)
+let preprocess_query (loc : Location.region)
     (calls : Ast.Expr.func Location.with_location FT.t)
     (module_ : (Types.directives, Types.mods) Ast.Module.module_body) :
     (Types.directives, Types.mods) Ast.Module.module_body =

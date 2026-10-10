@@ -1,4 +1,4 @@
-type mods = { imports : Location.location BatMap.String.t }
+type mods = { imports : Location.region BatMap.String.t }
 type state = mods
 type directives = |
 

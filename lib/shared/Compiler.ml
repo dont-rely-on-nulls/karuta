@@ -27,7 +27,7 @@ type functor_map = int PredicateMap.t
 type predicate = {
   (* TODO: add type information *)
   original_module : string FT.t * string;
-  loc : Location.location;
+  loc : Location.region;
 }
 
 let ft_of_original_module : string FT.t * string -> string FT.t =
@@ -112,14 +112,14 @@ module type LOOKUP = sig
     [> `Ok of compiled_signature Location.with_location
     | `Undefined of string Location.with_location
     | `UnexpectedModule of compiled_module Location.with_location
-    | `UnexpectedSignature of Location.location ]
+    | `UnexpectedSignature of Location.region ]
 
   val m0dule :
     compiled_module ->
     Ast.Expr.func_label ->
     [> `Ok of compiled_module Location.with_location
     | `Undefined of string Location.with_location
-    | `UnexpectedSignature of Location.location ]
+    | `UnexpectedSignature of Location.region ]
 
   val nested_signature :
     sig_env Location.with_location ->
@@ -128,7 +128,7 @@ module type LOOKUP = sig
     [> `Ok of signature Location.with_location
     | `Undefined of string Location.with_location
     | `UnexpectedModule of compiled_module Location.with_location
-    | `UnexpectedSignature of Location.location ]
+    | `UnexpectedSignature of Location.region ]
 
   val predicate :
     compiled_module ->
@@ -136,7 +136,7 @@ module type LOOKUP = sig
     int ->
     [> `Ok of predicate
     | `Undefined of string Location.with_location
-    | `UnexpectedSignature of Location.location ]
+    | `UnexpectedSignature of Location.region ]
 end
 
 module Options = struct
@@ -369,9 +369,9 @@ module Make (Config : COMPILER_CONFIG) :
       let new_module = Lazy.from_fun step in
       BatMap.String.add module_name
         (Location.add_loc new_module
-        @@ Location.double
+        @@ Location.double filepath
              (* TODO: make the endl actually point to the end of the file *)
-             { pos_fname = filepath; pos_lnum = 1; pos_bol = 0; pos_cnum = 1 })
+             Location.origin)
         acc
     in
     BatMap.String.empty
