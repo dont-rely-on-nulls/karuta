@@ -152,7 +152,7 @@ module type PREPROCESSOR_CONFIG = sig
     (directives, mods) one_output
 
   val preprocess_query :
-    Location.location ->
+    Location.region ->
     Ast.Expr.func Location.with_location FT.t ->
     (directives, mods) Ast.Module.module_body ->
     (directives, mods) Ast.Module.module_body

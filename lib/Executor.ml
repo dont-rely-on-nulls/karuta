@@ -90,7 +90,7 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
           exit 1
       | Some { content; loc } -> (
           match
-            Lookup.check_dependency_cycle loc.startl.pos_fname @@ fun () ->
+            Lookup.check_dependency_cycle loc.filename @@ fun () ->
             Lazy.force content
           with
           (* TODO: allow the use of queries from nested modules *)

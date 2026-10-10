@@ -15,7 +15,7 @@ let parser_to_internal (declaration : Ast.ParserClause.decl) :
     { body = declaration.body; original_arg_list = declaration.head.elements }
   )
 
-let report_error_cases (directive_loc : Location.location)
+let report_error_cases (directive_loc : Location.region)
     ((qualifiers, name) :
       string Location.with_location FT.t * string Location.with_location) : unit
     =
@@ -81,7 +81,7 @@ let preprocess_directive :
        report_error_cases head.loc head.content.name;
        exit 1))
 
-let preprocess_query (loc : Location.location)
+let preprocess_query (loc : Location.region)
     (_ : Ast.Expr.func Location.with_location FT.t)
     (_ : (Types.directives, Types.mods) Ast.Module.module_body) :
     (Types.directives, Types.mods) Ast.Module.module_body =

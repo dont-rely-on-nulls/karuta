@@ -2,7 +2,7 @@ open Compiler
 
 type 'a choice =
   | NestedLookup of 'a env
-  | UnexpectedSignature of Location.location
+  | UnexpectedSignature of Location.region
 
 type 'a selector = 'a Location.with_location -> 'a choice
 

@@ -20,7 +20,7 @@ let initialize_from_parent (type state) (type mods) (type directives)
     (Some parent) name
 
 let rec compile : type state mods.
-    Location.location ->
+    Location.region ->
     ('directives, mods) Ast.Module.directive ->
     state t ->
     (state, 'directives, mods) Compiler.runner ->

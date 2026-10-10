@@ -53,7 +53,7 @@ let rec print_module externals =
 
 let nested_env ({ env; state = { imports }; externals; filename; _ } : t) :
     Shared.Compiler.compiled_module =
-  let import_without_shadowing import_name (import_loc : Location.location)
+  let import_without_shadowing import_name (import_loc : Location.region)
       (module_env : Shared.Compiler.comptime Shared.Compiler.env) :
       Shared.Compiler.comptime Shared.Compiler.env =
     match
@@ -72,7 +72,7 @@ let nested_env ({ env; state = { imports }; externals; filename; _ } : t) :
         in
         BatMap.String.add import_name
           (if Lazy.is_done dependency then compiled ()
-           else check_dependency_cycle loc.startl.pos_fname compiled)
+           else check_dependency_cycle loc.filename compiled)
           module_env
     | Some _, Some { Location.loc; _ } when import_loc = Location.dummy ->
         (* If the import does not have a location, that means the compiler inserted it

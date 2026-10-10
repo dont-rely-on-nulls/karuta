@@ -1,27 +1,32 @@
-open Lexing
+type coordinate = {
+  offset : int;
+      (** Offset from the start of the file to the current position. *)
+  line_offset : int;
+      (** Offset from the start of the file to the start of the current line. *)
+  line : int;  (** Line number. 1-based. *)
+}
+(** A coordinate in source code. It has no knowledge of which file it belongs
+    to.
 
-type t = Lexing.position
-(** Alias to standard library's Lexing.position type. Our type has the same
-    fields as the original ones, which have the following description (official
-    documentation):
+    It is possible to recover the column number by doing offset -
+    offset_of_line. *)
 
-    pos_fname is the file name; pos_lnum is the line number; pos_bol is the
-    offset of the beginning of the line (number of characters between the
-    beginning of the lexbuf and the beginning of the line); pos_cnum is the
-    offset of the position (number of characters between the beginning of the
-    lexbuf and the position). The difference between pos_cnum and pos_bol is the
-    character offset within the line (i.e. the column number, assuming each
-    character is one column wide). *)
+let origin = { offset = 0; line_offset = 0; line = 1 }
 
-type location = {
-  startl : t;  (** Beginning of region *)
-  endl : t;  (** End of region *)
+type point = { filename : string; coordinate : coordinate }
+(** This type represents a point in source code. It is isomorphic to
+    Lexing.position, but with better names for the fields. *)
+
+type region = {
+  filename : string;  (** File name *)
+  startl : coordinate;  (** Beginning of region *)
+  endl : coordinate;  (** End of region *)
 }
 (** Source code location. Locations delimit a source code region. *)
 
 type 'a with_location = {
   content : 'a;  (** Generic type payload *)
-  loc : location;  (** Associated location, with a beginning and end. *)
+  loc : region;  (** Associated location, with a beginning and end. *)
 }
 (** Parametric type to add a location to any other type. Used to indicate the
     source code region where the payload originated. *)
@@ -30,7 +35,7 @@ type 'a with_location = {
     @param n amount to advance offset.
     @param loc location to be updated.
     @return updated location. *)
-let step n loc = { loc with pos_cnum = loc.pos_cnum + n }
+let step n coordinate = { coordinate with offset = coordinate.offset + n }
 
 (** [jump loc] increments line number and resets beginning of the line offset.
 
@@ -39,7 +44,16 @@ let step n loc = { loc with pos_cnum = loc.pos_cnum + n }
 
     @param loc location to be updated.
     @return updated location. *)
-let jump loc = { loc with pos_bol = loc.pos_cnum; pos_lnum = loc.pos_lnum + 1 }
+let jump { filename; coordinate } =
+  {
+    filename;
+    coordinate =
+      {
+        coordinate with
+        line_offset = coordinate.offset;
+        line = coordinate.line + 1;
+      };
+  }
 
 (** [jump_n n loc] adds n to current line number and resets beginning of the
     line offset.
@@ -50,9 +64,14 @@ let jump loc = { loc with pos_bol = loc.pos_cnum; pos_lnum = loc.pos_lnum + 1 }
     @param n amount to advance line number.
     @param loc location to be updated.
     @return updated location. *)
-let jump_n n loc =
-  if n = 0 then loc
-  else { loc with pos_bol = loc.pos_cnum; pos_lnum = loc.pos_lnum + n }
+let jump_n n coordinate =
+  if n = 0 then coordinate
+  else
+    {
+      coordinate with
+      line_offset = coordinate.offset;
+      line = coordinate.line + n;
+    }
 
 (** [plus_str str loc] step and jump combined based on the provided str
     argument.
@@ -84,7 +103,8 @@ let fmap f { content = a; loc } = { content = f a; loc }
     @param p2 end of location.
     @param v value of a type without location.
     @return updated value with new location. *)
-let add p1 p2 v = { content = v; loc = { startl = p1; endl = p2 } }
+let add { filename; coordinate = p1 } { coordinate = p2; _ } v =
+  { content = v; loc = { filename; startl = p1; endl = p2 } }
 
 (** [strip_loc v] Removes location from a value of type with location.
     @param v value of type with location.
@@ -96,13 +116,14 @@ let strip_loc (v : 'a with_location) : 'a = v.content
     @param v value of type without location.
     @param loc location to be added.
     @return same value as before updated with provided location. *)
-let add_loc (v : 'a) (loc : location) : 'a with_location = { content = v; loc }
+let add_loc (v : 'a) (loc : region) : 'a with_location = { content = v; loc }
 
 (** [double loc] Receive half of a location and create a full location by using
     the argument as both beginning and end.
     @param loc half-location to be used.
     @return full location. *)
-let double (loc : t) : location = { startl = loc; endl = loc }
+let double filename (loc : coordinate) : region =
+  { filename; startl = loc; endl = loc }
 
-(** Full dummy location based on Lexing.position (half-location). *)
-let dummy = double @@ Lexing.dummy_pos
+(** Dummy region. Note that the line is 0 even though it is 1-based. *)
+let dummy = double "" { offset = 0; line_offset = 0; line = 0 }
