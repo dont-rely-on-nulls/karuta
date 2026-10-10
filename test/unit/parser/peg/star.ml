@@ -4,7 +4,7 @@ module FT = Lib.FT
 open Alcotest
 
 let succeeds_repeatedly () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let p : (char, string) parser =
    fun state ->
@@ -12,7 +12,7 @@ let succeeds_repeatedly () =
     | None -> Error "no more input"
     | Some c ->
         let remaining = BatSubstring.triml 1 state.remaining in
-        let loc = step 1 state.loc in
+        let loc = dummy_coord_to_point @@ step 1 state.loc.coordinate in
         Ok (c, { remaining; loc })
   in
 
@@ -29,13 +29,13 @@ let succeeds_repeatedly () =
       check string "consumes all input" ""
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "updates position" 3 resulting_state.loc.pos_cnum
+      check int "updates position" 3 resulting_state.loc.coordinate.offset
 
 let succeeds_when_parser_fails_immediately () =
   let p : (char, string) parser = fun _state -> Error "p failed" in
 
   let state : parser_state =
-    { remaining = BatSubstring.of_string "hello"; loc = half_dummy }
+    { remaining = BatSubstring.of_string "hello"; loc = zero_point }
   in
 
   match star p state with
@@ -47,18 +47,23 @@ let succeeds_when_parser_fails_immediately () =
       check string "preserves remaining input" "hello"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "preserves position" state.loc.pos_cnum
-        resulting_state.loc.pos_cnum
+      check int "preserves position" state.loc.coordinate.offset
+        resulting_state.loc.coordinate.offset
 
 let stops_after_failure () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let p : (char, string) parser =
    fun state ->
     match BatSubstring.first state.remaining with
     | Some ('a' as c) | Some ('b' as c) ->
         let remaining = BatSubstring.triml 1 state.remaining in
-        Ok (c, { remaining; loc = step 1 state.loc })
+        Ok
+          ( c,
+            {
+              remaining;
+              loc = dummy_coord_to_point @@ step 1 state.loc.coordinate;
+            } )
     | _ -> Error "no match"
   in
 
@@ -76,7 +81,7 @@ let stops_after_failure () =
         (BatSubstring.to_string resulting_state.remaining);
 
       check int "updates position for successful parses" 2
-        resulting_state.loc.pos_cnum
+        resulting_state.loc.coordinate.offset
 
 let tests =
   [

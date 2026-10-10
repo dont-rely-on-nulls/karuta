@@ -8,7 +8,7 @@ let integer_list =
     ~end_delim:(literal "]") integer
 
 let succeeds_with_empty_list () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "[] rest"; loc = startl }
@@ -23,10 +23,11 @@ let succeeds_with_empty_list () =
       check string "leaves remaining input" " rest"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by two" 2 resulting_state.loc.pos_cnum
+      check int "advances position by two" 2
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_one_item () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "[123] rest"; loc = startl }
@@ -41,10 +42,11 @@ let succeeds_with_one_item () =
       check string "leaves remaining input" " rest"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by five" 5 resulting_state.loc.pos_cnum
+      check int "advances position by five" 5
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_multiple_items () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "[1,22,333] rest"; loc = startl }
@@ -59,10 +61,11 @@ let succeeds_with_multiple_items () =
       check string "leaves remaining input" " rest"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by ten" 10 resulting_state.loc.pos_cnum
+      check int "advances position by ten" 10
+        resulting_state.loc.coordinate.offset
 
 let fails_without_start_delimiter () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "1,2]"; loc = startl }
@@ -73,7 +76,7 @@ let fails_without_start_delimiter () =
   | Error _ -> ()
 
 let fails_when_item_is_missing () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "[1,]"; loc = startl }
@@ -84,7 +87,7 @@ let fails_when_item_is_missing () =
   | Error _ -> ()
 
 let fails_without_end_delimiter () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "[1,2"; loc = startl }
@@ -96,7 +99,7 @@ let fails_without_end_delimiter () =
 
 let fails_on_empty_input () =
   let state : parser_state =
-    { remaining = BatSubstring.of_string ""; loc = half_dummy }
+    { remaining = BatSubstring.of_string ""; loc = zero_point }
   in
 
   match integer_list state with

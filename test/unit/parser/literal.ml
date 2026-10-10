@@ -3,7 +3,7 @@ open Lib.Location
 open Alcotest
 
 let succeeds () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "hello world"; loc = startl }
@@ -17,10 +17,11 @@ let succeeds () =
       check string "consumes the matched prefix" " world"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by five" 5 resulting_state.loc.pos_cnum
+      check int "advances position by five" 5
+        resulting_state.loc.coordinate.offset
 
 let fails_when_prefix_does_not_match () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "world"; loc = startl }
@@ -30,10 +31,11 @@ let fails_when_prefix_does_not_match () =
   | Ok _ -> fail "literal should fail when the prefix does not match"
   | Error (`WrongPrefix (loc, expected)) ->
       check string "reports expected literal" "hello" expected;
-      check int "reports original position" startl.pos_cnum startl.pos_cnum
+      check int "reports original position" startl.coordinate.offset
+        startl.coordinate.offset
 
 let fails_when_input_is_too_short () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "hel"; loc = startl }
@@ -43,10 +45,11 @@ let fails_when_input_is_too_short () =
   | Ok _ -> fail "literal should fail when input is shorter than the literal"
   | Error (`WrongPrefix (loc, expected)) ->
       check string "reports expected literal" "hello" expected;
-      check int "reports original position" startl.pos_cnum startl.pos_cnum
+      check int "reports original position" startl.coordinate.offset
+        startl.coordinate.offset
 
 let succeeds_with_empty_literal () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "hello"; loc = startl }
@@ -60,8 +63,8 @@ let succeeds_with_empty_literal () =
       check string "preserves remaining input" "hello"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "preserves position" startl.pos_cnum
-        resulting_state.loc.pos_cnum
+      check int "preserves position" startl.coordinate.offset
+        resulting_state.loc.coordinate.offset
 
 let tests =
   [

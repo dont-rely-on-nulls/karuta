@@ -118,23 +118,22 @@ let rec find_variables (element : Ast.Expr.base) : variable_set =
       S.union (find_variables lhs.content) (find_variables rhs.content)
   | Nil | Integer _ -> S.empty
 
-type t = { filename : string; dependencies : DependencyGraph.t }
+type t = { filename : string }
 
-let initialize filename : t = { filename; dependencies = BatMap.String.empty }
+let initialize filename : t = { filename }
 
 type ('directives, 'mods) one_output =
   | TargetSpecificDirective of 'directives
-  | Update of { action : 'mods -> 'mods; dependencies : BatSet.String.t }
+  | Update of { action : 'mods -> 'mods }
 
 type ('directives, 'mods) output = {
-  dependencies : DependencyGraph.t;
   module_ : ('directives, 'mods) Ast.Module.module_body;
 }
 
 type ('directives, 'mods) recur =
   t -> Ast.ParserClause.t FT.t -> ('directives, 'mods) output
 
-let map_module f o = { o with module_ = f o.module_ }
+let map_module f o = { module_ = f o.module_ }
 
 module type PREPROCESSOR_CONFIG = sig
   type directives
@@ -153,7 +152,7 @@ module type PREPROCESSOR_CONFIG = sig
     (directives, mods) one_output
 
   val preprocess_query :
-    Location.location ->
+    Location.region ->
     Ast.Expr.func Location.with_location FT.t ->
     (directives, mods) Ast.Module.module_body ->
     (directives, mods) Ast.Module.module_body
@@ -184,22 +183,21 @@ module Make (Config : PREPROCESSOR_CONFIG) :
     with type mods = Config.mods = struct
   include Config
 
-  let rec preprocess_clauses ({ dependencies; filename } : t)
+  let rec preprocess_clauses ({ filename } : t)
       (clauses : Ast.ParserClause.t FT.t) =
-    let split ({ dependencies; module_ } : (directives, mods) output)
+    let split ({ module_ } : (directives, mods) output)
         (parser_clause : Ast.ParserClause.t) : (directives, mods) output =
       let open Location in
       let { loc; content } = parser_clause in
       match content with
       | QueryConjunction calls when module_.query = None ->
-          { dependencies; module_ = Config.preprocess_query loc calls module_ }
+          { module_ = Config.preprocess_query loc calls module_ }
       | QueryConjunction _ ->
           Logger.error loc "Modules can have at most one query";
           Logger.error (Option.get module_.query).loc "First query here";
           exit 1
       | Declaration decl ->
           {
-            dependencies;
             module_ =
               {
                 module_ with
@@ -248,13 +246,10 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                    implementation";
                 exit 1
             | 1, Some (remaining, body) when FT.size remaining = 0 ->
-                let { dependencies = body_dependencies; module_ = body_module }
-                    =
-                  preprocess_clauses { dependencies; filename } body.content
+                let { module_ = body_module } =
+                  preprocess_clauses { filename } body.content
                 in
                 {
-                  dependencies =
-                    DependencyGraph.merge dependencies body_dependencies;
                   module_ =
                     {
                       module_ with
@@ -270,16 +265,12 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                 let body = FT.head_exn remaining in
                 check_for_type_annotations signature_body.content;
                 let { module_ = signature_module; _ } =
-                  preprocess_clauses { dependencies; filename }
-                    signature_body.content
+                  preprocess_clauses { filename } signature_body.content
                 in
-                let { dependencies = body_dependencies; module_ = body_module }
-                    =
-                  preprocess_clauses { dependencies; filename } body.content
+                let { module_ = body_module } =
+                  preprocess_clauses { filename } body.content
                 in
                 {
-                  dependencies =
-                    DependencyGraph.merge dependencies body_dependencies;
                   module_ =
                     {
                       module_ with
@@ -314,13 +305,10 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                 let signature_name =
                   Ast.Expr.get_functor_label signature_name
                 in
-                let { dependencies = body_dependencies; module_ = body_module }
-                    =
-                  preprocess_clauses { dependencies; filename } body.content
+                let { module_ = body_module } =
+                  preprocess_clauses { filename } body.content
                 in
                 {
-                  dependencies =
-                    DependencyGraph.merge dependencies body_dependencies;
                   module_ =
                     {
                       module_ with
@@ -377,10 +365,9 @@ module Make (Config : PREPROCESSOR_CONFIG) :
             | 1, Some (remaining, body) when FT.size remaining = 0 ->
                 check_for_type_annotations body.content;
                 let { module_ = nested; _ } =
-                  preprocess_clauses { dependencies; filename } body.content
+                  preprocess_clauses { filename } body.content
                 in
                 {
-                  dependencies;
                   module_ =
                     {
                       module_ with
@@ -419,7 +406,6 @@ module Make (Config : PREPROCESSOR_CONFIG) :
             match Config.preprocess_directive preprocess_clauses directive with
             | TargetSpecificDirective directive ->
                 {
-                  dependencies;
                   module_ =
                     {
                       module_ with
@@ -429,11 +415,8 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                              (Ast.Module.TargetSpecific directive) loc;
                     };
                 }
-            | Update { dependencies = dependency_set; action } ->
+            | Update { action } ->
                 {
-                  dependencies =
-                    BatMap.String.add module_.name.content dependency_set
-                      dependencies;
                   module_ =
                     {
                       module_ with
@@ -446,7 +429,6 @@ module Make (Config : PREPROCESSOR_CONFIG) :
     |> FT.map check_empty_heads
     |> FT.fold_left split
          {
-           dependencies;
            module_ =
              {
                name =

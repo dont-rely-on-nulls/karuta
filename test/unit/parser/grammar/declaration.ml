@@ -6,14 +6,14 @@ open Alcotest
 
 let parse_func input =
   let state : parser_state =
-    { remaining = BatSubstring.of_string input; loc = zero_half }
+    { remaining = BatSubstring.of_string input; loc = zero_point }
   in
   match func state with
   | Ok (value, _) -> value
   | Error _ -> failf "could not parse initial predicate from %S" input
 
 let declaration_after head input =
-  { remaining = BatSubstring.of_string input; loc = head.loc.endl }
+  { remaining = BatSubstring.of_string input; loc = end_point head.loc }
   |> declaration head
 
 let succeeds_without_body () =
@@ -32,7 +32,7 @@ let succeeds_without_body () =
       check string "leaves remaining input" " rest"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "consumes the period" 8 resulting_state.loc.pos_cnum
+      check int "consumes the period" 8 resulting_state.loc.coordinate.offset
 
 let succeeds_with_one_body_element () =
   let head = parse_func "first()" in
@@ -51,7 +51,7 @@ let succeeds_with_one_body_element () =
         (BatSubstring.to_string resulting_state.remaining);
 
       check int "consumes declaration through period" 17
-        resulting_state.loc.pos_cnum
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_multiple_body_elements () =
   let head = parse_func "first()" in
@@ -70,7 +70,7 @@ let succeeds_with_multiple_body_elements () =
         (BatSubstring.to_string resulting_state.remaining);
 
       check int "consumes declaration through period" 23
-        resulting_state.loc.pos_cnum
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_whitespace () =
   let head = parse_func "first()" in
@@ -85,7 +85,8 @@ let succeeds_with_whitespace () =
       check string "consumes all input" ""
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "consumes all characters" 20 resulting_state.loc.pos_cnum
+      check int "consumes all characters" 20
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_line_comment () =
   let head = parse_func "first()" in

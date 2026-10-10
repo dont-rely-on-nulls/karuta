@@ -4,7 +4,7 @@ module Ast = Lib.Ast
 open Alcotest
 
 let succeeds_with_integer () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "123 rest"; loc = startl }
@@ -19,10 +19,11 @@ let succeeds_with_integer () =
       check string "leaves remaining input" " rest"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by three" 3 resulting_state.loc.pos_cnum
+      check int "advances position by three" 3
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_variable () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "Hello rest"; loc = startl }
@@ -37,10 +38,11 @@ let succeeds_with_variable () =
       check string "leaves remaining input" " rest"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by five" 5 resulting_state.loc.pos_cnum
+      check int "advances position by five" 5
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_line_comment () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "% comment\n123"; loc = startl }
@@ -56,10 +58,10 @@ let succeeds_with_line_comment () =
         (BatSubstring.to_string resulting_state.remaining);
 
       check int "advances position past comment and integer" 13
-        resulting_state.loc.pos_cnum
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_expression_comment () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "#%123\n456"; loc = startl }
@@ -75,10 +77,10 @@ let succeeds_with_expression_comment () =
         (BatSubstring.to_string resulting_state.remaining);
 
       check int "advances position across comment and expression" 9
-        resulting_state.loc.pos_cnum
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_nested_lists () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "[1,[2,3]]"; loc = startl }
@@ -94,10 +96,11 @@ let succeeds_with_nested_lists () =
       check string "consumes all input" ""
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by ten" 9 resulting_state.loc.pos_cnum
+      check int "advances position by ten" 9
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_list_whitespace () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "[ 1 , 2 ]"; loc = startl }
@@ -113,10 +116,11 @@ let succeeds_with_list_whitespace () =
       check string "consumes all input" ""
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by nine" 9 resulting_state.loc.pos_cnum
+      check int "advances position by nine" 9
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_functor () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "sum(1,2) rest"; loc = startl }
@@ -128,10 +132,11 @@ let succeeds_with_functor () =
       check string "leaves remaining input" " rest"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by eight" 8 resulting_state.loc.pos_cnum
+      check int "advances position by eight" 8
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_empty_functor () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "sum()"; loc = startl }
@@ -143,10 +148,11 @@ let succeeds_with_empty_functor () =
       check string "consumes all input" ""
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by five" 5 resulting_state.loc.pos_cnum
+      check int "advances position by five" 5
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_bracket_functor () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "sum[1,2]"; loc = startl }
@@ -158,10 +164,11 @@ let succeeds_with_bracket_functor () =
       check string "consumes all input" ""
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by eight" 8 resulting_state.loc.pos_cnum
+      check int "advances position by eight" 8
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_nested_functor () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "sum(1,product(2,3))"; loc = startl }
@@ -173,10 +180,11 @@ let succeeds_with_nested_functor () =
       check string "consumes all input" ""
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by nineteen" 19 resulting_state.loc.pos_cnum
+      check int "advances position by nineteen" 19
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_functor_inside_list () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "[sum(1,2),3]"; loc = startl }
@@ -192,11 +200,12 @@ let succeeds_with_functor_inside_list () =
       check string "consumes all input" ""
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by twelve" 12 resulting_state.loc.pos_cnum
+      check int "advances position by twelve" 12
+        resulting_state.loc.coordinate.offset
 
 let fails_on_empty_input () =
   let state : parser_state =
-    { remaining = BatSubstring.of_string ""; loc = half_dummy }
+    { remaining = BatSubstring.of_string ""; loc = zero_point }
   in
 
   match expr state with
@@ -204,7 +213,7 @@ let fails_on_empty_input () =
   | Error _ -> ()
 
 let fails_on_incomplete_list () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "[1,2"; loc = startl }
@@ -215,7 +224,7 @@ let fails_on_incomplete_list () =
   | Error _ -> ()
 
 let fails_on_incomplete_function_call () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "sum(1,2"; loc = startl }

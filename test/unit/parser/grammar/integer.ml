@@ -3,7 +3,7 @@ open Lib.Location
 open Alcotest
 
 let succeeds_with_positive_integer () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "12345 rest"; loc = startl }
@@ -17,10 +17,11 @@ let succeeds_with_positive_integer () =
       check string "leaves remaining input" " rest"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by five" 5 resulting_state.loc.pos_cnum
+      check int "advances position by five" 5
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_negative_integer () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "-123 rest"; loc = startl }
@@ -34,10 +35,11 @@ let succeeds_with_negative_integer () =
       check string "leaves remaining input" " rest"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by four" 4 resulting_state.loc.pos_cnum
+      check int "advances position by four" 4
+        resulting_state.loc.coordinate.offset
 
 let fails_when_minus_has_no_digits () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "-"; loc = startl }
@@ -51,7 +53,7 @@ let fails_when_minus_has_no_digits () =
   | Error _ -> fail "integer returned an unexpected error"
 
 let fails_when_first_character_is_not_a_digit () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "abc"; loc = startl }
@@ -60,13 +62,14 @@ let fails_when_first_character_is_not_a_digit () =
   match integer state with
   | Ok _ -> fail "integer should reject non-digit input"
   | Error (`NotADigit loc) ->
-      check int "reports original position" startl.pos_cnum startl.pos_cnum
+      check int "reports original position" startl.coordinate.offset
+        startl.coordinate.offset
   | Error `UnexpectedEOF -> fail "input is not empty"
   | Error _ -> fail "integer returned an unexpected error"
 
 let fails_on_empty_input () =
   let state : parser_state =
-    { remaining = BatSubstring.of_string ""; loc = half_dummy }
+    { remaining = BatSubstring.of_string ""; loc = zero_point }
   in
 
   match integer state with
@@ -77,7 +80,7 @@ let fails_on_empty_input () =
   | Error _ -> fail "integer returned an unexpected error"
 
 let succeeds_with_leading_zeros () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "000123 rest"; loc = startl }
@@ -91,7 +94,8 @@ let succeeds_with_leading_zeros () =
       check string "leaves remaining input" " rest"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by six" 6 resulting_state.loc.pos_cnum
+      check int "advances position by six" 6
+        resulting_state.loc.coordinate.offset
 
 let tests =
   [

@@ -12,7 +12,7 @@ let ident_like_test =
   ident_like is_start is_character (fun loc -> `ExpectedIdentifier loc)
 
 let succeeds () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "hello123 rest"; loc = startl }
@@ -26,10 +26,11 @@ let succeeds () =
       check string "leaves remaining input" " rest"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by eight" 8 resulting_state.loc.pos_cnum
+      check int "advances position by eight" 8
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_single_character () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "x!"; loc = startl }
@@ -43,10 +44,11 @@ let succeeds_with_single_character () =
       check string "leaves remaining input" "!"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by one" 1 resulting_state.loc.pos_cnum
+      check int "advances position by one" 1
+        resulting_state.loc.coordinate.offset
 
 let stops_at_invalid_continuation () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "hello-world"; loc = startl }
@@ -60,10 +62,11 @@ let stops_at_invalid_continuation () =
       check string "leaves hyphen and following text" "-world"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by five" 5 resulting_state.loc.pos_cnum
+      check int "advances position by five" 5
+        resulting_state.loc.coordinate.offset
 
 let fails_when_first_character_is_invalid () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "123abc"; loc = startl }
@@ -72,13 +75,14 @@ let fails_when_first_character_is_invalid () =
   match ident_like_test state with
   | Ok _ -> fail "ident_like should reject an invalid starting character"
   | Error (`ExpectedIdentifier loc) ->
-      check int "reports original position" startl.pos_cnum startl.pos_cnum
+      check int "reports original position" startl.coordinate.offset
+        startl.coordinate.offset
   | Error _ ->
       fail "ident_like should fail with UnexpectedEOF or via fallthrough"
 
 let fails_when_input_is_empty () =
   let state : parser_state =
-    { remaining = BatSubstring.of_string ""; loc = half_dummy }
+    { remaining = BatSubstring.of_string ""; loc = zero_point }
   in
 
   match ident_like_test state with

@@ -8,7 +8,7 @@ let fails_when_parser_succeeds () =
   let handler value _loc = "unexpectedly matched: " ^ value in
 
   let state : parser_state =
-    { remaining = BatSubstring.of_string "hello"; loc = zero_half }
+    { remaining = BatSubstring.of_string "hello"; loc = zero_point }
   in
 
   let actual = is_not p handler state in
@@ -24,7 +24,7 @@ let succeeds_when_parser_fails () =
   let handler _value _loc = "handler should not be called" in
 
   let state : parser_state =
-    { remaining = BatSubstring.of_string "hello"; loc = zero_half }
+    { remaining = BatSubstring.of_string "hello"; loc = zero_point }
   in
 
   match is_not p handler state with
@@ -33,29 +33,33 @@ let succeeds_when_parser_fails () =
       check string "remaining input is unchanged" "hello"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "line is unchanged" state.loc.pos_lnum
-        resulting_state.loc.pos_lnum;
+      check int "line is unchanged" state.loc.coordinate.line
+        resulting_state.loc.coordinate.line;
 
-      check int "position is unchanged" state.loc.pos_cnum
-        resulting_state.loc.pos_cnum;
+      check int "position is unchanged" state.loc.coordinate.offset
+        resulting_state.loc.coordinate.offset;
 
-      check int "beginning of line is unchanged" state.loc.pos_bol
-        resulting_state.loc.pos_bol
+      check int "beginning of line is unchanged"
+        state.loc.coordinate.line_offset
+        resulting_state.loc.coordinate.line_offset
 
 let handler_receives_correct_location () =
-  let startl = zero_half in
+  let startl = zero_coordinate in
   let endl = step 5 startl in
 
   let p : (string, string) parser =
    fun state ->
-    let new_state = { state with loc = endl } in
+    let new_state = { state with loc = dummy_coord_to_point endl } in
     Ok ("matched", new_state)
   in
 
   let handler value loc = (value, loc) in
 
   let state : parser_state =
-    { remaining = BatSubstring.of_string "hello"; loc = startl }
+    {
+      remaining = BatSubstring.of_string "hello";
+      loc = dummy_coord_to_point startl;
+    }
   in
 
   let actual = is_not p handler state in
@@ -65,11 +69,11 @@ let handler_receives_correct_location () =
   | Error (value, loc) ->
       check string "handler receives parser result" "matched" value;
 
-      check int "handler receives original start position" startl.pos_cnum
-        loc.startl.pos_cnum;
+      check int "handler receives original start position" startl.offset
+        loc.startl.offset;
 
-      check int "handler receives parser end position" endl.pos_cnum
-        loc.endl.pos_cnum
+      check int "handler receives parser end position" endl.offset
+        loc.endl.offset
 
 let does_not_call_handler_when_parser_fails () =
   let p : (string, string) parser = fun _state -> Error "p failed" in
@@ -77,7 +81,7 @@ let does_not_call_handler_when_parser_fails () =
   let handler _value _loc = failwith "handler should not be called" in
 
   let state : parser_state =
-    { remaining = BatSubstring.of_string "hello"; loc = zero_half }
+    { remaining = BatSubstring.of_string "hello"; loc = zero_point }
   in
 
   match is_not p handler state with

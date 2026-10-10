@@ -4,7 +4,6 @@ module Set = BatSet
 type predicate_name = Ast.head [@@deriving show, ord]
 type forms = Form.t FT.t
 type 'a env = 'a Location.with_location BatMap.String.t
-type 'a nested_env = 'a env BatLazyList.t
 
 let join_qualifiers names : string =
   BatIO.to_string
@@ -28,7 +27,7 @@ type functor_map = int PredicateMap.t
 type predicate = {
   (* TODO: add type information *)
   original_module : string FT.t * string;
-  loc : Location.location;
+  loc : Location.region;
 }
 
 let ft_of_original_module : string FT.t * string -> string FT.t =
@@ -70,21 +69,22 @@ let rec signature_equal lhs rhs =
 let builtin_module name predicates =
   let qualifier = (FT.empty, name) in
   Location.add_loc
-    (Module
-       {
-         qualifier;
-         query = None;
-         modules = BatMap.String.empty;
-         predicates =
-           PredicateMap.of_list
-           @@ List.map
-                (fun name ->
-                  (name, { original_module = qualifier; loc = Location.dummy }))
-                predicates;
-       })
+    {
+      qualifier;
+      query = None;
+      modules = BatMap.String.empty;
+      predicates =
+        PredicateMap.of_list
+        @@ List.map
+             (fun name ->
+               (name, { original_module = qualifier; loc = Location.dummy }))
+             predicates;
+    }
     Location.dummy
 
-let karuta_builtins : comptime Location.with_location =
+let builtin_module_names = BatSet.String.of_list [ "karuta"; "sakura" ]
+
+let karuta_builtins : compiled_module Location.with_location =
   builtin_module "karuta"
     [
       { name = "t-dee"; arity = 0 };
@@ -104,40 +104,39 @@ let karuta_builtins : comptime Location.with_location =
 module type LOOKUP = sig
   type t
 
-  val comptime_of_compiler : t -> comptime Location.with_location
+  val nested_env : t -> compiled_module
 
   val signature :
-    comptime Location.with_location ->
+    compiled_module ->
     Ast.Expr.func_label ->
     [> `Ok of compiled_signature Location.with_location
     | `Undefined of string Location.with_location
     | `UnexpectedModule of compiled_module Location.with_location
-    | `UnexpectedSignature of Location.location ]
+    | `UnexpectedSignature of Location.region ]
 
   val m0dule :
-    comptime Location.with_location ->
+    compiled_module ->
     Ast.Expr.func_label ->
     [> `Ok of compiled_module Location.with_location
     | `Undefined of string Location.with_location
-    | `UnexpectedSignature of Location.location ]
+    | `UnexpectedSignature of Location.region ]
 
   val nested_signature :
     sig_env Location.with_location ->
-    comptime Location.with_location ->
+    compiled_module ->
     Ast.Expr.func_label ->
     [> `Ok of signature Location.with_location
     | `Undefined of string Location.with_location
     | `UnexpectedModule of compiled_module Location.with_location
-    | `UnexpectedSignature of Location.location ]
+    | `UnexpectedSignature of Location.region ]
 
   val predicate :
-    comptime Location.with_location ->
     compiled_module ->
     Ast.Expr.func_label ->
     int ->
     [> `Ok of predicate
     | `Undefined of string Location.with_location
-    | `UnexpectedSignature of Location.location ]
+    | `UnexpectedSignature of Location.region ]
 end
 
 module Options = struct
@@ -153,9 +152,11 @@ module Options = struct
   let initialize ?(sakura = None) ~artifact () : t = { sakura; artifact }
 end
 
+type externals = compiled_module Lazy.t env
+
 type 'state t = {
   state : 'state;
-  externals : comptime env;
+  externals : externals;
   header : forms;
   output : forms;
   filename : string;
@@ -168,7 +169,7 @@ type 'state t = {
 type 'mods initialization = {
   persist : Persist.t;
   filename : string;
-  externals : comptime env;
+  externals : externals;
   mods : 'mods;
 }
 
@@ -176,7 +177,7 @@ type ('state, 'mods) initialize_nested =
   'mods initialization -> 'state t option -> string -> 'state t
 
 type ('state, 'directives, 'mods) step =
-  ('directives, 'mods) Ast.Module.module_body * 'state t -> 'state t
+  ('directives, 'mods) Ast.Module.module_body * 'state t -> compiled_module
 
 type ('state, 'directives, 'mods) runner = {
   step : ('state, 'directives, 'mods) step;
@@ -228,9 +229,7 @@ module type COMPILER = sig
   val compile_files :
     Persist.both ->
     (directives, mods) Ast.Module.module_body BatMap.String.t ->
-    comptime env ->
-    string FT.t ->
-    comptime env
+    externals
 
   val initialize : mods initialization -> state t
 end
@@ -267,23 +266,29 @@ module Make (Config : COMPILER_CONFIG) :
     let full_module_name =
       join_qualifiers @@ ft_of_original_module env.qualifier
     in
-    {
-      state;
-      parent;
-      externals = BatMap.String.add "karuta" karuta_builtins externals;
-      filename;
-      header =
-        FT.of_list
-          [
-            Beam.Builder.Attribute.file filename 1;
-            (* TODO: this should be a proper atom *)
-            Beam.Builder.Attribute.module_ full_module_name;
-          ];
-      output = FT.empty;
-      env;
-      persist;
-      lookup = (module Config.Lookup);
-    }
+    let nested_compiler =
+      {
+        state;
+        parent;
+        externals =
+          BatMap.String.add "karuta"
+            (Location.fmap Lazy.from_val karuta_builtins)
+            externals;
+        filename;
+        header =
+          FT.of_list
+            [
+              Beam.Builder.Attribute.file filename 1;
+              (* TODO: this should be a proper atom *)
+              Beam.Builder.Attribute.module_ full_module_name;
+            ];
+        output = FT.empty;
+        env;
+        persist;
+        lookup = (module Config.Lookup);
+      }
+    in
+    { nested_compiler with env = Config.Lookup.nested_env nested_compiler }
 
   let initialize ({ filename; _ } as init : mods initialization) :
       Config.state t =
@@ -329,25 +334,7 @@ module Make (Config : COMPILER_CONFIG) :
     if not @@ FT.is_empty compiler.output then
       compiler.persist compiler.filename
         (FT.append compiler.header compiler.output);
-    if Option.is_none compiler.parent then
-      {
-        compiler with
-        externals =
-          BatMap.String.add
-            (snd compiler.env.qualifier)
-            (let open Location in
-             add_loc (Module compiler.env)
-             @@ double
-                  (* TODO: make the endl actually point to the end of the file *)
-                  {
-                    pos_fname = compiler.filename;
-                    pos_lnum = 1;
-                    pos_bol = 0;
-                    pos_cnum = 1;
-                  })
-            compiler.externals;
-      }
-    else compiler
+    compiler.env
 
   let preprocess_clauses =
     let module TargetPreprocessor :
@@ -358,24 +345,37 @@ module Make (Config : COMPILER_CONFIG) :
     in
     TargetPreprocessor.preprocess_clauses
 
-  let compile_one_file (persist : Persist.both) preprocessed externals filepath
-      =
-    match BatMap.String.find_opt filepath preprocessed with
-    | None ->
-        Logger.simply_unreachable "We hit a file that doesn't exist";
-        exit 1
-    | Some body ->
-        (step
-           ( body,
-             initialize
-               {
-                 persist = persist.beam;
-                 filename = filepath;
-                 externals;
-                 mods = body.target_specific;
-               } ))
-          .externals
-
-  let compile_files persist preprocessed_files =
-    FT.fold_left @@ compile_one_file persist preprocessed_files
+  let compile_files :
+      Persist.both ->
+      (directives, mods) Ast.Module.module_body BatMap.String.t ->
+      externals =
+   fun persist preprocessed ->
+    let (env, bind_env) : externals Eio.Promise.t * externals Eio.Promise.u =
+      Eio.Promise.create ()
+    in
+    let compile_one filepath body acc =
+      let module_name = ModuleName.of_filepath filepath in
+      let step () =
+        step
+          ( body,
+            initialize
+              {
+                persist = persist.beam;
+                filename = filepath;
+                externals = Eio.Promise.await env;
+                mods = body.target_specific;
+              } )
+      in
+      let new_module = Lazy.from_fun step in
+      BatMap.String.add module_name
+        (Location.add_loc new_module
+        @@ Location.double filepath
+             (* TODO: make the endl actually point to the end of the file *)
+             Location.origin)
+        acc
+    in
+    BatMap.String.empty
+    |> BatMap.String.fold compile_one preprocessed
+    |> Eio.Promise.resolve bind_env;
+    Eio.Promise.await env
 end

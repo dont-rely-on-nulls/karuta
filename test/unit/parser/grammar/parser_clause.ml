@@ -4,7 +4,7 @@ module FT = Lib.FT
 open Alcotest
 
 let state_of_string input =
-  { remaining = BatSubstring.of_string input; loc = zero_half }
+  { remaining = BatSubstring.of_string input; loc = zero_point }
 
 let remaining_string state = BatSubstring.to_string state.remaining
 
@@ -18,7 +18,7 @@ let succeeds input expected_remaining =
 
       check int "updates position according to consumed input"
         (String.length input - String.length expected_remaining)
-        resulting_state.loc.pos_cnum
+        resulting_state.loc.coordinate.offset
 
 let fails input =
   let state = state_of_string input in

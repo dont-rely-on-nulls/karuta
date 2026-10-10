@@ -3,7 +3,7 @@ open Lib.Location
 open Alcotest
 
 let succeeds () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "abc"; loc = startl }
@@ -17,16 +17,18 @@ let succeeds () =
       check string "consumes one character" "bc"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by one" 1 resulting_state.loc.pos_cnum;
+      check int "advances position by one" 1
+        resulting_state.loc.coordinate.offset;
 
-      check int "preserves line" startl.pos_lnum resulting_state.loc.pos_lnum;
+      check int "preserves line" startl.coordinate.line
+        resulting_state.loc.coordinate.line;
 
-      check int "preserves beginning of line" startl.pos_bol
-        resulting_state.loc.pos_bol
+      check int "preserves beginning of line" startl.coordinate.line_offset
+        resulting_state.loc.coordinate.line_offset
 
 let fails_when_input_is_empty () =
   let state : parser_state =
-    { remaining = BatSubstring.of_string ""; loc = half_dummy }
+    { remaining = BatSubstring.of_string ""; loc = zero_point }
   in
 
   match some state with

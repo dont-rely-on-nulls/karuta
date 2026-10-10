@@ -3,7 +3,7 @@ open Lib.Location
 open Alcotest
 
 let succeeds () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "'hello' rest"; loc = startl }
@@ -17,10 +17,11 @@ let succeeds () =
       check string "leaves remaining input" " rest"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by seven" 7 resulting_state.loc.pos_cnum
+      check int "advances position by seven" 7
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_empty_atom () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "''"; loc = startl }
@@ -34,10 +35,11 @@ let succeeds_with_empty_atom () =
       check string "consumes both quotes" ""
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by two" 2 resulting_state.loc.pos_cnum
+      check int "advances position by two" 2
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_special_characters () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "'hello world-123_!'"; loc = startl }
@@ -51,10 +53,11 @@ let succeeds_with_special_characters () =
       check string "consumes all input" ""
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by nineteen" 19 resulting_state.loc.pos_cnum
+      check int "advances position by nineteen" 19
+        resulting_state.loc.coordinate.offset
 
 let fails_without_opening_quote () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "hello'"; loc = startl }
@@ -64,11 +67,12 @@ let fails_without_opening_quote () =
   | Ok _ -> fail "quoted_atom should require an opening quote"
   | Error (`WrongPrefix (loc, expected)) ->
       check string "expects opening quote" "'" expected;
-      check int "reports original position" startl.pos_cnum startl.pos_cnum
+      check int "reports original position" startl.coordinate.offset
+        startl.coordinate.offset
   | Error _ -> fail "quoted_atom should fail with WrongPrefix"
 
 let fails_without_closing_quote () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "'hello"; loc = startl }
@@ -78,11 +82,11 @@ let fails_without_closing_quote () =
   | Ok _ -> fail "quoted_atom should require a closing quote"
   | Error (`WrongPrefix (loc, expected)) ->
       check string "expects closing quote" "'" expected;
-      check int "reports original position" 0 startl.pos_cnum
+      check int "reports original position" 0 startl.coordinate.offset
   | Error _ -> fail "quoted_atom should fail with WrongPrefix"
 
 let fails_when_newline_occurs_before_closing_quote () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "'hello\nworld'"; loc = startl }
@@ -92,12 +96,12 @@ let fails_when_newline_occurs_before_closing_quote () =
   | Ok _ -> fail "quoted_atom should reject a newline inside the atom"
   | Error (`WrongPrefix (loc, expected)) ->
       check string "expects closing quote" "'" expected;
-      check int "reports original position" 0 startl.pos_cnum
+      check int "reports original position" 0 startl.coordinate.offset
   | Error _ -> fail "quoted_atom should fail with WrongPrefix"
 
 let fails_on_empty_input () =
   let state : parser_state =
-    { remaining = BatSubstring.of_string ""; loc = half_dummy }
+    { remaining = BatSubstring.of_string ""; loc = zero_point }
   in
 
   match quoted_atom state with

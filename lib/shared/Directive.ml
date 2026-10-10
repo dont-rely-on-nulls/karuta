@@ -20,7 +20,7 @@ let initialize_from_parent (type state) (type mods) (type directives)
     (Some parent) name
 
 let rec compile : type state mods.
-    Location.location ->
+    Location.region ->
     ('directives, mods) Ast.Module.directive ->
     state t ->
     (state, 'directives, mods) Compiler.runner ->
@@ -38,7 +38,7 @@ let rec compile : type state mods.
       let module_name' = (FT.empty, name) in
       match
         Logger.with_min_level Logger.Level.Unreachable @@ fun () ->
-        Lookup.m0dule (Lookup.comptime_of_compiler compiler) module_name'
+        Lookup.m0dule compiler.env module_name'
       with
       | `Ok { loc; _ } | `UnexpectedSignature loc ->
           Logger.error module_loc "Failed to define module";
@@ -51,7 +51,7 @@ let rec compile : type state mods.
             compiler |> initialize_from_parent module_ initialize_nested
             |> fun c ->
             step (module_, c) |> fun c ->
-            Location.add_loc (Module c.env) directive_loc
+            Location.add_loc (Module c) directive_loc
           in
           {
             compiler with
@@ -80,7 +80,7 @@ let rec compile : type state mods.
       let module_name' = (FT.empty, name) in
       match
         Logger.with_min_level Logger.Level.Unreachable @@ fun () ->
-        Lookup.m0dule (Lookup.comptime_of_compiler compiler) module_name'
+        Lookup.m0dule compiler.env module_name'
       with
       | `Ok content ->
           {
@@ -107,11 +107,10 @@ let rec compile : type state mods.
          _;
        } as module_) -> (
       let module_name' = (FT.empty, name) in
-      let comptime_env = Lookup.comptime_of_compiler compiler in
       match
         Logger.with_min_level Logger.Level.Unreachable @@ fun () ->
-        ( Lookup.m0dule comptime_env module_name',
-          Lookup.signature comptime_env signature_name )
+        ( Lookup.m0dule compiler.env module_name',
+          Lookup.signature compiler.env signature_name )
       with
       | `Ok { loc; _ }, _ | `UnexpectedSignature loc, _ ->
           Logger.error module_loc "Failed to define module";
@@ -123,7 +122,7 @@ let rec compile : type state mods.
           let comptime =
             compiler |> initialize_from_parent module_ initialize_nested
             |> fun c ->
-            step (module_, c) |> fun c -> Location.add_loc c.env directive_loc
+            step (module_, c) |> fun c -> Location.add_loc c directive_loc
           in
           let compiled_module =
             signature

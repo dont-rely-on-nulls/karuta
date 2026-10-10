@@ -3,7 +3,7 @@ open Lib.Location
 open Alcotest
 
 let succeeds_with_spaces () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "   abc"; loc = startl }
@@ -18,10 +18,11 @@ let succeeds_with_spaces () =
       check string "consumes all leading spaces" "abc"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by three" 3 resulting_state.loc.pos_cnum
+      check int "advances position by three" 3
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_tabs () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "\t\tabc"; loc = startl }
@@ -36,10 +37,11 @@ let succeeds_with_tabs () =
       check string "consumes all leading tabs" "abc"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by two" 2 resulting_state.loc.pos_cnum
+      check int "advances position by two" 2
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_mixed_whitespace () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string " \t \t abc"; loc = startl }
@@ -54,10 +56,11 @@ let succeeds_with_mixed_whitespace () =
       check string "consumes all leading horizontal whitespace" "abc"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by five" 5 resulting_state.loc.pos_cnum
+      check int "advances position by five" 5
+        resulting_state.loc.coordinate.offset
 
 let stops_at_non_whitespace () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string " \t abc \t"; loc = startl }
@@ -72,10 +75,11 @@ let stops_at_non_whitespace () =
       check string "leaves non-whitespace and following input" "abc \t"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by three" 3 resulting_state.loc.pos_cnum
+      check int "advances position by three" 3
+        resulting_state.loc.coordinate.offset
 
 let fails_without_horizontal_whitespace () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "abc"; loc = startl }
@@ -84,10 +88,11 @@ let fails_without_horizontal_whitespace () =
   match horizontal_whitespace state with
   | Ok _ -> fail "horizontal_whitespace should fail without whitespace"
   | Error (`ExpectedHorizontalWhitespace loc) ->
-      check int "reports the original position" startl.pos_cnum startl.pos_cnum
+      check int "reports the original position" startl.coordinate.offset
+        startl.coordinate.offset
 
 let fails_on_empty_input () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string ""; loc = startl }
@@ -96,7 +101,8 @@ let fails_on_empty_input () =
   match horizontal_whitespace state with
   | Ok _ -> fail "horizontal_whitespace should fail on empty input"
   | Error (`ExpectedHorizontalWhitespace loc) ->
-      check int "reports the original position" startl.pos_cnum startl.pos_cnum
+      check int "reports the original position" startl.coordinate.offset
+        startl.coordinate.offset
 
 let tests =
   [

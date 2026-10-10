@@ -7,16 +7,15 @@ end
 
 module type OUTPUT = sig
   val format_error_message :
-    string -> Location.location option -> string -> string
+    string -> Location.region option -> string -> string
 
   val format_warning_message :
-    string -> Location.location option -> string -> string
+    string -> Location.region option -> string -> string
 
-  val format_info_message :
-    string -> Location.location option -> string -> string
+  val format_info_message : string -> Location.region option -> string -> string
 
   val format_unreachable_message :
-    string -> Location.location option -> string -> string
+    string -> Location.region option -> string -> string
 
   val format_debug_message : string -> string -> string
   val export : string -> unit
@@ -56,18 +55,18 @@ module Make (Output : OUTPUT) = struct
   and report level locMay msg = msg |> format level locMay |> Output.export
   and create_simply_msg level msg = format level None msg
 
-  and internal level (locMay : Location.location option) (msg : string) : unit =
+  and internal level (locMay : Location.region option) (msg : string) : unit =
     if should_log level then
       match locMay with
       | None -> msg |> create_simply_msg level |> print_endline
       | Some _ -> report level locMay msg
 
-  and unreachable (loc : Location.location) (msg : string) : unit =
+  and unreachable (loc : Location.region) (msg : string) : unit =
     internal Unreachable (Some loc) msg
 
   and simply_unreachable (msg : string) : unit = internal Unreachable None msg
 
-  and error (loc : Location.location) (msg : string) : unit =
+  and error (loc : Location.region) (msg : string) : unit =
     internal Error (Some loc) msg
 
   and simply_error (msg : string) : unit = internal Error None msg
@@ -87,22 +86,22 @@ module Terminal = Make (
   struct
     open Format
 
-    type color = Red | Yellow | White | Blue | Magenta
+    type color = Red | Yellow | Blue | Magenta | Foreground
 
     let color_code : color -> string = function
       | Red -> "\027[31m"
       | Yellow -> "\027[33m"
-      | White -> "\027[97m"
+      | Foreground -> "\027[0m"
       | Blue -> "\027[34m"
       | Magenta -> "\027[35m"
 
     let make_bold (str : string) = "\027[1m" ^ str ^ "\027[0m"
 
     let add_color (c : color) (str : string) =
-      color_code c ^ str ^ color_code White
+      color_code c ^ str ^ color_code Foreground
 
-    let get_column ({ pos_cnum; pos_bol; _ } : Location.t) : int =
-      pos_cnum - pos_bol
+    let get_column ({ offset; line_offset; _ } : Location.coordinate) : int =
+      offset - line_offset
 
     let get_line (filepath : string) (line : int) : string =
       let input_channel = open_in filepath in
@@ -115,14 +114,14 @@ module Terminal = Make (
         close_in_noerr input_channel;
         raise exp
 
-    let format_message (color : color) (prefix : string)
-        (loc : Location.location) (msg : string) : string =
-      let filepath = loc.startl.pos_fname in
+    let format_message (color : color) (prefix : string) (loc : Location.region)
+        (msg : string) : string =
+      let filepath = loc.filename in
       let begin_characters = get_column loc.startl in
       let end_characters = get_column loc.endl in
       let separator = " | " in
       let how_many_characters = end_characters - begin_characters in
-      let line_number = loc.startl.pos_lnum in
+      let line_number = loc.startl.line in
       let line_digits : int = line_number |> string_of_int |> String.length in
       let spaces =
         String.make
@@ -139,7 +138,7 @@ module Terminal = Make (
            %d:@]@.@[<1>%d%s%s@]@.@[<1>%s%s@]@."
           (add_color color prefix) filepath line_number end_characters
           line_number separator
-          (get_line filepath (loc.startl.pos_cnum - begin_characters))
+          (get_line filepath (loc.startl.offset - begin_characters))
           spaces
           (markers ^ " " ^ msg)
       else
@@ -148,14 +147,14 @@ module Terminal = Make (
            %d-%d:@]@.@[<1>%d%s%s@]@.@[<1>%s%s@]@."
           (add_color color prefix) filepath line_number (begin_characters + 1)
           end_characters line_number separator
-          (get_line filepath (loc.startl.pos_cnum - begin_characters))
+          (get_line filepath (loc.startl.offset - begin_characters))
           spaces
           (markers ^ " " ^ msg)
 
     let export = Stdlib.print_string
 
     let format_diverse_message (prefix : string) (color : color)
-        (locMay : Location.location option) (msg : string) : string =
+        (locMay : Location.region option) (msg : string) : string =
       match locMay with
       | None ->
           let prefix = prefix |> make_bold |> add_color color in
@@ -166,7 +165,7 @@ module Terminal = Make (
       format_diverse_message (make_bold prefix) Red locMay msg
 
     let format_unreachable_message (prefix : string)
-        (locMay : Location.location option) (msg : string) : string =
+        (locMay : Location.region option) (msg : string) : string =
       format_diverse_message (make_bold prefix) Magenta locMay msg
 
     let format_warning_message prefix locMay msg =
@@ -176,20 +175,20 @@ module Terminal = Make (
       format_diverse_message (make_bold prefix) Blue locMay msg
 
     let format_debug_message prefix msg =
-      let color = White in
+      let color = Foreground in
       let prefix = prefix |> make_bold |> add_color color in
       prefix ^ msg
   end :
     OUTPUT)
 
 module type API = sig
-  val error : Location.location -> string -> unit
+  val error : Location.region -> string -> unit
   val simply_error : string -> unit
-  val warning : Location.location -> string -> unit
+  val warning : Location.region -> string -> unit
   val simply_warning : string -> unit
-  val unreachable : Location.location -> string -> unit
+  val unreachable : Location.region -> string -> unit
   val simply_unreachable : string -> unit
-  val info : Location.location -> string -> unit
+  val info : Location.region -> string -> unit
   val simply_info : string -> unit
   val with_min_level : 'a. Level.t -> (unit -> 'a) -> 'a
 

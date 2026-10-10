@@ -3,7 +3,7 @@ open Lib.Location
 open Alcotest
 
 let succeeds_with_horizontal_whitespace () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "   abc"; loc = startl }
@@ -17,10 +17,11 @@ let succeeds_with_horizontal_whitespace () =
       check string "consumes leading spaces" "abc"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by three" 3 resulting_state.loc.pos_cnum
+      check int "advances position by three" 3
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_tabs () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "\t\tabc"; loc = startl }
@@ -34,10 +35,11 @@ let succeeds_with_tabs () =
       check string "consumes leading tabs" "abc"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by two" 2 resulting_state.loc.pos_cnum
+      check int "advances position by two" 2
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_newline () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "\nabc"; loc = startl }
@@ -51,10 +53,10 @@ let succeeds_with_newline () =
       check string "consumes newline" "abc"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances line number" 1 resulting_state.loc.pos_lnum
+      check int "advances line number" 2 resulting_state.loc.coordinate.line
 
 let succeeds_with_multiple_lines () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string " \n\t\n  abc"; loc = startl }
@@ -68,10 +70,11 @@ let succeeds_with_multiple_lines () =
       check string "consumes whitespace across lines" "abc"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances line number twice" 2 resulting_state.loc.pos_lnum
+      check int "advances line number twice" 3
+        resulting_state.loc.coordinate.line
 
 let succeeds_with_empty_input () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string ""; loc = startl }
@@ -85,11 +88,11 @@ let succeeds_with_empty_input () =
       check string "preserves empty input" ""
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "preserves position" startl.pos_cnum
-        resulting_state.loc.pos_cnum
+      check int "preserves position" startl.coordinate.offset
+        resulting_state.loc.coordinate.offset
 
 let succeeds_without_consuming_non_whitespace () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "abc"; loc = startl }
@@ -103,8 +106,8 @@ let succeeds_without_consuming_non_whitespace () =
       check string "preserves non-whitespace input" "abc"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "preserves position" startl.pos_cnum
-        resulting_state.loc.pos_cnum
+      check int "preserves position" startl.coordinate.offset
+        resulting_state.loc.coordinate.offset
 
 let tests =
   [

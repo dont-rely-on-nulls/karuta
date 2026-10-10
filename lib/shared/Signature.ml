@@ -13,12 +13,12 @@ module Diff : sig
   val predicates :
     predicate_name BatSet.t ->
     predicate_name BatSet.t ->
-    Location.location ->
-    Location.location ->
+    Location.region ->
+    Location.region ->
     unit
 
   val comptimes :
-    comptime env -> sig_env -> Location.location -> Location.location -> unit
+    comptime env -> sig_env -> Location.region -> Location.region -> unit
 end = struct
   let when_populated entities f =
     match entities |> BatSet.to_seq |> Seq.uncons with
@@ -26,8 +26,8 @@ end = struct
     | Some elems -> f elems
 
   let predicates (provided : predicate_name BatSet.t)
-      (required : predicate_name BatSet.t) (module_loc : Location.location)
-      (sig_loc : Location.location) : unit =
+      (required : predicate_name BatSet.t) (module_loc : Location.region)
+      (sig_loc : Location.region) : unit =
     when_populated (BatSet.diff required provided) @@ fun (first, rest) ->
     let make_msg ({ name; arity } : predicate_name) : string =
       name ^ "/" ^ string_of_int arity
@@ -46,7 +46,7 @@ end = struct
     exit 1
 
   let comptimes (provided : comptime env) (required : sig_env)
-      (module_loc : Location.location) (sig_loc : Location.location) : unit =
+      (module_loc : Location.region) (sig_loc : Location.region) : unit =
     let provided_comptimes_set =
       BatSet.of_enum @@ BatMap.String.keys provided
     in
@@ -146,7 +146,7 @@ let rec ascribe_to_module
     module_loc
 
 let rec compile_nested : type a mods directive.
-    Location.location ->
+    Location.region ->
     (directive, mods) Ast.Module.signature_body ->
     a t ->
     sig_env Location.with_location ->
@@ -191,8 +191,7 @@ let rec compile_nested : type a mods directive.
           Location.add_loc (ModuleSignature payload) next.loc
         in
         match
-          Lookup.nested_signature (sig_env_cons sig_env acc)
-            (Lookup.comptime_of_compiler compiler)
+          Lookup.nested_signature (sig_env_cons sig_env acc) compiler.env
             module_signature
         with
         | `Ok { content = PlainSignature payload; _ } ->
@@ -282,7 +281,7 @@ let rec compile_nested : type a mods directive.
     loc
 
 and compile : type a mods directive.
-    Location.location ->
+    Location.region ->
     (directive, mods) Ast.Module.signature_body ->
     a t ->
     compiled_signature Location.with_location =

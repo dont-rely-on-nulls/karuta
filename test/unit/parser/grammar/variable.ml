@@ -3,7 +3,7 @@ open Lib.Location
 open Alcotest
 
 let succeeds_with_uppercase_variable () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "Hello"; loc = startl }
@@ -17,10 +17,11 @@ let succeeds_with_uppercase_variable () =
       check string "consumes all input" ""
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by five" 5 resulting_state.loc.pos_cnum
+      check int "advances position by five" 5
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_underscore_prefix () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "_hello"; loc = startl }
@@ -34,10 +35,11 @@ let succeeds_with_underscore_prefix () =
       check string "consumes all input" ""
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by six" 6 resulting_state.loc.pos_cnum
+      check int "advances position by six" 6
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_allowed_continuation_characters () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "Aabc09_X"; loc = startl }
@@ -51,10 +53,11 @@ let succeeds_with_allowed_continuation_characters () =
       check string "consumes all input" ""
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by eight" 8 resulting_state.loc.pos_cnum
+      check int "advances position by eight" 8
+        resulting_state.loc.coordinate.offset
 
 let stops_at_invalid_continuation () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "Hello-world"; loc = startl }
@@ -68,10 +71,11 @@ let stops_at_invalid_continuation () =
       check string "leaves hyphen and following text" "-world"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by five" 5 resulting_state.loc.pos_cnum
+      check int "advances position by five" 5
+        resulting_state.loc.coordinate.offset
 
 let fails_when_first_character_is_lowercase () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "hello"; loc = startl }
@@ -80,11 +84,12 @@ let fails_when_first_character_is_lowercase () =
   match variable state with
   | Ok _ -> fail "variable should reject a lowercase starting character"
   | Error (`ExpectedUppercaseOrUnderscore loc) ->
-      check int "reports original position" startl.pos_cnum startl.pos_cnum
+      check int "reports original position" startl.coordinate.offset
+        startl.coordinate.offset
   | Error _ -> fail "atom should fail with ExpectedUppercaseOrUnderscore"
 
 let fails_when_first_character_is_digit () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "123abc"; loc = startl }
@@ -93,12 +98,13 @@ let fails_when_first_character_is_digit () =
   match variable state with
   | Ok _ -> fail "variable should reject a digit as its first character"
   | Error (`ExpectedUppercaseOrUnderscore loc) ->
-      check int "reports original position" startl.pos_cnum startl.pos_cnum
+      check int "reports original position" startl.coordinate.offset
+        startl.coordinate.offset
   | Error _ -> fail "atom should fail with ExpectedUppercaseOrUnderscore"
 
 let fails_when_input_is_empty () =
   let state : parser_state =
-    { remaining = BatSubstring.of_string ""; loc = half_dummy }
+    { remaining = BatSubstring.of_string ""; loc = zero_point }
   in
 
   match variable state with

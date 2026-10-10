@@ -8,7 +8,7 @@ let check_qualifiers msg expected qualifiers =
   |> check (list string) msg expected
 
 let succeeds_with_atom_label () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "hello rest"; loc = startl }
@@ -26,10 +26,11 @@ let succeeds_with_atom_label () =
       check string "leaves remaining input" " rest"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by five" 5 resulting_state.loc.pos_cnum
+      check int "advances position by five" 5
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_quoted_label () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "'hello world' rest"; loc = startl }
@@ -48,10 +49,11 @@ let succeeds_with_quoted_label () =
       check string "leaves remaining input" " rest"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by thirteen" 13 resulting_state.loc.pos_cnum
+      check int "advances position by thirteen" 13
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_multiple_qualifiers () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     {
@@ -74,10 +76,10 @@ let succeeds_with_multiple_qualifiers () =
         (BatSubstring.to_string resulting_state.remaining);
 
       check int "advances position by twenty-two" 22
-        resulting_state.loc.pos_cnum
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_quoted_label_and_qualifier () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "module:'hello world'"; loc = startl }
@@ -96,10 +98,11 @@ let succeeds_with_quoted_label_and_qualifier () =
       check string "consumes all input" ""
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by twenty" 20 resulting_state.loc.pos_cnum
+      check int "advances position by twenty" 20
+        resulting_state.loc.coordinate.offset
 
 let fails_when_label_is_missing () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "module:"; loc = startl }
@@ -111,7 +114,7 @@ let fails_when_label_is_missing () =
   | Error _ -> fail "func_label should fail with UnexpectedEOF"
 
 let fails_when_quoted_label_is_unclosed () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "'hello"; loc = startl }
@@ -126,7 +129,7 @@ let fails_when_quoted_label_is_unclosed () =
   | Error _ -> fail "func_label should fail with ExpectedLowercase"
 
 let fails_when_qualifier_starts_with_uppercase () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "Module:hello"; loc = startl }
@@ -139,7 +142,7 @@ let fails_when_qualifier_starts_with_uppercase () =
 
 let fails_on_empty_input () =
   let state : parser_state =
-    { remaining = BatSubstring.of_string ""; loc = half_dummy }
+    { remaining = BatSubstring.of_string ""; loc = zero_point }
   in
 
   match func_label state with

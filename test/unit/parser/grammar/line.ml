@@ -3,7 +3,7 @@ open Lib.Location
 open Alcotest
 
 let succeeds_with_lf () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "\nabc"; loc = startl }
@@ -17,12 +17,13 @@ let succeeds_with_lf () =
       check string "consumes LF newline" "abc"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances line number" 1 resulting_state.loc.pos_lnum;
+      check int "advances line number" 2 resulting_state.loc.coordinate.line;
 
-      check int "advances position by one" 1 resulting_state.loc.pos_cnum
+      check int "advances position by one" 1
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_crlf () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "\r\nabc"; loc = startl }
@@ -36,12 +37,13 @@ let succeeds_with_crlf () =
       check string "consumes CRLF newline" "abc"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances line number" 1 resulting_state.loc.pos_lnum;
+      check int "advances line number" 2 resulting_state.loc.coordinate.line;
 
-      check int "advances position by two" 2 resulting_state.loc.pos_cnum
+      check int "advances position by two" 2
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_text_without_newline () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "abc"; loc = startl }
@@ -55,10 +57,11 @@ let succeeds_with_text_without_newline () =
       check string "consumes all text" ""
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "advances position by three" 3 resulting_state.loc.pos_cnum
+      check int "advances position by three" 3
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_empty_input () =
-  let startl = zero_half in
+  let startl = zero_point in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string ""; loc = startl }
@@ -72,11 +75,11 @@ let succeeds_with_empty_input () =
       check string "preserves empty input" ""
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "preserves position" startl.pos_cnum
-        resulting_state.loc.pos_cnum;
+      check int "preserves position" startl.coordinate.offset
+        resulting_state.loc.coordinate.offset;
 
-      check int "preserves line number" startl.pos_lnum
-        resulting_state.loc.pos_lnum
+      check int "preserves line number" startl.coordinate.line
+        resulting_state.loc.coordinate.line
 
 let tests =
   [

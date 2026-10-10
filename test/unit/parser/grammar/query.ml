@@ -3,9 +3,11 @@ open Lib.Location
 module FT = Lib.FT
 open Alcotest
 
+let stepped_seven = dummy_coord_to_point @@ step 7 zero_coordinate
+
 let parse_func input =
   let state : parser_state =
-    { remaining = BatSubstring.of_string input; loc = zero_half }
+    { remaining = BatSubstring.of_string input; loc = zero_point }
   in
   match func state with
   | Ok (value, _) -> value
@@ -14,7 +16,7 @@ let parse_func input =
 let succeeds_with_question_mark () =
   let first_element = parse_func "first()" in
   let state : parser_state =
-    { remaining = BatSubstring.of_string "? rest"; loc = step 7 zero_half }
+    { remaining = BatSubstring.of_string "? rest"; loc = stepped_seven }
   in
 
   match query first_element state with
@@ -25,14 +27,15 @@ let succeeds_with_question_mark () =
       check string "leaves remaining input" " rest"
         (BatSubstring.to_string resulting_state.remaining);
 
-      check int "consume the question mark" 8 resulting_state.loc.pos_cnum
+      check int "consume the question mark" 8
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_multiple_functors () =
   let first_element = parse_func "first()" in
   let state : parser_state =
     {
       remaining = BatSubstring.of_string ", second(), third()?";
-      loc = step 7 zero_half;
+      loc = stepped_seven;
     }
   in
 
@@ -45,14 +48,14 @@ let succeeds_with_multiple_functors () =
         (BatSubstring.to_string resulting_state.remaining);
 
       check int "advances position by twenty-seven" 27
-        resulting_state.loc.pos_cnum
+        resulting_state.loc.coordinate.offset
 
 let succeeds_with_whitespace_between_functors () =
   let first_element = parse_func "first()" in
   let state : parser_state =
     {
       remaining = BatSubstring.of_string "  ,  second()  ?";
-      loc = step 7 zero_half;
+      loc = stepped_seven;
     }
   in
 
@@ -66,14 +69,14 @@ let succeeds_with_whitespace_between_functors () =
 
       check int
         "advances position past whitespace, second functor, and question mark"
-        23 resulting_state.loc.pos_cnum
+        23 resulting_state.loc.coordinate.offset
 
 let succeeds_with_line_comment_between_functors () =
   let first_element = parse_func "first()" in
   let state : parser_state =
     {
       remaining = BatSubstring.of_string "% comment\n, second() ?";
-      loc = step 7 zero_half;
+      loc = stepped_seven;
     }
   in
 
@@ -88,7 +91,7 @@ let succeeds_with_line_comment_between_functors () =
 let succeeds_with_immediate_termination () =
   let first_element = parse_func "first()" in
   let state : parser_state =
-    { remaining = BatSubstring.of_string "?"; loc = step 7 zero_half }
+    { remaining = BatSubstring.of_string "?"; loc = stepped_seven }
   in
 
   match query first_element state with
@@ -102,7 +105,7 @@ let succeeds_with_immediate_termination () =
 let fails_when_comma_is_missing () =
   let first_element = parse_func "first()" in
   let state : parser_state =
-    { remaining = BatSubstring.of_string " second()?"; loc = step 7 zero_half }
+    { remaining = BatSubstring.of_string " second()?"; loc = stepped_seven }
   in
 
   match query first_element state with
@@ -112,7 +115,7 @@ let fails_when_comma_is_missing () =
 let fails_when_functor_is_missing_after_comma () =
   let first_element = parse_func "first()" in
   let state : parser_state =
-    { remaining = BatSubstring.of_string ", ?"; loc = step 7 zero_half }
+    { remaining = BatSubstring.of_string ", ?"; loc = stepped_seven }
   in
 
   match query first_element state with
@@ -122,7 +125,7 @@ let fails_when_functor_is_missing_after_comma () =
 let fails_when_input_ends_after_comma () =
   let first_element = parse_func "first()" in
   let state : parser_state =
-    { remaining = BatSubstring.of_string ","; loc = step 7 zero_half }
+    { remaining = BatSubstring.of_string ","; loc = stepped_seven }
   in
 
   match query first_element state with
