@@ -371,7 +371,7 @@ let ident_like is_start is_character fallthrough { remaining = current; loc } =
         }
       in
       Ok
-        ( Location.add loc next_loc (to_string atom),
+        ( Location.delimit loc next_loc (to_string atom),
           { remaining; loc = next_loc } )
   | Some _ -> Error (fallthrough loc)
 
@@ -425,7 +425,7 @@ let quoted_atom :
       in
       { remaining; loc = next_loc }
       |> single_quote @>> fun ((), ({ loc = endl; _ } as state)) ->
-         Ok (Location.add loc endl (to_string atom_name), state)
+         Ok (Location.delimit loc endl (to_string atom_name), state)
   | Some _ | None -> Error (`WrongPrefix (loc, "\'"))
 
 (** Grammar rule:
@@ -453,7 +453,7 @@ let integer :
         | "" -> Error (`NotADigit after_minus)
         | digits ->
             Ok
-              ( Location.add startl endl (int_of_string digits),
+              ( Location.delimit startl endl (int_of_string digits),
                 { remaining; loc = endl } ))
   in
   state
@@ -507,7 +507,7 @@ let func_label :
      @@ fun qualifiers ->
      (quoted_atom @|| atom)
      @>> fun (label_name, ({ loc = endl; _ } as state)) ->
-     Ok (Location.add startl endl (qualifiers, label_name), state)
+     Ok (Location.delimit startl endl (qualifiers, label_name), state)
 
 type expr_errors =
   [ `ExpectedLowercase of Location.point
@@ -554,7 +554,7 @@ and list : 'e. (Ast.Expr.t, ([> expr_errors ] as 'e)) parser =
       (prefix : Ast.Expr.t FT.t) (tail : Ast.Expr.t) : Ast.Expr.t =
     FT.fold_right
       (fun acc (elem : Ast.Expr.t) ->
-        Location.add
+        Location.delimit
           { filename = startl.filename; coordinate = elem.loc.startl }
           endl
           (Ast.Expr.Cons (elem, acc)))
@@ -565,7 +565,7 @@ and list : 'e. (Ast.Expr.t, ([> expr_errors ] as 'e)) parser =
       loc = { loc with startl = startl.coordinate; endl = loc.endl };
     }
   in
-  let nil startl endl = Location.add startl endl Ast.Expr.Nil in
+  let nil startl endl = Location.delimit startl endl Ast.Expr.Nil in
   let rec list_tail acc =
     ifte comma
       (snd @> whitespace_and_comments @&& expr @>> capture
@@ -635,7 +635,8 @@ and func :
        @> (prolog_elements @|| karuta_elements)
        @>> fun (args, ({ loc = endl; _ } as state)) ->
        Ok
-         ( Location.add startl endl (Ast.Expr.func Location.(label.content) args),
+         ( Location.delimit startl endl
+             (Ast.Expr.func Location.(label.content) args),
            state ))
      @@ return (Location.fmap Ast.Expr.atom label)
 
@@ -750,7 +751,7 @@ and top_level :
   |> whitespace_and_comments
      @&& star (parser_clause @>> ignoring whitespace_and_comments)
      @>> fun (result, ({ loc = endl; _ } as state)) ->
-     Ok (Location.add startl endl result, state)
+     Ok (Location.delimit startl endl result, state)
 
 (** Grammar rule:
 

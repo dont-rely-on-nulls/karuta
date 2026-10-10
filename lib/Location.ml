@@ -8,8 +8,8 @@ type coordinate = {
 (** A coordinate in source code. It has no knowledge of which file it belongs
     to.
 
-    It is possible to recover the column number by doing offset -
-    offset_of_line. *)
+    It is possible to recover the column number by doing offset - line_offset.
+*)
 
 let origin = { offset = 0; line_offset = 0; line = 1 }
 
@@ -33,37 +33,19 @@ type 'a with_location = {
 
 (** [step n loc] advances offset position by provided amount.
     @param n amount to advance offset.
-    @param loc location to be updated.
-    @return updated location. *)
+    @param loc coordinate to be updated.
+    @return updated coordinate. *)
 let step n coordinate = { coordinate with offset = coordinate.offset + n }
 
-(** [jump loc] increments line number and resets beginning of the line offset.
+(** [jump_n n loc] adds n to the line number and resets the line offset.
 
-    The reset is performed by updating pos_bol to be the provided location's
-    pos_cnum.
-
-    @param loc location to be updated.
-    @return updated location. *)
-let jump ({ coordinate; _ } as point) =
-  {
-    point with
-    coordinate =
-      {
-        coordinate with
-        line_offset = coordinate.offset;
-        line = coordinate.line + 1;
-      };
-  }
-
-(** [jump_n n loc] adds n to current line number and resets beginning of the
-    line offset.
-
-    If the provided n is zero, no changes are applied to the location. The reset
-    is performed by updating pos_bol to be the provided location's pos_cnum.
+    If the provided n is zero, no changes are applied to the coordinate. The
+    reset is performed by updating line_offset to be the provided location's
+    offset.
 
     @param n amount to advance line number.
-    @param loc location to be updated.
-    @return updated location. *)
+    @param loc coordinate to be updated.
+    @return updated coordinate. *)
 let jump_n n coordinate =
   if n = 0 then coordinate
   else
@@ -77,33 +59,33 @@ let jump_n n coordinate =
     argument.
 
     We step through the location based on the length of the provide string. We
-    then jump_n using the amount of new lines in the provided string as the
-    amount to jump.
+    then jump_n using the number of new lines in the provided string.
 
     @param str string to be inspected.
-    @param loc location to be updated.
-    @return updated location. *)
+    @param loc coordinate to be updated.
+    @return updated coordinate. *)
 let plus_str str loc =
-  step (String.length str) loc
+  loc
+  |> step (String.length str)
   |> jump_n
        (String.fold_left (fun n -> function '\n' -> n + 1 | _ -> n) 0 str)
 
 (** [fmap f v] Maps the contents of a type with location.
 
-    Inspired on the covariant Functors.
+    Based on covariant Functors.
 
     @param f function to be applied to contents.
     @param v value of a type with location.
     @return updated value with the same location as before. *)
 let fmap f { content = a; loc } = { content = f a; loc }
 
-(** [add p1 p2 v] Adds beginning and end locations to a value of type without
-    location.
-    @param p1 beginning of location.
-    @param p2 end of location.
-    @param v value of a type without location.
-    @return updated value with new location. *)
-let add { filename; coordinate = startl } { coordinate = endl; _ } v =
+(** [delimit p1 p2 v] adds a region to v given its start and end points.
+
+    @param p1 beginning of region.
+    @param p2 end of region.
+    @param v value without location.
+    @return value with location. *)
+let delimit { filename; coordinate = startl } { coordinate = endl; _ } v =
   { content = v; loc = { filename; startl; endl } }
 
 (** [strip_loc v] Removes location from a value of type with location.
