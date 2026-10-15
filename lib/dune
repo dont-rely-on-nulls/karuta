@@ -20,7 +20,6 @@
   lwt.unix
   lwt-exit
   lambda-term
-  textutils.ascii_table
   ppx_strip_payload)
  (package karuta)
  (preprocess
