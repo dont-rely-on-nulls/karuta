@@ -127,7 +127,7 @@ let succeeds_with_functor () =
   in
 
   match expr state with
-  | Error _ -> fail "expr should parse a function call"
+  | Error _ -> fail "expr should parse a functor"
   | Ok (_value, resulting_state) ->
       check string "leaves remaining input" " rest"
         (BatSubstring.to_string resulting_state.remaining);
@@ -143,7 +143,7 @@ let succeeds_with_empty_functor () =
   in
 
   match expr state with
-  | Error _ -> fail "expr should parse a function call with no arguments"
+  | Error _ -> fail "expr should parse a functor with no arguments"
   | Ok (_value, resulting_state) ->
       check string "consumes all input" ""
         (BatSubstring.to_string resulting_state.remaining);
@@ -159,7 +159,7 @@ let succeeds_with_bracket_functor () =
   in
 
   match expr state with
-  | Error _ -> fail "expr should parse a bracket-style function call"
+  | Error _ -> fail "expr should parse a bracket-style functor"
   | Ok (_value, resulting_state) ->
       check string "consumes all input" ""
         (BatSubstring.to_string resulting_state.remaining);
@@ -175,7 +175,7 @@ let succeeds_with_nested_functor () =
   in
 
   match expr state with
-  | Error _ -> fail "expr should parse nested function calls"
+  | Error _ -> fail "expr should parse nested functors"
   | Ok (_value, resulting_state) ->
       check string "consumes all input" ""
         (BatSubstring.to_string resulting_state.remaining);
@@ -191,7 +191,7 @@ let succeeds_with_functor_inside_list () =
   in
 
   match expr state with
-  | Error _ -> fail "expr should parse a function call inside a list"
+  | Error _ -> fail "expr should parse a functor inside a list"
   | Ok (value, resulting_state) ->
       (match strip_loc value with
       | Ast.Expr.Cons _ -> ()
@@ -223,7 +223,7 @@ let fails_on_incomplete_list () =
   | Ok _ -> fail "expr should reject a list without a closing delimiter"
   | Error _ -> ()
 
-let fails_on_incomplete_function_call () =
+let fails_on_incomplete_functor () =
   let startl = zero_point in
 
   let state : parser_state =
@@ -231,8 +231,7 @@ let fails_on_incomplete_function_call () =
   in
 
   match expr state with
-  | Ok _ ->
-      fail "expr should reject a function call without a closing delimiter"
+  | Ok _ -> fail "expr should reject a functor without a closing delimiter"
   | Error _ -> ()
 
 let tests =
@@ -249,12 +248,10 @@ let tests =
     test_case "succeeds with empty functor" `Quick succeeds_with_empty_functor;
     test_case "succeeds with bracket functor" `Quick
       succeeds_with_bracket_functor;
-    test_case "succeeds with nested functor call" `Quick
-      succeeds_with_nested_functor;
-    test_case "succeeds with functor call inside list" `Quick
+    test_case "succeeds with nested functor" `Quick succeeds_with_nested_functor;
+    test_case "succeeds with functor inside list" `Quick
       succeeds_with_functor_inside_list;
     test_case "fails on empty input" `Quick fails_on_empty_input;
     test_case "fails on incomplete list" `Quick fails_on_incomplete_list;
-    test_case "fails on incomplete function call" `Quick
-      fails_on_incomplete_function_call;
+    test_case "fails on incomplete functor" `Quick fails_on_incomplete_functor;
   ]

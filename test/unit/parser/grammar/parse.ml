@@ -28,7 +28,7 @@ let succeeds_with_query () =
   let parsed = parse_source "first()?" in
   check int "returns one clause" 1 (FT.size parsed)
 
-let succeeds_with_multiple_function_query () =
+let succeeds_with_multiple_predicate_query () =
   let parsed = parse_source "first(), second()?" in
   check int "returns one clause" 1 (FT.size parsed)
 
@@ -107,8 +107,8 @@ let tests =
     test_case "succeeds with multiple declarations" `Quick
       succeeds_with_multiple_declarations;
     test_case "succeeds with query" `Quick succeeds_with_query;
-    test_case "succeeds with multiple-function query" `Quick
-      succeeds_with_multiple_function_query;
+    test_case "succeeds with multiple-predicate query" `Quick
+      succeeds_with_multiple_predicate_query;
     test_case "succeeds with declaration body" `Quick
       succeeds_with_declaration_body;
     test_case "succeeds with directive" `Quick succeeds_with_directive;
