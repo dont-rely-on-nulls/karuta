@@ -99,8 +99,8 @@
               ocamlPackages.ppx_enumerate
               ocamlPackages.ppxlib
               ocamlPackages.ppx_sexp_conv
+              ocamlPackages.ppx_variants_conv
               ocamlPackages.sexplib
-              ocamlPackages.textutils
             ];
           };
 
@@ -143,7 +143,6 @@
               ocamlPackages.lwt
               ocamlPackages.lwt-exit
               ocamlPackages.lambda-term
-              ocamlPackages.textutils
               ocamlPackages.cmdliner
               ocamlPackages.alcotest
             ];

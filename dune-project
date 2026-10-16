@@ -16,6 +16,23 @@
 (package
  (name karuta)
  (synopsis "A compiler for a statically-typed relational programming language")
- (depends ocaml dune (batteries (>= 3.8.0)) lwt lwt-exit sexplib)
+ (depends
+  (ocaml (>= 5.4))
+  dune
+  alcotest
+  (batteries (>= 3.8.0))
+  cmdliner
+  eio
+  eio_main
+  lambda-term
+  lwt
+  lwt-exit
+  num
+  ppx_deriving
+  ppx_enumerate
+  ppx_sexp_conv
+  ppx_variants_conv
+  ppxlib
+  sexplib)
  (tags
   (prolog logic compiler relational warren)))
