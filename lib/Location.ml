@@ -24,6 +24,16 @@ type region = {
 }
 (** Source code location. Locations delimit a source code region. *)
 
+(** [start_point region] converts a region to a point using startl.
+    @param region region to be converted
+    @return point using startl. *)
+let start_point { filename; startl; _ } = { filename; coordinate = startl }
+
+(** [end_point region] converts a region to a point using endl.
+    @param region region to be converted
+    @return point using endl. *)
+let end_point { filename; endl; _ } = { filename; coordinate = endl }
+
 type 'a with_location = {
   content : 'a;  (** Generic type payload *)
   loc : region;  (** Associated location, with a beginning and end. *)
@@ -107,5 +117,21 @@ let add_loc (v : 'a) (loc : region) : 'a with_location = { content = v; loc }
 let double filename (loc : coordinate) : region =
   { filename; startl = loc; endl = loc }
 
-(** Dummy region. Note that the line is 0 even though it is 1-based. *)
-let dummy = double "" { offset = 0; line_offset = 0; line = 0 }
+(** Dummy coordinate. Note that the line is 0 even though it is 1-based.*)
+let half_dummy = { offset = 0; line_offset = 0; line = 0 }
+
+(** Dummy region. *)
+let dummy = double "" half_dummy
+
+(** [dummy_coord_to_point coordinate] Receive a considered dummy coordinate and
+    lift to a dummy point.
+    @param coordinate coordinated assumed to be dummy.
+    @return point with empty filename. *)
+let dummy_coord_to_point (coordinate : coordinate) : point =
+  { filename = ""; coordinate }
+
+(** Zero coordinate. *)
+let zero_coordinate = origin
+
+(** Zero point. *)
+let zero_point = dummy_coord_to_point zero_coordinate
