@@ -437,7 +437,7 @@ module Make (Config : PREPROCESSOR_CONFIG) :
              {
                name =
                  Location.add_loc
-                   (ModuleName.of_filepath filename)
+                   (Module_name.of_filepath filename)
                    Location.dummy;
                signature = None;
                declarations = BatMap.empty;

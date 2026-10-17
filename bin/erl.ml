@@ -9,7 +9,7 @@ let spawn_compile_process program =
 
 let compile prefix filepath forms =
   let open Beam.Serializer in
-  let name = Lib.ModuleName.of_filepath filepath in
+  let name = Lib.Module_name.of_filepath filepath in
   let forms =
     "[" ^ (String.concat "," @@ List.map Attribute.to_string forms) ^ "]"
   in
