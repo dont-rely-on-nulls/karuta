@@ -5,7 +5,7 @@ open Alcotest
 let fails_when_parser_succeeds () =
   let p : (string, string) parser = fun state -> Ok ("matched", state) in
 
-  let handler value _loc = "unexpectedly matched: " ^ value in
+  let handler value _loc _ = "unexpectedly matched: " ^ value in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "hello"; loc = zero_point }
@@ -21,7 +21,7 @@ let fails_when_parser_succeeds () =
 let succeeds_when_parser_fails () =
   let p : (string, string) parser = fun _state -> Error "p failed" in
 
-  let handler _value _loc = "handler should not be called" in
+  let handler _value _loc _ = "handler should not be called" in
 
   let state : parser_state =
     { remaining = BatSubstring.of_string "hello"; loc = zero_point }
@@ -53,7 +53,10 @@ let handler_receives_correct_location () =
     Ok ("matched", new_state)
   in
 
-  let handler value loc = (value, loc) in
+  let handler (value : 'a) startl
+      ({ loc = { filename; coordinate = endl }; _ } : Lib.Parser.parser_state) =
+    (value, { Lib.Location.filename; startl; endl })
+  in
 
   let state : parser_state =
     {
