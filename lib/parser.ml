@@ -118,14 +118,10 @@ let succeed : 'e. (unit, 'e) parser = return ()
 let is_not :
     'a 'errin 'errout.
     ('a, 'errin) parser ->
-    ('a -> Location.region -> 'errout) ->
+    ('a -> Location.coordinate -> parser_state -> 'errout) ->
     (unit, 'errout) parser =
  fun p handler ({ loc = { filename; coordinate = startl }; _ } as state) ->
-  state
-  |> ifte p
-       (fun (r, { loc = { coordinate = endl; _ }; _ }) ->
-         Error (handler r { filename; startl; endl }))
-       succeed
+  state |> ifte p (fun (r, state) -> Error (handler r startl state)) succeed
 
 (** [is p] constructs a parser that attempts to parse p. On success, the parser
     then backtracks and succeeds without consuming input. On failure, the parser
@@ -764,20 +760,27 @@ let parse (filename : string) (source : string) =
     }
     |> top_level @>> capture
        @@ fun file ->
-       (* TODO: reparse clause instead of just returning ExpectedEOF *)
-       is_not some (fun () loc -> `ExpectedEOF (file, loc)) @&& return file
+       is_not (is some) (fun () _ ->
+           parser_clause @> function
+           | Ok _ ->
+               Logger.simply_unreachable
+                 "If there was a valid parser_clause here it would have been \
+                  parsed by top_level already";
+               raise Exit
+           | Error err -> err (* TODO: rethink possible parser errors. *))
+       @&& return file
   with
   | Ok (parsed, _) -> parsed.content
   | Error e ->
       (match e with
-      | `ExpectedEOF (_, loc) ->
-          Logger.error loc "Expected the file to end, but it continued"
       | `ExpectedLowercase { filename; coordinate } ->
           Logger.error
             (Location.double filename coordinate)
             "Expected a lower case letter, but got something else"
       | `UnexpectedEOF ->
-          Logger.simply_error "File ended, but we expected it to continue"
+          Logger.simply_error
+            "File ended, but we expected it to continue; check for unbalanced \
+             delimiters"
       | `WrongPrefix ({ coordinate; filename }, expected_prefix) ->
           Logger.error
             {
@@ -785,7 +788,7 @@ let parse (filename : string) (source : string) =
               startl = coordinate;
               endl = Location.plus_str expected_prefix coordinate;
             }
-          @@ "We were expecting a '"
+          @@ "We were expecting a \""
           ^ String.escaped expected_prefix
-          ^ "', but got this instead.");
+          ^ "\", but got this instead.");
       raise Exit
