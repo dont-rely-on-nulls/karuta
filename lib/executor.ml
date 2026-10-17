@@ -54,6 +54,7 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
           let sakura_filename = root_module ^ ".skr" in
           sakura_files
           |> Error.fold (fun parsed filepath ->
+              Logger.in_file filepath @@ fun () ->
               parse filepath |> Error.map (FT.append parsed))
           |> preprocess sakura_filename
           ||> fun { module_ } ->
@@ -64,6 +65,7 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
     let* preprocessed = acc in
     let preprocessor = Shared.Preprocessor.initialize filepath in
     let* { module_ } =
+      Logger.in_file filepath @@ fun () ->
       try
         filepath |> parse |> Error.map @@ Karuta.preprocess_clauses preprocessor
       with Exit -> exit 1
