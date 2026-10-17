@@ -767,7 +767,7 @@ let parse (filename : string) (source : string) =
                  "If there was a valid parser_clause here it would have been \
                   parsed by top_level already";
                raise Exit
-           | Error err -> err)
+           | Error err -> err (* TODO: rethink possible parser errors. *))
        @&& return file
   with
   | Ok (parsed, _) -> parsed.content
