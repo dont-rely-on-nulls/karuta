@@ -6,7 +6,7 @@ let initialize_from_parent (type state) (type mods) (type directives)
     (initialize_nested : (state, mods) initialize_nested) (parent : state t) :
     state t =
   let inner_filename =
-    ModuleName.of_filepath parent.filename
+    Module_name.of_filepath parent.filename
     ^ "." ^ name
     ^ Filename.extension parent.filename
   in

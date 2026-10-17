@@ -7,7 +7,7 @@ type 'a env = 'a Location.with_location BatMap.String.t
 
 let join_qualifiers names : string =
   BatIO.to_string
-    (FT.print ~first:"" ~last:"" ~sep:ModuleName.separator BatIO.nwrite)
+    (FT.print ~first:"" ~last:"" ~sep:Module_name.separator BatIO.nwrite)
     names
 
 module PredicateMap = BatMap.Make (struct
@@ -294,7 +294,7 @@ module Make (Config : COMPILER_CONFIG) :
 
   let initialize ({ filename; _ } as init : mods initialization) :
       Config.state t =
-    let module_name = ModuleName.of_filepath filename in
+    let module_name = Module_name.of_filepath filename in
     initialize_nested init None module_name
 
   let rec step : (Config.state, Config.directives, Config.mods) step =
@@ -356,7 +356,7 @@ module Make (Config : COMPILER_CONFIG) :
       Eio.Promise.create ()
     in
     let compile_one filepath body acc =
-      let module_name = ModuleName.of_filepath filepath in
+      let module_name = Module_name.of_filepath filepath in
       let step () =
         Logger.in_file filepath @@ fun () ->
         try
