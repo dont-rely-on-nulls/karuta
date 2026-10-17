@@ -11,16 +11,7 @@
 
 (library
  (name lib)
- (libraries
-  batteries
-  sexplib
-  eio
-  eio_main
-  lwt
-  lwt.unix
-  lwt-exit
-  lambda-term
-  ppx_strip_payload)
+ (libraries batteries.unthreaded sexplib eio eio.mock unix ppx_strip_payload)
  (package karuta)
  (preprocess
   (pps

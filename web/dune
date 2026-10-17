@@ -1,0 +1,17 @@
+; The Karuta compiler for the browser, used by the REPL page in index.html.
+
+(executable
+ (name repl)
+ (modes js)
+ (optional)
+ (libraries lib eio.mock js_of_ocaml)
+ (js_of_ocaml
+  (flags
+   (:standard --effects=cps))))
+
+; `dune build --profile release @web/playground`, then serve _build/default/web
+
+(rule
+ (alias playground)
+ (deps index.html repl.bc.js)
+ (action (progn)))

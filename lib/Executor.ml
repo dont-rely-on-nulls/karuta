@@ -24,7 +24,9 @@ let parse : string -> Ast.ParserClause.t FT.t attempt = function
 let compile ({ sakura; artifact; target } : Shared.Compiler.Options.t)
     (persist : Shared.Compiler.Persist.both) (filepaths : string list) :
     unit attempt =
-  Eio_main.run @@ fun _ ->
+  (* Eio is only used for its promises and lazy values, which the mock backend
+     schedules without any OS dependency (so this also runs in a browser). *)
+  Eio_mock.Backend.run @@ fun () ->
   (* The wasm target links every module into a single binary, so it keeps the
      forms around until the executable is emitted instead of persisting them. *)
   let wasm_modules = ref [] in

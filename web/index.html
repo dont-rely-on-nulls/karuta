@@ -1,0 +1,394 @@
+<title>Karuta REPL</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Shippori+Mincho+B1:wght@700&display=swap">
+<style>
+  /* Layout: a fixed-height workbench; program on the left, session on the right, stacked on phones. */
+  :root {
+    --paper: #f4f5f1;
+    --surface: #fbfbf8;
+    --ink: #1c2230;
+    --muted: #5e6577;
+    --rule: #d9dbd3;
+    --accent: #2c418f;
+    --accent-soft: #e3e7f6;
+    --ok: #2f6b45;
+    --bad: #a33a2b;
+    --bad-soft: #f8e6e2;
+    --font-display: "Shippori Mincho B1", "Hiragino Mincho ProN", "Yu Mincho", Georgia, serif;
+    --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #12151c; --surface: #191d27; --ink: #e3e5ec; --muted: #9298a8; --rule: #2c3140;
+      --accent: #93a6ff; --accent-soft: #232b4a; --ok: #7cc495; --bad: #f08f7f; --bad-soft: #3a211d;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #12151c; --surface: #191d27; --ink: #e3e5ec; --muted: #9298a8; --rule: #2c3140;
+    --accent: #93a6ff; --accent-soft: #232b4a; --ok: #7cc495; --bad: #f08f7f; --bad-soft: #3a211d;
+    color-scheme: dark;
+  }
+
+  html, body { height: 100%; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font: 15px/1.5 var(--font-body);
+    display: grid;
+    grid-template-rows: auto 1fr;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 0 16px;
+    box-sizing: border-box;
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+
+  header {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px;
+    padding-block: 14px 12px;
+  }
+  h1 { font: 700 26px/1.1 var(--font-display); margin: 0; letter-spacing: 0.01em; }
+  h1 span { color: var(--accent); }
+  .tagline { color: var(--muted); margin: 0; flex: 1 1 280px; }
+  .status { font: 500 12px/1 var(--font-mono); color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .status[data-state="ready"]::before { background: var(--ok); }
+  .status[data-state="error"]::before { background: var(--bad); }
+  .status[data-state="error"] { color: var(--bad); }
+
+  main {
+    display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 16px;
+    min-height: 0;
+  }
+  .pane {
+    display: flex; flex-direction: column; min-height: 0; min-width: 0;
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 6px;
+  }
+  .pane-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 14px; border-bottom: 1px solid var(--rule);
+  }
+  .label { font: 600 11px/1 var(--font-body); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .hint { font-size: 12px; color: var(--muted); }
+
+  #program {
+    flex: 1; min-height: 0; width: 100%; resize: none; border: 0; outline: none;
+    padding: 12px 14px; background: transparent; color: var(--ink);
+    font: 13.5px/1.6 var(--font-mono); tab-size: 2; white-space: pre; overflow: auto;
+  }
+  #program:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+
+  #log { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 14px; }
+  .entry { padding-block: 14px; border-bottom: 1px solid var(--rule); display: grid; gap: 8px; }
+  .entry:last-child { border-bottom: 0; }
+  .query { font: 500 13.5px/1.5 var(--font-mono); overflow-wrap: anywhere; }
+  .query::before { content: "?- "; color: var(--accent); }
+  .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .chip {
+    font: 500 12px/1 var(--font-body); padding: 4px 8px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  .chip.none { background: var(--bad-soft); color: var(--bad); }
+  .chip.yes { color: var(--ok); }
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 4px; }
+  table { border-collapse: collapse; width: 100%; font: 13px/1.45 var(--font-mono); font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 6px 12px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  th { font: 600 12px/1.4 var(--font-mono); color: var(--accent); background: var(--accent-soft); }
+  td.n, th.n { color: var(--muted); width: 1%; text-align: right; font-weight: 400; }
+  th.n { background: var(--accent-soft); }
+
+  pre.error {
+    margin: 0; padding: 10px 12px; border-radius: 4px; background: var(--bad-soft); color: var(--bad);
+    font: 12.5px/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+
+  form { border-top: 1px solid var(--rule); padding: 10px 14px 12px; display: grid; gap: 10px; }
+  .prompt { display: flex; align-items: center; gap: 8px; }
+  .prompt-sign { font: 500 14px/1 var(--font-mono); color: var(--accent); }
+  #query {
+    flex: 1; min-width: 0; border: 1px solid var(--rule); border-radius: 4px; padding: 8px 10px;
+    background: var(--paper); color: var(--ink); font: 14px/1.4 var(--font-mono);
+  }
+  #query:focus-visible, #limit:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button {
+    font: 600 13px/1 var(--font-body); padding: 9px 14px; border-radius: 4px; border: 1px solid var(--accent);
+    background: var(--accent); color: var(--surface); cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; cursor: progress; }
+  .options { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; font-size: 12px; color: var(--muted); }
+  #limit {
+    width: 4.5em; padding: 4px 6px; border: 1px solid var(--rule); border-radius: 4px;
+    background: var(--paper); color: var(--ink); font: 12px/1.2 var(--font-mono);
+  }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; }
+  .example {
+    font: 12px/1 var(--font-mono); padding: 5px 8px; border-radius: 4px; cursor: pointer;
+    border: 1px solid var(--rule); background: transparent; color: var(--ink);
+  }
+  .example:hover { border-color: var(--accent); color: var(--accent); }
+
+  @media (max-width: 760px) {
+    html, body { height: auto; }
+    main { grid-template-columns: minmax(0, 1fr); }
+    #program { min-height: 18em; }
+    #log { max-height: none; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .entry { animation: arrive 160ms ease-out; }
+    @keyframes arrive { from { transform: translateY(4px); } }
+  }
+</style>
+
+<header>
+  <h1>Karuta <span>REPL</span></h1>
+  <p class="tagline">Write relations on the left, ask queries on the right. Programs compile to WebAssembly in your browser.</p>
+  <div class="status" id="status" data-state="loading" role="status">Loading the compiler</div>
+</header>
+
+<main>
+  <section class="pane" aria-labelledby="program-label">
+    <div class="pane-head">
+      <span class="label" id="program-label">Program</span>
+      <span class="hint">Facts and rules, no query</span>
+    </div>
+    <textarea id="program" spellcheck="false" autocapitalize="off" autocomplete="off" aria-labelledby="program-label"></textarea>
+  </section>
+
+  <section class="pane" aria-labelledby="session-label">
+    <div class="pane-head">
+      <span class="label" id="session-label">Session</span>
+      <span class="hint">Enter runs, ↑ ↓ browse history</span>
+    </div>
+    <div id="log" aria-live="polite"></div>
+    <form id="form" autocomplete="off">
+      <div class="prompt">
+        <span class="prompt-sign" aria-hidden="true">?-</span>
+        <input id="query" aria-label="Query" spellcheck="false" autocapitalize="off" placeholder="append[X, Y, [1, 2, 3]]">
+        <button id="run" type="submit" disabled>Run</button>
+      </div>
+      <div class="options">
+        <label for="limit">Show up to</label>
+        <input id="limit" type="number" min="1" max="1000" value="10">
+        <span>solutions, stop after 5 s</span>
+      </div>
+      <div class="examples" id="examples"></div>
+    </form>
+  </section>
+</main>
+
+<script src="repl.bc.js"></script>
+<script type="module">
+  const SAMPLE = `% Relations over lists. Every argument can be an input or an output.
+append[[], [], []].
+append[[], [H | T], [H | T]].
+append[[H | T], [], [H | T]].
+append[[H | Tail], [HS | TS], [H | Mid]] :- append[Tail, [HS | TS], Mid].
+
+reverse[In, Out] :- 'reverse loop'[In, Out, [], Out].
+'reverse loop'[[], [], Out, Out].
+'reverse loop'[[Head | Tail], [Last | Init], Acc, Out] :-
+  'reverse loop'[Tail, Init, [Head | Acc], Out].
+
+% Arithmetic goes through the karuta builtins.
+factorial[N, Out] :- karuta:nat[N], 'factorial loop'[N, 1, Out].
+'factorial loop'[0, Out, Out] :- karuta:nat[Out].
+'factorial loop'[N, Acc, Out] :-
+  karuta:nat[N],
+  karuta:mult[N, Acc, NewAcc],
+  karuta:minus[N, 1, Prev],
+  'factorial loop'[Prev, NewAcc, Out].
+`;
+  const EXAMPLES = [
+    "append[X, Y, [1, 2, 3]]",
+    "reverse[X, [a, b, c]]",
+    "factorial[6, Out]",
+    "karuta:plus[X, Y, 3]",
+    "append[[1], [2], [2, 1]]",
+  ];
+  const TIMEOUT_MS = 5000;
+  const DIVIDER = "---------\n";
+
+  const $ = (id) => document.getElementById(id);
+  const program = $("program"), query = $("query"), limit = $("limit"), run = $("run");
+  const log = $("log"), status = $("status");
+  const history = [];
+  let historyAt = 0;
+
+  const store = {
+    get(key) { try { return localStorage.getItem(key); } catch { return null; } },
+    set(key, value) { try { localStorage.setItem(key, value); } catch {} },
+  };
+  program.value = store.get("karuta-program") ?? SAMPLE;
+  program.addEventListener("input", () => store.set("karuta-program", program.value));
+  program.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab" || e.shiftKey) return;
+    e.preventDefault();
+    program.setRangeText("  ", program.selectionStart, program.selectionEnd, "end");
+  });
+
+  for (const text of EXAMPLES) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "example"; b.textContent = text;
+    b.addEventListener("click", () => { query.value = text; submit(); });
+    $("examples").append(b);
+  }
+
+  function setStatus(state, text) { status.dataset.state = state; status.textContent = text; }
+
+  // Runs the module off the main thread so an endless search can be stopped.
+  const workerUrl = URL.createObjectURL(new Blob([`
+    onmessage = async ({ data: { bytes, limit } }) => {
+      try {
+        const { instance: { exports: k } } = await WebAssembly.instantiate(bytes);
+        const length = k.run(limit);
+        postMessage({ ok: true, text: new TextDecoder().decode(new Uint8Array(k.memory.buffer, k.out_base.value, length)) });
+      } catch (err) { postMessage({ ok: false, text: String(err) }); }
+    };`], { type: "text/javascript" }));
+
+  function execute(bytes, limit) {
+    return new Promise((resolve) => {
+      let worker;
+      try { worker = new Worker(workerUrl); } catch {
+        // No workers here: run inline, without the time limit.
+        WebAssembly.instantiate(bytes).then(({ instance: { exports: k } }) => {
+          const length = k.run(limit);
+          resolve({ ok: true, text: new TextDecoder().decode(new Uint8Array(k.memory.buffer, k.out_base.value, length)) });
+        }, (err) => resolve({ ok: false, text: String(err) }));
+        return;
+      }
+      const timer = setTimeout(() => {
+        worker.terminate();
+        resolve({ ok: false, timeout: true, text: `The search ran for ${TIMEOUT_MS / 1000} s without finishing, so it was stopped. Ask for fewer solutions or make the query more specific.` });
+      }, TIMEOUT_MS);
+      worker.onmessage = ({ data }) => { clearTimeout(timer); worker.terminate(); resolve(data); };
+      worker.onerror = (e) => { clearTimeout(timer); worker.terminate(); resolve({ ok: false, text: e.message || "The program crashed." }); };
+      worker.postMessage({ bytes, limit }, [bytes.buffer]);
+    });
+  }
+
+  function cleanCompilerOutput(text) {
+    return text.replace(/\x1b\[[0-9;]*m/g, "").replace(/File "\/static\/repl\.krt", /g, "").trim();
+  }
+
+  function parseSolutions(text) {
+    return text.split(DIVIDER).slice(1).map((block) => {
+      const row = new Map();
+      for (const line of block.split("\n")) {
+        const at = line.indexOf(" = ");
+        if (at > 0) row.set(line.slice(0, at), line.slice(at + 3));
+      }
+      return row;
+    });
+  }
+
+  function renderTable(rows, queryText) {
+    const seen = new Set(rows.flatMap((r) => [...r.keys()]));
+    // Columns follow the order variables appear in the query.
+    const columns = [...new Set(queryText.match(/\b[A-Z][A-Za-z0-9_]*/g) ?? [])].filter((v) => seen.has(v));
+    for (const name of seen) if (!columns.includes(name)) columns.push(name);
+    const wrap = document.createElement("div");
+    wrap.className = "table-wrap";
+    const table = document.createElement("table");
+    const head = table.createTHead().insertRow();
+    const n = document.createElement("th"); n.className = "n"; n.textContent = "#"; head.append(n);
+    for (const c of columns) { const th = document.createElement("th"); th.textContent = c; head.append(th); }
+    const body = table.createTBody();
+    rows.forEach((row, i) => {
+      const tr = body.insertRow();
+      const num = tr.insertCell(); num.className = "n"; num.textContent = i + 1;
+      for (const c of columns) tr.insertCell().textContent = row.get(c) ?? "";
+    });
+    wrap.append(table);
+    return wrap;
+  }
+
+  function addEntry(queryText) {
+    const entry = document.createElement("article");
+    entry.className = "entry";
+    const q = document.createElement("div");
+    q.className = "query"; q.textContent = queryText + "?";
+    const meta = document.createElement("div");
+    meta.className = "meta"; meta.textContent = "Running…";
+    entry.append(q, meta);
+    log.append(entry);
+    log.scrollTop = log.scrollHeight;
+    return { entry, meta };
+  }
+
+  function chip(text, kind = "") {
+    const c = document.createElement("span");
+    c.className = "chip " + kind; c.textContent = text;
+    return c;
+  }
+
+  function showError(entry, meta, title, text) {
+    meta.replaceChildren(chip(title, "none"));
+    const pre = document.createElement("pre");
+    pre.className = "error"; pre.textContent = text;
+    entry.append(pre);
+  }
+
+  let binaryen;
+  async function evaluate(queryText) {
+    const max = Math.max(1, Math.min(1000, parseInt(limit.value, 10) || 10));
+    const { entry, meta } = addEntry(queryText);
+    const started = performance.now();
+    const compiled = globalThis.karuta.compile(program.value + "\n\n" + queryText + "?");
+    if (!compiled.ok) return showError(entry, meta, "Does not compile", cleanCompilerOutput(compiled.text));
+    const module = binaryen.parseText(compiled.text);
+    module.setFeatures(binaryen.Features.GC | binaryen.Features.ReferenceTypes | binaryen.Features.Multivalue);
+    if (!module.validate()) { module.dispose(); return showError(entry, meta, "Internal error", "The generated WebAssembly did not validate."); }
+    const bytes = module.emitBinary();
+    module.dispose();
+    const result = await execute(bytes, max);
+    const ms = Math.round(performance.now() - started);
+    if (!result.ok) return showError(entry, meta, result.timeout ? "Stopped" : "Runtime error", result.text);
+    const rows = parseSolutions(result.text);
+    const parts = [];
+    if (rows.length === 0) parts.push(chip("No solutions", "none"));
+    else if (rows.every((r) => r.size === 0)) parts.push(chip(rows.length === 1 ? "True" : `True, ${rows.length} ways`, "yes"));
+    else parts.push(chip(rows.length === 1 ? "1 solution" : `${rows.length} solutions`));
+    const note = document.createElement("span");
+    note.textContent = (rows.length === max ? `limit reached, there may be more · ` : "") + `${ms} ms`;
+    meta.replaceChildren(...parts, note);
+    if (rows.some((r) => r.size > 0)) entry.append(renderTable(rows, queryText));
+    log.scrollTop = log.scrollHeight;
+  }
+
+  let busy = Promise.resolve();
+  function submit() {
+    const text = query.value.trim().replace(/[?.]\s*$/, "").trim();
+    if (!text || !binaryen) return;
+    if (history[history.length - 1] !== text) history.push(text);
+    historyAt = history.length;
+    query.value = "";
+    busy = busy.then(() => evaluate(text)).catch((err) => console.error(err));
+  }
+
+  $("form").addEventListener("submit", (e) => { e.preventDefault(); submit(); });
+  query.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowUp" && historyAt > 0) { historyAt--; query.value = history[historyAt]; e.preventDefault(); }
+    else if (e.key === "ArrowDown" && historyAt < history.length) {
+      historyAt++; query.value = history[historyAt] ?? ""; e.preventDefault();
+    }
+  });
+
+  try {
+    if (!globalThis.karuta) throw new Error("The compiler (repl.bc.js) did not load.");
+    setStatus("loading", "Loading the assembler");
+    binaryen = (await import("https://cdn.jsdelivr.net/npm/binaryen@125.0.0/index.js")).default;
+    setStatus("ready", "Ready");
+    run.disabled = false;
+    query.focus({ preventScroll: true });
+    query.value = EXAMPLES[0];
+    submit();
+  } catch (err) {
+    setStatus("error", "Could not start: " + (err?.message ?? err));
+  }
+</script>

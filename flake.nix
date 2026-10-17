@@ -123,6 +123,9 @@
               # WebAssembly target: `wasm-as` assembles, Node runs the output
               pkgs.binaryen
               pkgs.nodejs
+              # Browser REPL (web/): the compiler built with js_of_ocaml
+              ocamlPackages.js_of_ocaml
+              ocamlPackages.js_of_ocaml-compiler
 
               # OCaml dependencies
               pkgs.ocaml
