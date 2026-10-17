@@ -23,7 +23,7 @@ let check_extensions (ext : BatSet.String.t) (files : string list) : unit =
   List.iter check_single_extension files
 
 let run : cmd -> unit = function
-  | Compile { files; artifact; output_path; log_level } ->
+  | Compile { files; artifact; output_path; log_level; target } ->
       (* TODO: Make sakura module name as an available CLI option with db being the default *)
       Logger.with_min_level log_level @@ fun () ->
       check_extensions (BatSet.String.of_list [ ".krt"; ".skr"; ".pl" ]) files;
@@ -32,7 +32,7 @@ let run : cmd -> unit = function
         Options.initialize
           ~sakura:
             (Some (Options.initialize_sakura ~address:"localhost" ~port:3435 ()))
-          ~artifact ()
+          ~target ~artifact ()
       in
       Error.void
       @@ Executor.compile options

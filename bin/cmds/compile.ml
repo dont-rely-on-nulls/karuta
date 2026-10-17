@@ -5,6 +5,7 @@ type t = {
   artifact : Lib.Shared.Compiler.Options.artifact;
   output_path : string;
   log_level : Lib.Logger.Level.t;
+  target : Lib.Shared.Compiler.Options.target;
 }
 
 let file_terms =
@@ -47,12 +48,21 @@ let artifact_term =
     | true, _ -> Library
     | false, (root_module, filename) -> Executable { root_module; filename })
 
+let target_term =
+  let open Lib.Shared.Compiler.Options in
+  let info =
+    Arg.info [ "t"; "target" ]
+      ~doc:"Compilation target: $(b,beam) or $(b,wasm)."
+  in
+  Arg.value @@ Arg.opt (Arg.enum [ ("beam", Beam); ("wasm", Wasm) ]) Beam info
+
 let doc = "Compile Karuta and Sakura source files"
 let man = [ `S Manpage.s_description; `P doc ]
 
 let term combine =
   Term.(
-    const combine $ file_terms $ artifact_term $ output_path_term $ Log.term)
+    const combine $ file_terms $ artifact_term $ output_path_term $ Log.term
+    $ target_term)
 
 let cmd combine =
   let info = Cmdliner.Cmd.info "compile" ~doc ~man in

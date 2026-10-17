@@ -3,8 +3,8 @@ open Cmdliner
 type cmd = Compile of Cmds.Compile.t
 
 let compile runner =
-  let combine files artifact output_path log_level =
-    Compile { files; artifact; output_path; log_level } |> runner
+  let combine files artifact output_path log_level target =
+    Compile { files; artifact; output_path; log_level; target } |> runner
   in
   Cmds.Compile.cmd combine
 

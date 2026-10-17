@@ -147,9 +147,11 @@ module Options = struct
 
   type executable = { root_module : string; filename : string }
   type artifact = Library | Executable of executable
-  type t = { sakura : sakura option; artifact : artifact }
+  type target = Beam | Wasm
+  type t = { sakura : sakura option; artifact : artifact; target : target }
 
-  let initialize ?(sakura = None) ~artifact () : t = { sakura; artifact }
+  let initialize ?(sakura = None) ?(target = Beam) ~artifact () : t =
+    { sakura; artifact; target }
 end
 
 type externals = compiled_module Lazy.t env

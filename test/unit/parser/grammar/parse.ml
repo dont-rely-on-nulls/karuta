@@ -75,7 +75,7 @@ let expect_parse_failure source =
       Stdlib.exit 0
   | -1 -> fail "could not fork a child process"
   | pid -> (
-      match Unix.waitpid [] pid with
+      match Lib.Posix.wait pid with
       | _, Unix.WEXITED 1 -> ()
       | _, Unix.WEXITED status -> failf "expected exit status 1, got %d" status
       | _, Unix.WSIGNALED signal ->

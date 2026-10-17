@@ -1,7 +1,11 @@
 open Unix
 
+(* Eio's SIGCHLD handler can interrupt the wait, so retry on EINTR *)
+let rec wait pid =
+  try waitpid [] pid with Unix_error (EINTR, _, _) -> wait pid
+
 let treat_pid pid =
-  waitpid [] pid |> function
+  wait pid |> function
   | _pid, WEXITED 0 -> Ok ()
   | _pid, (WEXITED status as err) ->
       Logger.simply_error

@@ -120,6 +120,10 @@
               beamPackages.erlang
               beamPackages.lfe
 
+              # WebAssembly target: `wasm-as` assembles, Node runs the output
+              pkgs.binaryen
+              pkgs.nodejs
+
               # OCaml dependencies
               pkgs.ocaml
               pkgs.dune_3

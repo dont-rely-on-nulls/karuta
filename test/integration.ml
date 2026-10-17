@@ -18,12 +18,18 @@ let divisor = "---------\n"
 let split_results : string -> BatSet.String.t =
   BatSet.String.of_list |.| List.tl |.| BatString.split_on_string ~by:divisor
 
-let make_test current_directory
+let make_test current_directory target
     (name, { expected; limit; root_module; filepaths }) =
-  (try Unix.mkdir name 0o766 with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
-  (try Unix.link "../runtime/karuta.beam" (name ^ "/karuta.beam")
+  let directory =
+    match (target : Lib.Shared.Compiler.Options.target) with
+    | Beam -> name
+    | Wasm -> name ^ "-wasm"
+  in
+  (try Unix.mkdir directory 0o766
    with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
-  let test_directory = current_directory ^ "/" ^ name in
+  (try Unix.link "../runtime/karuta.beam" (directory ^ "/karuta.beam")
+   with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
+  let test_directory = current_directory ^ "/" ^ directory in
   let prefix file = current_directory ^ "/../examples/" ^ file in
   let filename = test_directory ^ "/play" in
   let open Lib.Error in
@@ -33,6 +39,7 @@ let make_test current_directory
         artifact =
           Lib.Shared.Compiler.Options.Executable { filename; root_module };
         sakura = None;
+        target;
       }
       {
         beam =
@@ -63,5 +70,5 @@ let make_test current_directory
           |> Alcotest.(check batset_string)
                ("Ran " ^ name) (format_expected expected))
 
-let make_test_suite current_directory (category, tests) =
-  (category, List.map (make_test current_directory) tests)
+let make_test_suite current_directory target (category, tests) =
+  (category, List.map (make_test current_directory target) tests)

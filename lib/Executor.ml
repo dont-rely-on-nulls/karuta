@@ -21,10 +21,22 @@ let parse : string -> Ast.ParserClause.t FT.t attempt = function
 
 (* FIXME: hook up dependency information and sort the file list before compiling *)
 (* TODO: compilation cache *)
-let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
+let compile ({ sakura; artifact; target } : Shared.Compiler.Options.t)
     (persist : Shared.Compiler.Persist.both) (filepaths : string list) :
     unit attempt =
   Eio_main.run @@ fun _ ->
+  (* The wasm target links every module into a single binary, so it keeps the
+     forms around until the executable is emitted instead of persisting them. *)
+  let wasm_modules = ref [] in
+  let persist : Shared.Compiler.Persist.both =
+    match target with
+    | Beam -> persist
+    | Wasm ->
+        {
+          persist with
+          beam = (fun _ forms -> wasm_modules := forms :: !wasm_modules);
+        }
+  in
   let sakura_files, karuta_files =
     FT.partition Sakura.Preprocessor.is_sakura_file @@ FT.of_list filepaths
   in
@@ -97,17 +109,28 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
           | { query = None; _ } ->
               Logger.error loc "Module does not have a query";
               exit 1
-          | { query = Some query; _ } ->
-              Ok
-                (Executable.emit
-                   {
-                     persist = persist.executable;
-                     query = query.content;
-                     sakura =
-                       (if FT.is_empty sakura_files then None else sakura);
-                     filename;
-                     root_module;
-                   })))
+          | { query = Some query; _ } -> (
+              match target with
+              | Beam ->
+                  Ok
+                    (Executable.emit
+                       {
+                         persist = persist.executable;
+                         query = query.content;
+                         sakura =
+                           (if FT.is_empty sakura_files then None else sakura);
+                         filename;
+                         root_module;
+                       })
+              | Wasm ->
+                  Wasm.Executable.emit
+                    {
+                      persist = persist.executable;
+                      modules = !wasm_modules;
+                      query = query.content;
+                      filename;
+                      root_module;
+                    })))
 
 let run ?(limit : int option = None)
     (executable : Shared.Compiler.Options.executable)
