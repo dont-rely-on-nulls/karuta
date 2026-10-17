@@ -12,11 +12,15 @@ let all_atoms (args : Ast.Expr.t FT.t) : unit =
   | None -> ()
   | Some { loc; _ } ->
       Logger.error loc "Expected atom.";
-      exit 1
+      raise Exit
+
+let error_all_after :
+    'a. int -> 'a Location.with_location BatFingerTree.t -> string -> unit =
+ fun n -> FT.log_all_after Logger.error n
 
 let compare_clauses (c1 : Ast.ParserClause.t) (c2 : Ast.ParserClause.t) : int =
   match (c1, c2) with
-  | ( { content = Declaration { head = h1; _ }; _ },
+  | ( { Location.content = Declaration { head = h1; _ }; _ },
       { content = Declaration { head = h2; _ }; _ } ) ->
       Ast.Expr.compare_func h1 h2
   | _, _ -> -1
@@ -85,7 +89,7 @@ let rec remove_comments (clause : Ast.ParserClause.t) :
             Logger.simply_unreachable
               "The conjunctions we constructed are guaranteed not to have this \
                form.";
-            exit 1)
+            raise Exit)
       |> fun funcs ->
       if FT.is_empty funcs then None
       else Some { content = Ast.ParserClause.QueryConjunction funcs; loc }
@@ -98,7 +102,7 @@ let check_empty_heads (clause : Ast.ParserClause.t) : Ast.ParserClause.t =
   } ->
       Logger.error loc
         "You cannot have a query or declaration with an empty name";
-      exit 1
+      raise Exit
   | other -> other
 
 module S = BatSet
@@ -185,6 +189,7 @@ module Make (Config : PREPROCESSOR_CONFIG) :
 
   let rec preprocess_clauses ({ filename } : t)
       (clauses : Ast.ParserClause.t FT.t) =
+    Logger.in_file filename @@ fun () ->
     let split ({ module_ } : (directives, mods) output)
         (parser_clause : Ast.ParserClause.t) : (directives, mods) output =
       let open Location in
@@ -195,7 +200,7 @@ module Make (Config : PREPROCESSOR_CONFIG) :
       | QueryConjunction _ ->
           Logger.error loc "Modules can have at most one query";
           Logger.error (Option.get module_.query).loc "First query here";
-          exit 1
+          raise Exit
       | Declaration decl ->
           {
             module_ =
@@ -233,7 +238,7 @@ module Make (Config : PREPROCESSOR_CONFIG) :
               match FT.front header.elements with
               | None ->
                   Logger.error loc "All modules must be named";
-                  exit 1
+                  raise Exit
               | Some (_, module_name) ->
                   Location.add_loc
                     (Ast.Expr.extract_functor_label module_name)
@@ -244,7 +249,7 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                 Logger.error loc
                   "Expected a module to have at least one body for its \
                    implementation";
-                exit 1
+                raise Exit
             | 1, Some (remaining, body) when FT.size remaining = 0 ->
                 let { module_ = body_module } =
                   preprocess_clauses { filename } body.content
@@ -332,26 +337,25 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                 Logger.error loc
                   "There is a conflict between the provided named signature \
                    and a provided inline signature. There can be only one!";
-                exit 1
+                raise Exit
             | arity, Some _ when arity = 1 || arity = 2 ->
                 Logger.error loc
                 @@ "Modules can have at most only two bodies and you have "
                 ^ Int.to_string @@ FT.size bodies;
-                FT.error_all_after 2 bodies "Extra body for module here";
-                exit 1
+                error_all_after 2 bodies "Extra body for module here";
+                raise Exit
             | arity, _ ->
                 Logger.error loc
                 @@ "Module directives can handle at most 2 atoms as arguments \
                     and you have " ^ Int.to_string arity;
-                FT.error_all_after 2 header.elements
-                  "Extra module argument here";
-                exit 1)
+                error_all_after 2 header.elements "Extra module argument here";
+                raise Exit)
           else if Ast.Expr.match_func header [ "signature" ] then (
             let signature_name =
               match FT.front header.elements with
               | None ->
                   Logger.error loc "Signature directives must declare a name";
-                  exit 1
+                  raise Exit
               | Some (_, signature_name) ->
                   Location.add_loc
                     (Ast.Expr.extract_functor_label signature_name)
@@ -361,7 +365,7 @@ module Make (Config : PREPROCESSOR_CONFIG) :
             | _, None ->
                 Logger.error loc "Abstract signatures are not supported yet";
                 (* TODO: implement abstract signatures *)
-                exit 1
+                raise Exit
             | 1, Some (remaining, body) when FT.size remaining = 0 ->
                 check_for_type_annotations body.content;
                 let { module_ = nested; _ } =
@@ -393,15 +397,15 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                 Logger.error loc
                 @@ "Signatures can have at most one body and you have "
                 ^ Int.to_string @@ FT.size bodies;
-                FT.error_all_after 1 bodies "Extra body for signature here";
-                exit 1
+                error_all_after 1 bodies "Extra body for signature here";
+                raise Exit
             | arity, _ ->
                 Logger.error loc
                 @@ "Signature directives must have exactly one atom as an \
                     argument and you have " ^ Int.to_string arity;
-                FT.error_all_after 1 header.elements
+                error_all_after 1 header.elements
                   "Extra signature argument here";
-                exit 1)
+                raise Exit)
           else
             match Config.preprocess_directive preprocess_clauses directive with
             | TargetSpecificDirective directive ->

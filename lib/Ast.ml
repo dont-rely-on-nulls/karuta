@@ -77,7 +77,7 @@ module ModuleF (Expr : EXPR) = struct
             (fun { Location.loc; _ } ->
               Logger.error loc "Extra definition here")
             rhs;
-          exit 1))
+          raise Exit))
       multi_declaration_env
 end
 
@@ -138,7 +138,7 @@ module Expr = struct
     | { content = Variable name; _ } -> name
     | _ ->
         Logger.simply_error "Trying to extract a variable wrongly";
-        exit 1
+        raise Exit
 
   let extract_qualified_func_label :
       func -> string Location.with_location * string Location.with_location =
@@ -147,11 +147,11 @@ module Expr = struct
     match FT.front qualifiers with
     | None ->
         Logger.error name.loc "Expected functor to have a qualified label";
-        exit 1
+        raise Exit
     | Some (remaining, qualifier) when FT.is_empty remaining -> (qualifier, name)
     | Some (_, qualifier) ->
         Logger.error qualifier.loc "Expected functor to have a single qualifier";
-        exit 1
+        raise Exit
 
   let func_label : func -> string = function
     | { name = _, name; _ } -> name.content
@@ -171,20 +171,20 @@ module Expr = struct
     | Some (_, first_segment) ->
         Logger.error first_segment.loc
           "Expected functor to have an unqualified label";
-        exit 1
+        raise Exit
 
   let get_functor_label : t -> func_label = function
     | { content = Functor f; _ } -> f.name
     | _ ->
         Logger.simply_error "Trying to get a functor label out of a non-functor";
-        exit 1
+        raise Exit
 
   let extract_functor_label : t -> string = function
     | { content = Functor f; _ } -> extract_func_label f
     | _ ->
         Logger.simply_error
           "Trying to extract a functor label out of a non-functor";
-        exit 1
+        raise Exit
 
   let extract_unqualified_atom : t -> string =
    fun { content; loc } ->
@@ -195,13 +195,13 @@ module Expr = struct
         | None when FT.is_empty func.elements -> unqualified_name.content
         | None ->
             Logger.error loc "Expected unqualified atom and it has arguments";
-            exit 1
+            raise Exit
         | Some _ ->
             Logger.error loc "Expected unqualified atom and it is qualified";
-            exit 1)
+            raise Exit)
     | _ ->
         Logger.error loc "Expected unqualified atom";
-        exit 1
+        raise Exit
 
   let first_functor_atom_arg : t -> string =
    fun { content; loc } ->
@@ -211,12 +211,12 @@ module Expr = struct
         | None ->
             Logger.error loc
               "Tried to extract first functor atom argument from an atom";
-            exit 1
+            raise Exit
         | Some (_, first) -> extract_unqualified_atom first)
     | _ ->
         Logger.error loc
           "Tried to extract first functor atom argument from a non Functor";
-        exit 1
+        raise Exit
 
   let is_functor : t -> bool = function
     | { content = Functor _; _ } -> true

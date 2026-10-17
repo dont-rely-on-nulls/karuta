@@ -18,12 +18,16 @@ module type OUTPUT = sig
     string -> Location.region option -> string -> string
 
   val format_debug_message : string -> string -> string
+  val in_file : string -> (unit -> 'a) -> 'a
   val export : string -> unit
+  val flush : unit -> unit
 end
 
 module Make (Output : OUTPUT) = struct
   open Level
 
+  let flush = Output.flush
+  let in_file = Output.in_file
   let current_min_level = External.Dynvar.dnew ~init:Level.default ()
 
   let with_min_level : 'a. Level.t -> (unit -> 'a) -> 'a =
@@ -82,8 +86,15 @@ module Make (Output : OUTPUT) = struct
       print_endline @@ Output.format_debug_message prefix msg
 end
 
-module Terminal = Make (
+module type WRITE = sig
+  val export : string -> unit
+  val flush : unit -> unit
+  val in_file : string -> (unit -> 'a) -> 'a
+end
+
+module Terminal (Write : WRITE) = Make (
   struct
+    include Write
     open Format
 
     type color = Red | Yellow | Blue | Magenta | Foreground
@@ -151,8 +162,6 @@ module Terminal = Make (
           spaces
           (markers ^ " " ^ msg)
 
-    let export = Stdlib.print_string
-
     let format_diverse_message (prefix : string) (color : color)
         (locMay : Location.region option) (msg : string) : string =
       match locMay with
@@ -194,9 +203,32 @@ module type API = sig
 
   (* TODO: Debug should receive location but location of THE SOURCE CODE OF THE COMPILER instead of Karuta source code. *)
   val debug : string -> unit
+  val flush : unit -> unit
+  val in_file : string -> (unit -> 'a) -> 'a
 end
 
-let current = External.Dynvar.dnew ~init:(module Terminal : API) ()
+module Log = struct
+  let current_file : string External.Dynvar.dynvar = External.Dynvar.dnew ()
+  let in_file filename = External.Dynvar.dlet current_file filename
+
+  let rec swap a f =
+    let v = Atomic.get a in
+    if Atomic.compare_and_set a v (f v) then () else swap a f
+
+  let messages_by_file : string FT.t BatMap.String.t Atomic.t =
+    Atomic.make BatMap.String.empty
+
+  let export msg =
+    let filename = External.Dynvar.dref current_file in
+    swap messages_by_file
+      (BatMap.String.modify_def FT.empty filename (Fun.flip FT.snoc msg))
+
+  let flush () =
+    Atomic.get messages_by_file
+    |> BatMap.String.iter (fun _ msg -> FT.iter Stdlib.print_endline msg)
+end
+
+let current = External.Dynvar.dnew ~init:(module Terminal (Log) : API) ()
 let with_logger logger = External.Dynvar.dlet current logger
 let get_current_module () = External.Dynvar.dref current
 
@@ -235,6 +267,14 @@ let info loc msg =
 let debug msg =
   let (module L) = get_current_module () in
   L.debug msg
+
+let flush () =
+  let (module L) = get_current_module () in
+  L.flush ()
+
+let in_file filename =
+  let (module L) = get_current_module () in
+  L.in_file filename
 
 let with_min_level level =
   let (module L) = get_current_module () in

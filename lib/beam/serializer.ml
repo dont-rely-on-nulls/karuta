@@ -130,7 +130,7 @@ module Expression = struct
     | Comprehension _ | Bitstring _ | Block _ | Case _ | Catch _ | If _
     | Match _ | Receive _ | Record _ | Try _ ->
         Logger.simply_unreachable "TODO";
-        exit 1
+        raise Exit
 end
 
 module Attribute = struct
@@ -161,5 +161,5 @@ module Attribute = struct
         ^ "}"
     | _ ->
         Logger.simply_unreachable "TODO";
-        exit 1
+        raise Exit
 end

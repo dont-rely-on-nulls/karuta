@@ -14,14 +14,14 @@ let compile :
   | Signature _ ->
       Logger.error directive_loc
         "TODO: Sakura has special treatment for signatures";
-      exit 1
+      raise Exit
   | TargetSpecific (Ephemeral _declarations) ->
       Logger.error directive_loc
         "TODO: ephemeral directive is not yet implemented";
-      exit 1
+      raise Exit
   | TargetSpecific (Constraint _declarations) ->
       Logger.error directive_loc
         "TODO: constraint directive is not yet implemented";
-      exit 1
+      raise Exit
   | TargetSpecific (Persisted declarations) ->
       BatMap.foldi Declaration.compile_persisted declarations compiler

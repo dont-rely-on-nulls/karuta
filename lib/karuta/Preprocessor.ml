@@ -38,7 +38,7 @@ let renamer ({ head = { elements; _ }; body } : Ast.ParserClause.decl) :
                  | _ ->
                      Logger.simply_unreachable
                        "This cannot be anything other than a functor";
-                     exit 1 )
+                     raise Exit )
                (Ast.Expr.rename_vars
                @@
                let discards = ref 0 in
@@ -89,7 +89,7 @@ let preprocess_directive :
                         Logger.simply_info @@ external_dep
                         ^ " is a builtin module"
                       else Logger.error previous_loc "Previous import";
-                      exit 1
+                      raise Exit
                   | None ->
                       {
                         imports =
@@ -98,17 +98,17 @@ let preprocess_directive :
             }
       | None ->
           Logger.error head.loc "Directive 'import' cannot be an empty functor";
-          exit 1
+          raise Exit
       | _ ->
           Logger.error head.loc
             "Directive 'import' cannot have multiple expressions within";
-          exit 1)
+          raise Exit)
     else (
       Logger.error head.loc "Directive 'import' cannot have a body";
-      exit 1)
+      raise Exit)
   else (
     Logger.error head.loc "Unknown Karuta directive";
-    exit 1)
+    raise Exit)
 
 let preprocess_query (loc : Location.region)
     (calls : Ast.Expr.func Location.with_location FT.t)

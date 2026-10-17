@@ -45,7 +45,7 @@ let rec compile : type state mods.
           Logger.error loc
             "There's already a module or signatures with the same name. \
              Modules and signatures share their scope.";
-          exit 1
+          raise Exit
       | `Undefined _ ->
           let compiled_module =
             compiler |> initialize_from_parent module_ initialize_nested
@@ -99,7 +99,7 @@ let rec compile : type state mods.
       | _ ->
           Logger.simply_unreachable
             "Take care of non-oks when doing lookups in modules";
-          exit 1)
+          raise Exit)
   | Module
       ({
          name = { content = module_name; loc = module_loc } as name;
@@ -117,7 +117,7 @@ let rec compile : type state mods.
           Logger.error loc
             "There's already a module or signatures with the same name. \
              Modules and signatures share their scope.";
-          exit 1
+          raise Exit
       | `Undefined _, `Ok signature ->
           let comptime =
             compiler |> initialize_from_parent module_ initialize_nested
@@ -139,16 +139,16 @@ let rec compile : type state mods.
           }
       | `Undefined _, `UnexpectedModule { loc; _ } ->
           Logger.error loc "Modules are not signatures";
-          exit 1
+          raise Exit
       | `Undefined _, `Undefined { loc; _ } ->
           Logger.error loc
             "This name is undefined when looking up for signatures";
-          exit 1
+          raise Exit
       | `Undefined _, `UnexpectedSignature loc ->
           Logger.error loc
             "You cannot inspect other signatures when qualifying signatures. \
              Only modules can be inspected.";
-          exit 1)
+          raise Exit)
   | Signature
       { name = { content = name; loc }; body = { declarations; directives } }
     -> (
@@ -157,7 +157,7 @@ let rec compile : type state mods.
           Logger.error loc "Failed to define signature";
           Logger.error existing.loc
             "There's already a module or signature with the same name";
-          exit 1
+          raise Exit
       | None ->
           let compiled_sig =
             compiler
@@ -173,4 +173,4 @@ let rec compile : type state mods.
       Logger.simply_unreachable
         "Shared directive compilation should not handle target specific \
          directives";
-      exit 1
+      raise Exit
