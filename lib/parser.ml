@@ -760,7 +760,7 @@ let parse (filename : string) (source : string) =
     }
     |> top_level @>> capture
        @@ fun file ->
-       is_not some (fun () _ ->
+       is_not (is some) (fun () _ ->
            parser_clause @> function
            | Ok _ ->
                Logger.simply_unreachable
