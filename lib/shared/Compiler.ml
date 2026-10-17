@@ -358,7 +358,7 @@ module Make (Config : COMPILER_CONFIG) :
     let compile_one filepath body acc =
       let module_name = ModuleName.of_filepath filepath in
       let step () =
-        Logger.Log.in_file filepath @@ fun () ->
+        Logger.in_file filepath @@ fun () ->
         try
           Option.some
           @@ step
