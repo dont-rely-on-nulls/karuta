@@ -44,5 +44,5 @@ let ( let* ) o f =
   match o with
   | Error err ->
       Logger.simply_error @@ display err;
-      exit 1
+      raise Exit
   | Ok x -> f x

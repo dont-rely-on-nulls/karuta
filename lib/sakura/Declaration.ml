@@ -5,10 +5,6 @@ let compile _ _ _ = failwith "TODO"
 (* TODO: collect names of every declaration in every schema so we can do
   the check on program initialization. *)
 
-(* let rec swap a f = *)
-(*   let v = Atomic.get a in *)
-(*   if Atomic.compare_and_set a v (f v) then () else swap a f *)
-
 let compile_persisted ({ name; arity } as head : Ast.head)
     ({ content = { original_arg_list; _ }; loc } :
       Ast.Module.decl Location.with_location)
@@ -27,7 +23,7 @@ let compile_persisted ({ name; arity } as head : Ast.head)
         "Cannot use an underscore when defining an argument for a Sakura \
          persisted predicate"
       else "Every argument in a Sakura predicate definition must be a variable";
-      exit 1);
+      raise Exit);
   let full_name =
     Shared.Compiler.join_qualifiers
     @@ FT.snoc

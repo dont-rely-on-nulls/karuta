@@ -18,7 +18,7 @@ let check_extensions (ext : BatSet.String.t) (files : string list) : unit =
     if not @@ BatSet.String.mem (Filename.extension file) ext then (
       Logger.simply_error @@ display (InvalidExtension file);
       Logger.simply_info @@ ext_string ();
-      exit 1)
+      raise Exit)
   in
   List.iter check_single_extension files
 

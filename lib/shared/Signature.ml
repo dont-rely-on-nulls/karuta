@@ -43,7 +43,7 @@ end = struct
     Logger.error sig_loc "Signature defined here";
     Logger.simply_error
     @@ "The following predicates are missing implementation: " ^ error_msg;
-    exit 1
+    raise Exit
 
   let comptimes (provided : comptime env) (required : sig_env)
       (module_loc : Location.region) (sig_loc : Location.region) : unit =
@@ -68,7 +68,7 @@ end = struct
     Logger.error sig_loc "Signature defined here";
     Logger.simply_error @@ "The following are missing implementation: "
     ^ error_msg;
-    exit 1
+    raise Exit
 end
 
 let rec ascribe_to_module
@@ -103,7 +103,7 @@ let rec ascribe_to_module
             Logger.simply_unreachable
               "Every key in public_comptimes must be in \
                given_signature.modules at this point.";
-            exit 1
+            raise Exit
         | Some nested_sig -> (
             match (v.content, nested_sig.content) with
             | Signature module_signature, (PlainSignature _ as rhs) ->
@@ -114,21 +114,21 @@ let rec ascribe_to_module
                   Logger.error v.loc
                     "Nested signatures cannot differ from implemented ones";
                   Logger.error nested_sig.loc "Signature here";
-                  exit 1)
+                  raise Exit)
             | Signature _, ModuleSignature _ ->
                 Logger.error nested_sig.loc
                   "Signature mandates this to be a module";
                 Logger.error v.loc "Found a signature in module implementation";
-                exit 1
+                raise Exit
             | (Signature _ | Module _), Abstract _ ->
                 Logger.unreachable v.loc
                   "Abstract signatures and modules are not implemented yet";
-                exit 1
+                raise Exit
             | Module _, PlainSignature _ ->
                 Logger.error nested_sig.loc
                   "Signature mandates this to be a signature";
                 Logger.error v.loc "Found a module instead";
-                exit 1
+                raise Exit
             | Module nested_module, ModuleSignature nested_mod_sig ->
                 Location.fmap (fun m -> Module m)
                 @@ ascribe_to_module
@@ -178,7 +178,7 @@ let rec compile_nested : type a mods directive.
           Logger.error sig_loc
             "This name does not actually refer to a signature.";
           Logger.error module_loc "Definition in scope.";
-          exit 1
+          raise Exit
         in
         let module_of_abstract =
           (* TODO: handle this correctly *)
@@ -201,12 +201,12 @@ let rec compile_nested : type a mods directive.
         | `UnexpectedModule { loc = outer; _ }
         | `Ok { content = ModuleSignature _; loc = outer } ->
             report_module_as_signature module_signature_loc outer
-        | `UnexpectedSignature _ -> exit 1
+        | `UnexpectedSignature _ -> raise Exit
         | `Undefined _ ->
             Logger.error module_signature_loc
               "Undefined signature name. Remember: the order matters (for now \
                😉).";
-            exit 1)
+            raise Exit)
     | Module
         {
           name = { content = atom_module_name; _ };
@@ -223,7 +223,7 @@ let rec compile_nested : type a mods directive.
             Logger.error loc "Failed to define module within a signature";
             Logger.error existing.loc
               "There's already a module or signature with the same name";
-            exit 1
+            raise Exit
         | None ->
             let compiled_module_sig =
               compile_nested sig_loc inline_signature compiler
@@ -248,26 +248,26 @@ let rec compile_nested : type a mods directive.
         Logger.error sig_loc
           "This signature turns your module into a giant unit. Did you forget \
            to add a body?";
-        exit 1
+        raise Exit
     | Module { signature = None; _ } ->
         Logger.error next.loc
           "Module declarations in signatures must have a signature.";
-        exit 1
+        raise Exit
     | Module { directives; declarations; _ }
       when (not (FT.is_empty directives)) || not (BatMap.is_empty declarations)
       ->
         Logger.error next.loc
           "Module declarations in signatures cannot have a body.";
-        exit 1
+        raise Exit
     | Module { signature = Some _; _ } ->
         Logger.simply_unreachable
           "The compiler should have handled all possible combinations for \
            modules inside signatures at this point.";
-        exit 1
+        raise Exit
     | TargetSpecific _ ->
         Logger.simply_unreachable
           "Target specific directive should not be handled here";
-        exit 1
+        raise Exit
   in
   Location.add_loc
     (FT.fold_left directive_step

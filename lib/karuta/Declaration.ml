@@ -29,7 +29,7 @@ let compile_declaration_bodies
     (clauses : Ast.Module.decl Location.with_location FT.t) =
   if FT.is_empty clauses then (
     Logger.simply_unreachable "Predicates must have at least one body";
-    exit 1)
+    raise Exit)
   else
     let open Beam in
     let compile_single_body
@@ -52,11 +52,11 @@ let compile_declaration_bodies
         let make_function { content = { Ast.Expr.name; elements } as call; loc }
             =
           match Lookup.predicate compiler.env name (FT.size elements) with
-          | `Undefined _ -> exit 1
+          | `Undefined _ -> raise Exit
           | `UnexpectedSignature loc ->
               Logger.error loc
                 "Expected module name but found a signature instead";
-              exit 1
+              raise Exit
           | `Ok { original_module } when original_module = env.qualifier ->
               let args = FT.map compile_expr elements in
               Builder.call (Builder.atom @@ Ast.Expr.extract_func_label call)

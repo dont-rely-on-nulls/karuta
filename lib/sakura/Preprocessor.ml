@@ -7,7 +7,7 @@ let init_mods = Fun.id
 let preprocess_declaration
     ({ loc; _ } : Ast.ParserClause.decl Location.with_location) _ =
   Logger.error loc "Declarations are only allowed inside Sakura directives";
-  exit 1
+  raise Exit
 
 let parser_to_internal (declaration : Ast.ParserClause.decl) :
     string * Ast.Module.decl =
@@ -45,11 +45,11 @@ let preprocess_directive :
     | None ->
         Logger.error head.loc
           "Sakura-exclusive directives can only have one body";
-        exit 1
+        raise Exit
     | Some (remaining, _) when FT.size remaining <> 0 ->
         Logger.error head.loc
           "Sakura-exclusive directives can only have one body";
-        exit 1
+        raise Exit
     | Some (_, body) ->
         let open Location in
         f
@@ -58,10 +58,10 @@ let preprocess_directive :
                match content with
                | Ast.ParserClause.QueryConjunction _ ->
                    Logger.error loc "Cannot have query inside Sakura directive";
-                   exit 1
+                   raise Exit
                | Ast.ParserClause.Directive _ ->
                    Logger.error loc "Sakura directives are not nestable";
-                   exit 1
+                   raise Exit
                | Declaration decl ->
                    let name, decl = parser_to_internal decl in
                    Shared.Preprocessor.group_declaration name
@@ -79,11 +79,11 @@ let preprocess_directive :
        preprocess_bodies (fun env -> Constraint env)
      else (
        report_error_cases head.loc head.content.name;
-       exit 1))
+       raise Exit))
 
 let preprocess_query (loc : Location.region)
     (_ : Ast.Expr.func Location.with_location FT.t)
     (_ : (Types.directives, Types.mods) Ast.Module.module_body) :
     (Types.directives, Types.mods) Ast.Module.module_body =
   Logger.error loc "Queries are not allowed in Sakura";
-  exit 1
+  raise Exit

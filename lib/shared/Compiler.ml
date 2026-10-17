@@ -152,7 +152,7 @@ module Options = struct
   let initialize ?(sakura = None) ~artifact () : t = { sakura; artifact }
 end
 
-type externals = compiled_module Lazy.t env
+type externals = compiled_module option Lazy.t env
 
 type 'state t = {
   state : 'state;
@@ -272,7 +272,9 @@ module Make (Config : COMPILER_CONFIG) :
         parent;
         externals =
           BatMap.String.add "karuta"
-            (Location.fmap Lazy.from_val karuta_builtins)
+            (Location.fmap
+               (Fun.compose Lazy.from_val Option.some)
+               karuta_builtins)
             externals;
         filename;
         header =
@@ -305,7 +307,7 @@ module Make (Config : COMPILER_CONFIG) :
       | Some { loc = lhs_loc; _ }, Some { loc = rhs_loc; _ } ->
           Logger.error rhs_loc "Attempt to shadow a predicate";
           Logger.error lhs_loc "Outer definition here";
-          exit 1
+          raise Exit
     in
     let local_predicates : predicate PredicateMap.t =
       declarations |> BatMap.enum
@@ -356,15 +358,19 @@ module Make (Config : COMPILER_CONFIG) :
     let compile_one filepath body acc =
       let module_name = ModuleName.of_filepath filepath in
       let step () =
-        step
-          ( body,
-            initialize
-              {
-                persist = persist.beam;
-                filename = filepath;
-                externals = Eio.Promise.await env;
-                mods = body.target_specific;
-              } )
+        Logger.Log.in_file filepath @@ fun () ->
+        try
+          Option.some
+          @@ step
+               ( body,
+                 initialize
+                   {
+                     persist = persist.beam;
+                     filename = filepath;
+                     externals = Eio.Promise.await env;
+                     mods = body.target_specific;
+                   } )
+        with Exit -> None
       in
       let new_module = Lazy.from_fun step in
       BatMap.String.add module_name

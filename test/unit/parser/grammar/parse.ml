@@ -65,23 +65,11 @@ let succeeds_with_mixed_top_level_clauses () =
   in
   check int "returns four clauses" 4 (FT.size parsed)
 
-(* TODO: get rid of this forking mechanism
-   This is here because the only way to tell if the parse function
-   failed is by checking the exit code.*)
 let expect_parse_failure source =
-  match Unix.fork () with
-  | 0 ->
-      ignore (parse_source source);
-      Stdlib.exit 0
-  | -1 -> fail "could not fork a child process"
-  | pid -> (
-      match Unix.waitpid [] pid with
-      | _, Unix.WEXITED 1 -> ()
-      | _, Unix.WEXITED status -> failf "expected exit status 1, got %d" status
-      | _, Unix.WSIGNALED signal ->
-          failf "parser was terminated by signal %d" signal
-      | _, Unix.WSTOPPED signal ->
-          failf "parser was stopped by signal %d" signal)
+  try
+    ignore @@ parse_source source;
+    fail @@ "Fail: " ^ source
+  with Exit -> ()
 
 let fails_on_incomplete_declaration () = expect_parse_failure "first()"
 

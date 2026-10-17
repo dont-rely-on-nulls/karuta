@@ -24,7 +24,7 @@ let check_dependency_cycle (filepath : string) (f : unit -> 'a) : 'a =
            (FT.print ~first:"Dependency cycle detected:\n" ~sep:"\n→  " ~last:""
               BatIO.nwrite)
            (FT.snoc cycle_start filepath);
-      exit 1
+      raise Exit
   | None ->
       External.Dynvar.dlet files_being_compiled
         {
@@ -62,11 +62,15 @@ let nested_env ({ env; state = { imports }; externals; filename; _ } : t) :
     with
     | None, _ ->
         Logger.error import_loc "Attempt to import a file that does not exist";
-        exit 1
+        raise Exit
     | Some { content = dependency; loc }, None ->
         let compiled () =
           {
-            Location.content = Shared.Compiler.Module (Lazy.force dependency);
+            Location.content =
+              Shared.Compiler.Module
+                (match Lazy.force dependency with
+                | Some v -> v
+                | None -> raise Exit);
             loc = import_loc;
           }
         in
@@ -87,7 +91,7 @@ let nested_env ({ env; state = { imports }; externals; filename; _ } : t) :
           Logger.simply_error @@ "Attempt to shadow " ^ import_name
           ^ ", which is a builtin"
         else Logger.error loc "Previous definition here";
-        exit 1
+        raise Exit
   in
   {
     env with

@@ -7,4 +7,4 @@ let compile (query : Ast.Module.query_ref Location.with_location option)
   | Some _ ->
       Logger.simply_unreachable
         "Compiling a query for Sakura means the its preprocessor is defective";
-      exit 1
+      raise Exit

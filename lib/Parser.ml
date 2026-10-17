@@ -788,4 +788,4 @@ let parse (filename : string) (source : string) =
           @@ "We were expecting a '"
           ^ String.escaped expected_prefix
           ^ "', but got this instead.");
-      exit 1
+      raise Exit

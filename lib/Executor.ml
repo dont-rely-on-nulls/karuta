@@ -19,12 +19,12 @@ let parse : string -> Ast.ParserClause.t FT.t attempt = function
 (*       in *)
 (*       Some (compiler, computer) *)
 
-(* FIXME: hook up dependency information and sort the file list before compiling *)
 (* TODO: compilation cache *)
 let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
     (persist : Shared.Compiler.Persist.both) (filepaths : string list) :
     unit attempt =
   Eio_main.run @@ fun _ ->
+  at_exit Logger.flush;
   let sakura_files, karuta_files =
     FT.partition Sakura.Preprocessor.is_sakura_file @@ FT.of_list filepaths
   in
@@ -45,9 +45,11 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
           exit 1
       | Some { root_module; _ } ->
           let preprocess filepath =
-            Error.map
-            @@ Sakura.preprocess_clauses
-                 (Shared.Preprocessor.initialize filepath)
+            try
+              Error.map
+              @@ Sakura.preprocess_clauses
+                   (Shared.Preprocessor.initialize filepath)
+            with Exit -> exit 1
           in
           let sakura_filename = root_module ^ ".skr" in
           sakura_files
@@ -62,7 +64,9 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
     let* preprocessed = acc in
     let preprocessor = Shared.Preprocessor.initialize filepath in
     let* { module_ } =
-      filepath |> parse |> Error.map @@ Karuta.preprocess_clauses preprocessor
+      try
+        filepath |> parse |> Error.map @@ Karuta.preprocess_clauses preprocessor
+      with Exit -> exit 1
     in
     ok (BatMap.String.add filepath module_ preprocessed)
   in
@@ -94,10 +98,10 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
             Lazy.force content
           with
           (* TODO: allow the use of queries from nested modules *)
-          | { query = None; _ } ->
+          | Some { query = None; _ } ->
               Logger.error loc "Module does not have a query";
               exit 1
-          | { query = Some query; _ } ->
+          | Some { query = Some query; _ } ->
               Ok
                 (Executable.emit
                    {
@@ -107,7 +111,8 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
                        (if FT.is_empty sakura_files then None else sakura);
                      filename;
                      root_module;
-                   })))
+                   })
+          | None -> exit 1))
 
 let run ?(limit : int option = None)
     (executable : Shared.Compiler.Options.executable)
