@@ -4,6 +4,7 @@ module Form = Beam.Core.Form (Beam.Core.Erlang)
 let parse : string -> Ast.ParserClause.t FT.t attempt = function
   | "" -> error Error.EmptyFilepath
   | str ->
+      Logger.in_file str @@ fun () ->
       In_channel.with_open_text str @@ fun inc ->
       if in_channel_length inc = 0 then error @@ Error.EmptyFile str
       else ok @@ Parser.parse str (In_channel.input_all inc)
@@ -54,7 +55,6 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
           let sakura_filename = root_module ^ ".skr" in
           sakura_files
           |> Error.fold (fun parsed filepath ->
-              Logger.in_file filepath @@ fun () ->
               parse filepath |> Error.map (FT.append parsed))
           |> preprocess sakura_filename
           ||> fun { module_ } ->
@@ -65,7 +65,6 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
     let* preprocessed = acc in
     let preprocessor = Shared.Preprocessor.initialize filepath in
     let* { module_ } =
-      Logger.in_file filepath @@ fun () ->
       try
         filepath |> parse |> Error.map @@ Karuta.preprocess_clauses preprocessor
       with Exit -> exit 1
