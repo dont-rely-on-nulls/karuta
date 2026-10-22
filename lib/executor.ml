@@ -38,19 +38,21 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
             "Tried to compile Sakura files without a configuration";
           exit 1
       | Some { root_module; _ } ->
-          let compiled =
-            try Sakura.compile_files persist sakura_files BatMap.String.empty
-            with Exit -> exit 1
+          let create_builtin modules =
+            Shared.Compiler.builtin_module ~name:root_module ~predicates:[]
+              ~modules
           in
-          Shared.Compiler.builtin_module ~name:root_module ~predicates:[]
-            ~modules:
-              (BatMap.String.map
-                 (Location.fmap
-                    (Fun.compose
-                       (function
-                         | None -> exit 1 | Some v -> Shared.Compiler.Module v)
-                       Lazy.force))
-                 compiled)
+          let eager_create_module =
+            let create_module = function
+              | None -> exit 1
+              | Some v -> Shared.Compiler.Module v
+            in
+            Location.fmap @@ Fun.compose create_module Lazy.force
+          in
+          (try Sakura.compile_files persist sakura_files BatMap.String.empty
+           with Exit -> exit 1)
+          |> BatMap.String.map eager_create_module
+          |> create_builtin
           |> Location.fmap (Fun.compose Lazy.from_val Option.some)
           |> BatMap.String.singleton root_module
   in
