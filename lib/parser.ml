@@ -713,9 +713,11 @@ let rec parser_clause :
 
 (** Grammar rule:
 
-    directive <- func (whitespace_and_comments left_curly_brace top_level
-    right_curly_brace whitespace_and_comments)* period whitespace_and_comments
-*)
+    directive <- func whitespace_and_comments directive_bodies period
+    whitespace_and_comments
+
+    directive_bodies <- !left_curly_brace / left_curly_brace top_level
+    right_curly_brace whitespace_and_comments directive_bodies *)
 and directive :
     'e.
     ( (Ast.Expr.func Location.with_location
@@ -723,16 +725,21 @@ and directive :
       Location.with_location,
       ([> expr_errors ] as 'e) )
     parser =
- fun state ->
-  state
-  |> func @>> capture
-     @@ fun header ->
-     star
-       (whitespace_and_comments @&& left_curly_brace @&& top_level @>> ignoring
-      @@ right_curly_brace @&& whitespace_and_comments)
-     @>> ignoring (period @&& whitespace_and_comments)
-     @> replace
-     @@ fun bodies -> Location.add_loc (header, bodies) Location.(header.loc)
+  let rec directive_bodies bodies_acc =
+    (is_not left_curly_brace (fun _ _ _ -> `UnexpectedEOF) @&& return bodies_acc)
+    @|| left_curly_brace @&& top_level @>> capture
+    @@ fun body ->
+    right_curly_brace @&& whitespace_and_comments
+    @&& directive_bodies (FT.snoc bodies_acc body)
+  in
+  fun state ->
+    state
+    |> func @>> capture
+       @@ fun header ->
+       whitespace_and_comments @&& directive_bodies FT.empty @>> capture
+       @@ fun bodies ->
+       period @&& whitespace_and_comments
+       @&& return (Location.add_loc (header, bodies) Location.(header.loc))
 
 (** Grammar rule:
 
