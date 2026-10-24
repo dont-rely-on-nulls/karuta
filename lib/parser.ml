@@ -726,11 +726,13 @@ and directive :
       ([> expr_errors ] as 'e) )
     parser =
   let rec directive_bodies bodies_acc =
-    (is_not left_curly_brace (fun _ _ _ -> `UnexpectedEOF) @&& return bodies_acc)
-    @|| left_curly_brace @&& top_level @>> capture
-    @@ fun body ->
-    right_curly_brace @&& whitespace_and_comments
-    @&& directive_bodies (FT.snoc bodies_acc body)
+    ifte left_curly_brace
+      (snd @> top_level @>> capture
+      @@ fun body ->
+      (right_curly_brace @> Result.map_error (fun a -> a))
+      @&& whitespace_and_comments
+      @&& directive_bodies (FT.snoc bodies_acc body))
+      (return bodies_acc)
   in
   fun state ->
     state
@@ -789,13 +791,18 @@ let parse (filename : string) (source : string) =
             "File ended, but we expected it to continue; check for unbalanced \
              delimiters"
       | `WrongPrefix ({ coordinate; filename }, expected_prefix) ->
-          Logger.error
-            {
-              filename;
-              startl = coordinate;
-              endl = Location.plus_str expected_prefix coordinate;
-            }
-          @@ "We were expecting a \""
-          ^ String.escaped expected_prefix
-          ^ "\", but got this instead.");
+          let we_were_expecting =
+            "We were expecting a \"" ^ String.escaped expected_prefix
+          in
+          if coordinate.offset < String.length source then
+            Logger.error
+              {
+                filename;
+                startl = coordinate;
+                endl = Location.plus_str expected_prefix coordinate;
+              }
+            @@ we_were_expecting ^ "\", but got this instead."
+          else
+            Logger.simply_error @@ we_were_expecting
+            ^ "\", but reached the end of the file.");
       raise Exit
