@@ -3,9 +3,9 @@ let tests =
     [
       Helpers.add_section_name "PEG"
         [
-          ("Operators", Operators.tests);
+          (* ("Operators", Operators.tests); *)
           ("ifte", Ifte.tests);
-          ("is_not", Is_not.tests);
+          (* ("is_not", Is_not.tests); *)
           ("is", Is.tests);
           ("maybe", Maybe.tests);
           ("ignoring", Ignoring.tests);

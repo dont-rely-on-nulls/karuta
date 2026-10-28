@@ -1,0 +1,51 @@
+start <- top_level eof
+
+top_level <- whitespace_and_comments clauses
+
+clauses <-
+	!(holds / func) /
+	holds whitespace_and_comments directive whitespace_and_comments clauses /
+	func whitespace_and_comments (query / declaration) whitespace_and_comments clauses
+	
+directive <- func whitespace_and_comments directive_bodies period
+
+directive_bodies <-
+	!left_curly_brace /
+	left_curly_brace top_level right_curly_brace whitespace_and_comments directive_bodies
+		    
+query <-
+	question_mark
+  	/ comma whitespace_and_comments func whitespace_and_comments query
+  	
+declaration <- (!holds / holds whitespace_and_comments declaration_body) period
+
+declaration_body <- func whitespace_and_comments (!comma / comma whitespace_and_comments declaration_body)
+
+func <- func_label (
+	!(left_bracket / left_paren) / prolog_elements / karuta_elements
+	)
+
+func_label <- (atom colon)* (quoted_atom / atom)
+
+prolog_elements <- left_paren whitespace_and_comments (right_paren / single_element prolog_elements_loop)
+   
+prolog_elements_loop <-
+	right_paren / comma whitespace_and_comments single_element prolog_elements_loop
+
+karuta_elements <- left_bracket whitespace_and_comments (right_bracket / single_element karuta_elements_loop)
+   
+karuta_elements_loop <-
+	right_bracket / comma whitespace_and_comments single_element karuta_elements_loop
+	
+single_element <- expr whitespace_and_comments
+
+expr <- integer / variable / func / list
+
+list <- left_bracket whitespace_and_comments (right_bracket / expr whitespace_and_comments list_tail)
+
+list_tail <-
+  right_bracket /
+  pipe whitespace_and_comments expr whitespace_and_comments right_bracket /
+  comma whitespace_and_comments expr whitespace_and_comments list_tail
+
+eof <- !.
