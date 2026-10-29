@@ -7,19 +7,21 @@ clauses <-
 	holds whitespace_and_comments directive whitespace_and_comments clauses /
 	func whitespace_and_comments (query / declaration) whitespace_and_comments clauses
 	
-directive <- func whitespace_and_comments directive_bodies period
+directive <- func whitespace_and_comments directive_bodies
 
 directive_bodies <-
-	!left_curly_brace /
+	period /
 	left_curly_brace top_level right_curly_brace whitespace_and_comments directive_bodies
 		    
 query <-
 	question_mark
   	/ comma whitespace_and_comments func whitespace_and_comments query
   	
-declaration <- (!holds / holds whitespace_and_comments declaration_body) period
 
-declaration_body <- func whitespace_and_comments (!comma / comma whitespace_and_comments declaration_body)
+declaration <- period / holds whitespace_and_comments func whitespace_and_comments declaration_body
+
+declaration_body <- period / comma whitespace_and_comments func whitespace_and_comments declaration_body
+
 
 func <- func_label (
 	!(left_bracket / left_paren) / prolog_elements / karuta_elements
