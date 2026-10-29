@@ -66,13 +66,13 @@ let rec signature_equal lhs rhs =
   | Abstract lhs, Abstract rhs -> lhs = rhs
   | _ -> false
 
-let builtin_module name predicates =
+let builtin_module ~predicates ~name ~modules =
   let qualifier = (FT.empty, name) in
   Location.add_loc
     {
       qualifier;
       query = None;
-      modules = BatMap.String.empty;
+      modules;
       predicates =
         PredicateMap.of_list
         @@ List.map
@@ -85,21 +85,22 @@ let builtin_module name predicates =
 let builtin_module_names = BatSet.String.of_list [ "karuta"; "sakura" ]
 
 let karuta_builtins : compiled_module Location.with_location =
-  builtin_module "karuta"
-    [
-      { name = "t-dee"; arity = 0 };
-      { name = "t-dum"; arity = 0 };
-      { name = "int"; arity = 1 };
-      { name = "nat"; arity = 1 };
-      { name = "eq"; arity = 2 };
-      { name = "leq"; arity = 2 };
-      { name = "lt"; arity = 2 };
-      { name = "neg"; arity = 2 };
-      { name = "minus"; arity = 3 };
-      { name = "mult"; arity = 3 };
-      { name = "plus"; arity = 3 };
-      { name = "divmod"; arity = 4 };
-    ]
+  builtin_module ~name:"karuta" ~modules:BatMap.String.empty
+    ~predicates:
+      [
+        { name = "t-dee"; arity = 0 };
+        { name = "t-dum"; arity = 0 };
+        { name = "int"; arity = 1 };
+        { name = "nat"; arity = 1 };
+        { name = "eq"; arity = 2 };
+        { name = "leq"; arity = 2 };
+        { name = "lt"; arity = 2 };
+        { name = "neg"; arity = 2 };
+        { name = "minus"; arity = 3 };
+        { name = "mult"; arity = 3 };
+        { name = "plus"; arity = 3 };
+        { name = "divmod"; arity = 4 };
+      ]
 
 module type LOOKUP = sig
   type t
@@ -226,11 +227,7 @@ module type COMPILER = sig
     Ast.ParserClause.t FT.t ->
     (directives, mods) Preprocessor.output
 
-  val compile_files :
-    Persist.both ->
-    (directives, mods) Ast.Module.module_body BatMap.String.t ->
-    externals
-
+  val compile_files : Persist.both -> BatSet.String.t -> externals -> externals
   val initialize : mods initialization -> state t
 end
 
@@ -239,6 +236,13 @@ module Make (Config : COMPILER_CONFIG) :
     with type state = Config.state
     with type directives = Config.directives
     with type mods = Config.mods = struct
+  include (
+    Preprocessor.Make
+      (Config.Preprocessor) :
+        Preprocessor.PREPROCESSOR
+          with type directives = Config.directives
+          with type mods = Config.mods)
+
   type state = Config.state
   type directives = Config.directives
   type mods = Config.mods
@@ -338,28 +342,32 @@ module Make (Config : COMPILER_CONFIG) :
         (FT.append compiler.header compiler.output);
     compiler.env
 
-  let preprocess_clauses =
-    let module TargetPreprocessor :
-      Preprocessor.PREPROCESSOR
-        with type directives = Config.directives
-        with type mods = Config.mods =
-      Preprocessor.Make (Config.Preprocessor)
-    in
-    TargetPreprocessor.preprocess_clauses
+  let parse = function
+    | "" ->
+        Logger.simply_error "Input filepath is empty";
+        raise Exit
+    | str ->
+        In_channel.with_open_text str @@ fun inc ->
+        if in_channel_length inc = 0 then (
+          Logger.simply_error @@ "Input file '" ^ str ^ "' is empty";
+          raise Exit)
+        else Parser.parse str (In_channel.input_all inc)
 
-  let compile_files :
-      Persist.both ->
-      (directives, mods) Ast.Module.module_body BatMap.String.t ->
-      externals =
-   fun persist preprocessed ->
+  let compile_files : Persist.both -> BatSet.String.t -> externals -> externals
+      =
+   fun persist filenames precompiled ->
     let (env, bind_env) : externals Eio.Promise.t * externals Eio.Promise.u =
       Eio.Promise.create ()
     in
-    let compile_one filepath body acc =
+    let compile_one filepath acc =
       let module_name = Module_name.of_filepath filepath in
       let step () =
         Logger.in_file filepath @@ fun () ->
         try
+          let preprocessor = Preprocessor.initialize filepath in
+          let { Preprocessor.module_ = body } =
+            filepath |> parse |> preprocess_clauses preprocessor
+          in
           Option.some
           @@ step
                ( body,
@@ -380,8 +388,8 @@ module Make (Config : COMPILER_CONFIG) :
              Location.origin)
         acc
     in
-    BatMap.String.empty
-    |> BatMap.String.fold compile_one preprocessed
+    precompiled
+    |> BatSet.String.fold compile_one filenames
     |> Eio.Promise.resolve bind_env;
     Eio.Promise.await env
 end
