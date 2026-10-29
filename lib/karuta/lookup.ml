@@ -18,18 +18,19 @@ let rec print_module externals =
 
 let nested_env ({ env; state = { imports }; externals; filename; _ } : t) :
     Shared.Compiler.compiled_module =
+  Eio.Switch.run @@ fun sw ->
   let import_without_shadowing import_name (import_loc : Location.region)
-      (module_env : Shared.Compiler.comptime Shared.Compiler.env) :
-      Shared.Compiler.comptime Shared.Compiler.env =
+      additions =
     match
       ( BatMap.String.find_opt import_name externals,
-        BatMap.String.find_opt import_name module_env )
+        BatMap.String.find_opt import_name env.modules )
     with
     | None, _ ->
         Logger.error import_loc "Attempt to import a file that does not exist";
         raise Exit
     | Some { content = dependency; loc }, None ->
         let compiled () =
+          Eio.Fiber.fork_promise ~sw @@ fun () ->
           {
             Location.content =
               Shared.Compiler.Module
@@ -39,15 +40,15 @@ let nested_env ({ env; state = { imports }; externals; filename; _ } : t) :
             loc = import_loc;
           }
         in
-        BatMap.String.add import_name
-          (if Lazy.is_done dependency then compiled ()
-           else check_dependency_cycle loc.filename compiled)
-          module_env
+        FT.snoc additions
+          ( import_name,
+            if Lazy.is_done dependency then compiled ()
+            else check_dependency_cycle loc.filename compiled )
     | Some _, Some { Location.loc; _ } when import_loc = Location.dummy ->
         (* If the import does not have a location, that means the compiler inserted it
            for a builtin module. This is inserted in all scopes, so we must not error out.
            If the user tries to shadow it there will be an error elsewhere. *)
-        module_env
+        additions
     | Some _, Some { Location.loc; _ } ->
         Logger.error import_loc
           "Attempt to shadow an existing name with an import";
@@ -58,7 +59,14 @@ let nested_env ({ env; state = { imports }; externals; filename; _ } : t) :
         else Logger.error loc "Previous definition here";
         raise Exit
   in
+  let additions =
+    BatMap.String.fold import_without_shadowing imports FT.empty
+  in
   {
     env with
-    modules = BatMap.String.fold import_without_shadowing imports env.modules;
+    modules =
+      FT.fold_left
+        (fun acc (name, import) ->
+          BatMap.String.add name (Eio.Promise.await_exn import) acc)
+        env.modules additions;
   }
