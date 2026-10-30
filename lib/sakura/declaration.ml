@@ -47,12 +47,21 @@ let compile_persisted ({ name; arity } as head : Ast.head)
                   (Fun.compose Beam.Builder.atom Ast.Expr.extract_variable)
              |> BatList.of_enum)
              (List.map Beam.Builder.var args);
+           (* TODO: the branch is always master for now *)
+           (* TODO: Multi group namespace needs to be treated at some point *)
            Beam.Builder.list_expr
-             (* TODO: Multi group namespace needs to be treated at some point *)
-             [
-               Beam.Builder.atom "Base";
-               Beam.Builder.string @@ "sakura:" ^ full_name;
-             ];
+           @@ List.map Beam.Builder.string
+                [
+                  "system";
+                  "branch";
+                  "master";
+                  "multigroup";
+                  FT.head_exn (Shared.Compiler.ft_of_original_module qualifier);
+                  "schema";
+                  "default";
+                  "relation";
+                  full_name;
+                ];
          ]
   in
   let export = Beam.Builder.Attribute.export [ (name, arity) ] in
