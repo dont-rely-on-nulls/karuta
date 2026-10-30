@@ -1,41 +1,6 @@
 include Types
 include Shared.Lookup
 
-type dependent = { index : int }
-
-type cycle_detection = {
-  dependents : dependent BatMap.String.t;
-  trace : string FT.t;
-}
-
-let files_being_compiled : cycle_detection External.Dynvar.dynvar =
-  External.Dynvar.dnew
-    ~init:{ dependents = BatMap.String.empty; trace = FT.empty }
-    ()
-
-let check_dependency_cycle (filepath : string) (f : unit -> 'a) : 'a =
-  let { dependents; trace } = External.Dynvar.dref files_being_compiled in
-  match BatMap.String.find_opt filepath dependents with
-  | Some { index } ->
-      Logger.with_min_level Logger.Level.Error @@ fun () ->
-      let _, cycle_start = FT.split_at trace index in
-      Logger.simply_error
-      @@ BatIO.to_string
-           (FT.print ~first:"Dependency cycle detected:\n" ~sep:"\n→  " ~last:""
-              BatIO.nwrite)
-           (FT.snoc cycle_start filepath);
-      raise Exit
-  | None ->
-      External.Dynvar.dlet files_being_compiled
-        {
-          dependents =
-            BatMap.String.add filepath
-              { index = BatMap.String.cardinal dependents }
-              dependents;
-          trace = FT.snoc trace filepath;
-        }
-        f
-
 type t = state Shared.Compiler.t
 
 let rec print_module externals =

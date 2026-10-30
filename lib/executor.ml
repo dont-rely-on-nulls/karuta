@@ -1,14 +1,6 @@
 open Error
 module Form = Beam.Core.Form (Beam.Core.Erlang)
 
-let parse : string -> Ast.ParserClause.t FT.t attempt = function
-  | "" -> error Error.EmptyFilepath
-  | str ->
-      Logger.in_file str @@ fun () ->
-      In_channel.with_open_text str @@ fun inc ->
-      if in_channel_length inc = 0 then error @@ Error.EmptyFile str
-      else ok @@ Parser.parse str (In_channel.input_all inc)
-
 (* let eval ((compiler, computer) : Compiler.t * Machine.t) : *)
 (*     (Compiler.t * Machine.t) option = *)
 (*   match compiler.entry_point with *)
@@ -27,7 +19,8 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
   Eio_main.run @@ fun _ ->
   at_exit Logger.flush;
   let sakura_files, karuta_files =
-    FT.partition Sakura.Preprocessor.is_sakura_file @@ FT.of_list filepaths
+    BatSet.String.partition Sakura.Preprocessor.is_sakura_file
+    @@ BatSet.String.of_list filepaths
   in
   let module Lookup = Karuta.Lookup in
   let module Sakura : Shared.Compiler.COMPILER =
@@ -36,8 +29,8 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
   let module Karuta : Shared.Compiler.COMPILER =
     Shared.Compiler.Make (Karuta.Module)
   in
-  let* sakura_modules =
-    if FT.is_empty sakura_files then Error.ok @@ BatMap.String.empty
+  let sakura_modules : Shared.Compiler.externals =
+    if BatSet.String.is_empty sakura_files then BatMap.String.empty
     else
       match sakura with
       | None ->
@@ -45,44 +38,27 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
             "Tried to compile Sakura files without a configuration";
           exit 1
       | Some { root_module; _ } ->
-          let preprocess filepath =
-            try
-              Error.map
-              @@ Sakura.preprocess_clauses
-                   (Shared.Preprocessor.initialize filepath)
-            with Exit -> exit 1
+          let create_builtin modules =
+            Shared.Compiler.builtin_module ~name:root_module ~predicates:[]
+              ~modules
           in
-          let sakura_filename = root_module ^ ".skr" in
-          sakura_files
-          |> Error.fold (fun parsed filepath ->
-              parse filepath |> Error.map (FT.append parsed))
-          |> preprocess sakura_filename
-          ||> fun { module_ } ->
-          Error.ok (BatMap.String.singleton sakura_filename module_)
-  in
-  let preprocess_one_karuta acc filepath =
-    let open Error in
-    let* preprocessed = acc in
-    let preprocessor = Shared.Preprocessor.initialize filepath in
-    let* { module_ } =
-      try
-        filepath |> parse |> Error.map @@ Karuta.preprocess_clauses preprocessor
-      with Exit -> exit 1
-    in
-    ok (BatMap.String.add filepath module_ preprocessed)
-  in
-  let* preprocessed_files =
-    FT.fold_left preprocess_one_karuta (ok BatMap.String.empty) karuta_files
+          let eager_create_module =
+            let create_module = function
+              | None -> exit 1
+              | Some v -> Shared.Compiler.Module v
+            in
+            Location.fmap @@ Fun.compose create_module Lazy.force
+          in
+          (try Sakura.compile_files persist sakura_files BatMap.String.empty
+           with Exit -> exit 1)
+          |> BatMap.String.map eager_create_module
+          |> create_builtin
+          |> Location.fmap (Fun.compose Lazy.from_val Option.some)
+          |> BatMap.String.singleton root_module
   in
   let compiled_modules =
-    (match sakura_modules |> BatMap.String.keys |> BatList.of_enum with
-      | [ sakura_path ] -> Sakura.compile_files persist sakura_modules
-      | [] -> BatMap.String.empty
-      | _ :: _ ->
-          Logger.simply_unreachable
-            "We always work with a single logical Sakura file";
-          exit 1)
-    |> fun compiled -> Karuta.compile_files persist preprocessed_files
+    try Karuta.compile_files persist karuta_files sakura_modules
+    with Exit -> exit 1
   in
   match artifact with
   | Library -> Ok ()
@@ -109,7 +85,8 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
                      persist = persist.executable;
                      query = query.content;
                      sakura =
-                       (if FT.is_empty sakura_files then None else sakura);
+                       (if BatSet.String.is_empty sakura_files then None
+                        else sakura);
                      filename;
                      root_module;
                    })

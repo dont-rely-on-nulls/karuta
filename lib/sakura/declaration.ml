@@ -25,7 +25,7 @@ let compile_persisted ({ name; arity } as head : Ast.head)
       else "Every argument in a Sakura predicate definition must be a variable";
       raise Exit);
   let full_name =
-    Shared.Compiler.join_qualifiers
+    BatIO.to_string (FT.print ~first:"" ~last:"" ~sep:":" BatIO.nwrite)
     @@ FT.snoc
          (FT.tail_exn (Shared.Compiler.ft_of_original_module qualifier))
          name
