@@ -1,94 +1,34 @@
 (defmodule sakura
-  (export (ask 2)
-          (get-response' 3)
-          (deserialize 1)))
+  (export (ask 2)))
 
-(defun serialize (term) (lfe_io_pretty:term term))
-(defun deserialize (str) (lfe_io:read_string str))
-
-(defun keyvals->map (keyvals)
-  (lists:foldl
-    (lambda (elem acc)
-      (let (((list key val) elem))
-        (mset acc key val)))
-    (map)
-    keyvals))
-
-(defun normalize-attribute-name (kv)
-  (let (((list attribute value) kv))
-    (clj:-> attribute
-      (atom_to_list)
-      (string:titlecase)
-      (list_to_atom)
-      (list value))))
-
-(defun row->map (row)
-  (clj:->> row
-    (lists:map (fun normalize-attribute-name 1))
-    (keyvals->map)))
-
-(defun rows->maps (rows)
-  (lists:map (fun row->map 1) rows))
-
-(defun cursor-sexp->map (cursor)
-  (case cursor
-    ((cons 'cursor keyvals)
-     (maps:update_with
-       'rows
-       (fun rows->maps 1)
-       (list)
-       (keyvals->map keyvals)))))
-
-(defun create-session (socket receive-timeout query)
-  (let ((session-creation-payload (serialize (list 'scl query))))
-    (maybe
-      (?= 'ok (gen_tcp:send socket session-creation-payload))
-      (?= (tuple 'ok raw-data) (gen_tcp:recv socket 0 receive-timeout))
-      (?= (tuple 'ok (list deserialized-session)) (deserialize (binary_to_list raw-data)))
-      ; TODO: How do we identify that this receive is about the above send? We need to have some nonce about it.
-      ; TODO: deserialized-session is not a map anymore
-      (tuple 'ok (mref deserialized-session 'cursor))
-      (else
-        (((tuple 'error error)) (erlang:error error))))))
-
-(defun get-response (socket receive-timeout session-id)
-  (let ((serialized-fetch (serialize `(scl (fetch ,session-id)))))
-    (maybe
-      (?= 'ok (gen_tcp:send socket serialized-fetch))
-      (?= (tuple 'ok raw-data) (gen_tcp:recv socket 0 receive-timeout))
-      ; TODO: map -> list
-      (?= (tuple 'ok (list (map 'has_more more 'row rows))) (deserialize raw-data))
-      (case rows
-        ('() '())
-        ((list row)
-         (case more
-           ('true (cons row (lambda () (get-response socket receive-timeout session-id))))
-           ('false (list row))))
-        (_ (erlang:error "Unreachable: ask primitive should only fetch one piece of data at a time")))
-      (else
-        (((tuple 'error error)) (erlang:error error))))))
-
-(defun get-response' (socket receive-timeout query)
-  ;; This is temporary until SCL is working again.
-  (maybe
-    (?= 'ok (gen_tcp:send socket query))
-    (?= (tuple 'ok raw-data) (gen_tcp:recv socket 0 receive-timeout))
-    (?= (tuple 'ok (list cursor-sexp)) (deserialize (binary_to_list raw-data)))
-    (mref (cursor-sexp->map cursor-sexp) 'rows)
-    (else
-      (((tuple 'error error)) (erlang:error error)))))
-
-(defun ask (pattern raw-query)
+(defun ask (pattern path)
+  "What a persisted Sakura predicate compiles to: reads the relation at
+Path through RNT's fol evaluator and unifies each row with Pattern."
   (lambda (state)
-    (let* (((map 'db_config (map 'socket socket 'timeouts timeout-map)) state)
-          (receive-timeout (maps:get 'receive timeout-map (* 5 1000)))
-          (query (serialize `(drl ,raw-query))))
-     (maybe
-       ; TODO: uncomment this when SCL is back.
-       ; (?= (tuple 'ok session-id) (create-session socket receive-timeout query))
-       (funcall
-         (karuta:bind-results pattern
-           (lambda () (get-response' socket receive-timeout query)))
-         state)
-       (else
-         (((tuple 'error error)) (erlang:error error)))))))
+    (let ((plan (fol:base (lists:map (fun unicode:characters_to_binary 1) path))))
+      (funcall (karuta:bind-results pattern (rows (rnt:evaluate #"fol" (fol:source plan))))
+               state))))
+
+(defun rows (relation)
+  "An RNT relation as a Karuta lazy stream, fetching 64 rows only when
+the stream is pulled that far."
+  (lambda ()
+    (let (((tuple tuples rest) (funcall relation 64)))
+      (lists:foldr (lambda (tuple stream) (cons (solution tuple) stream))
+                   (if (=:= rest 'done) '() (rows rest))
+                   tuples))))
+
+(defun solution
+  "An RNT tuple in the shape compiled predicates unify against:
+capitalised attribute names to Karuta values."
+  (((tuple _ attributes))
+   (maps:fold (lambda (name value row)
+                (mset row (binary_to_atom (string:titlecase name)) (karuta-value value)))
+              #m()
+              attributes)))
+
+(defun karuta-value
+  "Strings come back as atoms, which is what Karuta compares and prints.
+This creates atoms from data, so keep relations bounded for now."
+  ((value) (when (is_binary value)) (binary_to_atom value))
+  ((value) value))

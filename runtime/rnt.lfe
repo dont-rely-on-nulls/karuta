@@ -119,3 +119,36 @@ ephemeral relation, as a lazy fun(Limit)."
   "Runs a program without registering it, for plans built on the fly
 such as the FOL query behind a persisted Sakura predicate."
   (relation (request (list #\E (sized evaluator) source))))
+
+(defun relation (id)
+  "Wraps an RNT cursor in the same fun(Limit) -> {Tuples, Rest | done}
+shape RNT reads from the node, so both directions page alike."
+  (lambda (limit)
+    (let (((tuple rows exhausted) (request (binary #\N (id (size 64)) (limit (size 32))))))
+      (tuple rows (if exhausted 'done (relation id))))))
+
+(defun request (frame)
+  "Sends a request to RNT and blocks for its answer."
+  (send frame)
+  (reply))
+
+(defun reply ()
+  "Waits for RNT's answer, serving RNT's own requests in between: while
+RNT answers us it may need batches from images running here."
+  (case (frame)
+    ((binary #\o) 'ok)
+    ((binary #\r (id (size 64))) id)
+    ((binary #\b exhausted (rows binary))
+     (tuple (lc ((<= (binary (n (size 32)) (term binary (size n))) rows))
+              (binary_to_term term))
+            (=:= exhausted 1)))
+    ((binary #\e (message binary)) (error (tuple 'rnt message)))
+    (frame (serve frame) (reply))))
+
+(defun encode-path (segments)
+  "A path on the wire: the segment count, then each sized segment."
+  (cons (binary ((length segments) (size 16))) (lists:map (fun sized 1) segments)))
+
+(defun sized (bytes)
+  "A string on the wire: 16-bit length, then the bytes."
+  (binary ((byte_size bytes) (size 16)) (bytes binary)))
