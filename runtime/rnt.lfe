@@ -75,3 +75,47 @@ for example a compiled Karuta query registering itself as an image."
   (lc ((<- (tuple mod _) (code:all_loaded))
        (erlang:function_exported mod 'rnt_init 0))
     (call mod 'rnt_init)))
+
+(defun load (name beam)
+  "Loads the .beam an image carries, unless that exact code is already
+loaded, so the image RNT stores is the source of truth for the code."
+  (let (((tuple 'ok (tuple _ md5)) (beam_lib:md5 beam)))
+    (if (andalso (erlang:module_loaded name) (=:= (call name 'module_info 'md5) md5))
+      name
+      (progn
+        (code:purge name)
+        (let (((tuple 'module _) (code:load_binary name (++ (atom_to_list name) ".beam") beam)))
+          name)))))
+
+(defun fetch (id limit)
+  "Pulls up to Limit tuples from a running image and keeps the rest of
+its stream for the next fetch."
+  (case (get (tuple 'poll id))
+    ('done (batch '() 'true))
+    (relation
+     (let (((tuple rows rest) (funcall relation limit)))
+       (put (tuple 'poll id) rest)
+       (batch rows (=:= rest 'done))))))
+
+(defun batch (rows exhausted)
+  "Encodes a b frame: the exhausted flag, then each {Type, #{Name =>
+Value}} tuple as a sized term_to_binary."
+  (list* #\b (if exhausted 1 0)
+         (lc ((<- row rows))
+           (let ((term (term_to_binary row)))
+             (list (binary ((byte_size term) (size 32))) term)))))
+
+(defun define (path evaluator source)
+  "Registers Source as a program of Evaluator (karuta:beam, fol, ...)
+at Path in RNT's tree, so it can be invoked later by anyone."
+  (request (list #\D (encode-path path) (sized evaluator) source)))
+
+(defun invoke (path)
+  "Runs the program registered at Path and hands back its result, an
+ephemeral relation, as a lazy fun(Limit)."
+  (relation (request (list #\X (encode-path path)))))
+
+(defun evaluate (evaluator source)
+  "Runs a program without registering it, for plans built on the fly
+such as the FOL query behind a persisted Sakura predicate."
+  (relation (request (list #\E (sized evaluator) source))))
