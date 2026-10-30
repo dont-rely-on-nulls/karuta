@@ -14,12 +14,19 @@
 ;; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 (defmodule rnt
-  (export (start 0)))
+  (export (start 0) (define 3) (invoke 1) (evaluate 2) (relation 2) (image 2)))
 
 (defun start ()
+  "RNT boots the node with rnt:start(). It turns stdin/stdout, the pipe
+RNT spawned us with, into a port and serves it forever. Logs go to
+stderr, since stdout belongs to RNT."
+  (logger:remove_handler 'default)
+  (logger:add_handler 'default 'logger_std_h (map 'config (map 'type 'standard_error)))
+  (put 'rnt-port (open_port #(fd 0 1) '(binary #(packet 4) eof)))
   (loop))
 
 (defun loop ()
+  "The node's idle state: wait for RNT to ask something, answer, repeat."
   (serve (frame))
   (loop))
 
@@ -43,29 +50,22 @@ program becomes an RNT condition, instead of killing the entire node."
   "Writes one frame to RNT, with {packet 4} adds the length prefix."
   (port_command (get 'rnt-port) frame))
 
-
 (defun serve
   "Answers to RNT requests where `h` runs the initialization procedures,
 i prepares a program image (loaded lazily, so load errors bubble on
 the first fetch), f reads the next batch and c forgets about it."
   (((binary #\h))
-   (send (answering
-	  (lambda ()
-	    (progn (initialize)
-		   #"o")))))
+   (send (answering (lambda () (initialize) #"o"))))
   (((binary #\i (id (size 64))
-	    (m (size 16))
-	    (b (size 32))
-	    (f (size 16))
-	    (func binary (size f))
-	    (b (size 32))
-	    (beam binary (size b))))
+            (m (size 16)) (mod binary (size m))
+            (f (size 16)) (func binary (size f))
+            (b (size 32)) (beam binary (size b))))
    (put (tuple 'poll id)
-	(lambda (limit)
-	  (let ((name (load (erlang:binary_to_atom func) beam)))
-	    (funcall (call name (binary_to_existing_atom func)) limit)))))
+        (lambda (limit)
+          (let ((name (load (binary_to_atom mod) beam)))
+            (funcall (call name (binary_to_existing_atom func)) limit)))))
   (((binary #\f (id (size 64)) (limit (size 32))))
-   (send (answerinng (lambda () (fetch id limit)))))
+   (send (answering (lambda () (fetch id limit)))))
   (((binary #\c (id (size 64))))
    (erase (tuple 'poll id))))
 
@@ -152,3 +152,58 @@ RNT answers us it may need batches from images running here."
 (defun sized (bytes)
   "A string on the wire: 16-bit length, then the bytes."
   (binary ((byte_size bytes) (size 16)) (bytes binary)))
+
+(defun relation (mod goal)
+  "Turns Mod's query into the fun(Limit) RNT pages, so a compiled
+query can run as a karuta:beam program image."
+  (batches (atom_to_binary mod) (karuta:run-lazy #m() goal)))
+
+(defun batches (type stream)
+  "One batch of up to Limit solutions as RNT tuples; the rest of the
+stream waits for the next fetch."
+  (lambda (limit)
+    (let (((tuple solutions rest) (split limit stream)))
+      (tuple (lists:map (lambda (solution) (tuple type (attributes solution))) solutions)
+             (if (=:= rest '()) 'done (batches type rest))))))
+
+(defun split (n stream)
+  "Like take/2, but also returns what is left of the stream."
+  (if (=< n 0)
+    (tuple '() stream)
+    (case (karuta:pull stream)
+      ((tuple 'ok solution next)
+       (let (((tuple solutions rest) (split (- n 1) next)))
+         (tuple (cons solution solutions) rest)))
+      ((tuple 'error 'no-result) (tuple '() '())))))
+
+(defun attributes (solution)
+  "A solution (query variable => value) as an RNT attribute map."
+  (maps:fold (lambda (variable value row)
+               (mset row (attribute-name variable) (attribute-value value)))
+             #m()
+             solution))
+
+(defun attribute-name (variable)
+  "Query variables are capitalised, RNT attributes are lower case;
+sakura:solution undoes this."
+  (string:lowercase (atom_to_binary variable)))
+
+(defun attribute-value
+  "RNT only holds strings and integers: atoms become binaries, and
+lists, tuples and unbound variables are refused for now."
+  ((value) (when (is_atom value)) (atom_to_binary value))
+  ((value) (when (is_integer value)) value)
+  ((value) (error (tuple 'unrepresentable value))))
+
+(defun image (mod variables)
+  "Called by a compiled module's rnt_init/0: registers its query in RNT
+at \\karuta\\program\\<module>, carrying the module's own .beam as the
+image. Every attribute is declared as a string until Karuta has types."
+  (let* (((tuple 'ok beam) (file:read_file (code:which mod)))
+         (heading (maps:from_list
+                    (lc ((<- variable variables))
+                      (tuple (attribute-name variable) #"string"))))
+         (program (tuple (atom_to_binary mod) #"rnt_query" beam heading)))
+    (define (list #"karuta" #"program" (atom_to_binary mod))
+            #"karuta:beam"
+            (term_to_binary program))))
