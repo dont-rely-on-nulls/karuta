@@ -1,0 +1,6 @@
+book[sicp, abelson].
+book[dbsystems, date].
+book[words, mitchel].
+book[babel, mitchel].
+
+book[Title, Author]?
