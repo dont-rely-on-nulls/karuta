@@ -7,7 +7,13 @@ type parser_state = {
 }
 (** Type representing an immutable parser state. *)
 
-type ('a, 'e) parser = parser_state -> ('a * parser_state, 'e) result
+type parser_error = {
+  region : Location.region;
+  expected : string;
+  gotten : string;
+}
+
+type 'a parser = parser_state -> ('a * parser_state, parser_error) result
 (** The parser type. A function taking the current parser state and returning
     either an output and a new state, or an error. *)
 
@@ -27,19 +33,15 @@ let ( @> ) : 'a 'b 'c. ('a -> 'b) -> ('b -> 'c) -> 'a -> 'c =
     parsers. Corresponds to the following parsing expression:
 
     l r *)
-let ( @>> ) :
-    'a 'b 'e. ('a, 'e) parser -> ('a -> ('b, 'e) parser) -> ('b, 'e) parser =
+let ( @>> ) : 'a 'b 'e. 'a parser -> ('a -> 'b parser) -> 'b parser =
  fun prefix f state ->
   Result.bind (prefix state) (fun (a, state') -> f a state')
 
-let parser_map : 'a 'b 'e. ('a -> 'b) -> ('a, 'e) parser -> ('b, 'e) parser =
+let parser_map : 'a 'b 'e. ('a -> 'b) -> 'a parser -> 'b parser =
  fun f p state -> p state |> Result.map (fun (a, state') -> (f a, state'))
 
-let parser_map_error :
-    'a 'error_in 'error_out.
-    ('error_in -> 'error_out) ->
-    ('a, 'error_in) parser ->
-    ('a, 'error_out) parser =
+let parser_map_error : (parser_error -> parser_error) -> 'a parser -> 'a parser
+    =
  fun f p state -> p state |> Result.map_error f
 
 (** [replace f] lifts f so it can apply to the output of a parser.
@@ -60,11 +62,7 @@ let replace :
     Corresponds to the following parsing expression:
 
     test consequent / !test alternative *)
-let ifte :
-    ('a, 'error_predicate) parser ->
-    ('a -> ('b, 'error_branch) parser) ->
-    ('b, 'error_branch) parser ->
-    ('b, 'error_branch) parser =
+let ifte : 'a parser -> ('a -> 'b parser) -> 'b parser -> 'b parser =
  fun test consequent alternative state ->
   state |> test
   |> Result.fold
@@ -77,8 +75,7 @@ let ifte :
     Corresponds to the following parsing expression:
 
     "" *)
-let return : 'a 'e. 'a -> ('a, 'e) parser =
- fun output state -> Ok (output, state)
+let return : 'a -> 'a parser = fun output state -> Ok (output, state)
 
 (** [l @|| r] constructs a parser that attempts to parse l. On failure, the
     parser backtracks and tries r instead.
@@ -103,8 +100,7 @@ let ( @|| ) l r = ifte l return r
     Corresponds to the following parsing expression:
 
     l r *)
-let ( @&& ) : ('a, 'e) parser -> ('b, 'e) parser -> ('b, 'e) parser =
- fun l r -> l @>> fun _ -> r
+let ( @&& ) : 'a parser -> 'b parser -> 'b parser = fun l r -> l @>> fun _ -> r
 
 (** [l @&&& r] constructs a parser that attempts to parse l followed by r,
     discarding the output of r.
@@ -112,7 +108,7 @@ let ( @&& ) : ('a, 'e) parser -> ('b, 'e) parser -> ('b, 'e) parser =
     Corresponds to the following parsing expression:
 
     l r *)
-let ( @&&& ) : ('a, 'e) parser -> ('b, 'e) parser -> ('a, 'e) parser =
+let ( @&&& ) : 'a parser -> 'b parser -> 'a parser =
  fun l r -> l @>> fun a -> r @&& return a
 
 (** A parser succeeds without consuming any input and outputs unit.
@@ -120,10 +116,7 @@ let ( @&&& ) : ('a, 'e) parser -> ('b, 'e) parser -> ('a, 'e) parser =
     Corresponds to the following parsing expression:
 
     "" *)
-let succeed : 'e. (unit, 'e) parser = return ()
-
-(* TODO: should error be unit, argument error or argument function receiving state?  *)
-let fail : ('a, unit) parser = fun state -> Error ()
+let succeed : unit parser = return ()
 
 (** [is_not p] constructs a parser that attempts to parse p. On success, the
     parser then fails. On failure, the parser backtracks and succeeds without
@@ -132,8 +125,12 @@ let fail : ('a, unit) parser = fun state -> Error ()
     Corresponds to the following parsing expression:
 
     !p *)
-let is_not : 'a 'e. ('a, 'e) parser -> ('e, 'a * parser_state) parser =
- fun p state -> match p state with Ok r -> Error r | Error e -> Ok (e, state)
+let is_not : 'a parser -> unit parser =
+ (* TODO: how to deal with dummy errors *)
+ fun p state ->
+  match p state with
+  | Ok r -> Error { gotten = ""; expected = ""; region = Location.dummy }
+  | Error _ -> Ok ((), state)
 
 (** [is p] constructs a parser that attempts to parse p. On success, the parser
     then backtracks and succeeds without consuming input. On failure, the parser
@@ -142,22 +139,10 @@ let is_not : 'a 'e. ('a, 'e) parser -> ('e, 'a * parser_state) parser =
     Corresponds to the following parsing expression:
 
     &p *)
-let is : 'a 'e. ('a, 'e) parser -> ('a, 'e) parser =
+let is : 'a 'e. 'a parser -> 'a parser =
  (* fun p state -> state |> p @>> fun (r, _) -> Ok (r, state) *)
  fun p state ->
   p state |> Result.map (fun (a, _) -> (a, state))
-
-(** [capture f] lifts a function returning a parser so it can apply to a
-    successful parser result.
-
-    Because the grammar does not specify what to do with the results of parsing,
-    this function does not correspond to anything in the grammar. *)
-let capture :
-    'a 'b 'e.
-    ('a -> ('b, 'e) parser) ->
-    'a * parser_state ->
-    ('b * parser_state, 'e) result =
- fun f (result, state) -> f result state
 
 (** [maybe p] constructs a parser that attempts to parse p. On success, the
     parser succeeds. On failure, the parser backtracks and succeeds.
@@ -165,21 +150,8 @@ let capture :
     Corresponds to the following parsing expression:
 
     p? *)
-let maybe : 'a 'el 'er. ('a, 'el) parser -> ('a option, 'er) parser =
+let maybe : 'a parser -> 'a option parser =
  fun p -> ifte p (Option.some @> return) (return None)
-
-(** [ignoring p] augments a parser to capture the output of a previous parser,
-    continue parsing using the state, discard its output and replace it with the
-    captured output.
-
-    Because the grammar does not specify what to do with the results of parsing,
-    this corresponds to the following parsing expression:
-
-    p *)
-let ignoring :
-    'a 'b 'e.
-    ('a, 'e) parser -> 'b * parser_state -> ('b * parser_state, 'e) result =
- fun p -> capture @@ fun result -> p @&& return result
 
 (** [star p] constructs a parser that attempts to parse p repeatedly for as long
     as it succeeds, accumulating its outputs into a BatFingerTree.
@@ -187,7 +159,7 @@ let ignoring :
     Corresponds to the following parsing expression:
 
     p* *)
-let star : 'a 'e 'none. ('a, 'e) parser -> ('a FT.t, 'none) parser =
+let star : 'a parser -> 'a FT.t parser =
  fun p ->
   let rec loop acc =
     ifte p (fun elem -> loop (FT.snoc acc elem)) (return acc)
@@ -217,35 +189,54 @@ open BatSubstring
     characters the parser has advanced. *)
 let stride previous current = size previous - size current
 
+(* TODO: improver parser Ok payload and error *)
+let char_predicate f error_message = function
+  | { remaining; loc } -> (
+      match first remaining with
+      | Some c when f c ->
+          Ok
+            ( (),
+              {
+                remaining = triml 1 remaining;
+                loc = { loc with coordinate = Location.step 1 loc.coordinate };
+              } )
+      | Some _ | None ->
+          Error
+            {
+              gotten =
+                Printf.sprintf "`%s`"
+                  (BatSubstring.first remaining
+                  |> Option.fold ~none:"EOF" ~some:(String.make 1));
+              expected = error_message;
+              region = Location.double loc.filename loc.coordinate;
+            })
+
 (** [some] is a parser that attempts to parse any single character. It fails
     only when there are no more characters to parse.
 
     Corresponds to the following parsing expression:
 
     . *)
-let some : 'e. (unit, ([> `UnexpectedEOF ] as 'e)) parser = function
-  | { remaining; loc } -> (
-      match first remaining with
-      | None -> Error `UnexpectedEOF
-      | Some _ ->
-          Ok
-            ( (),
-              {
-                remaining = triml 1 remaining;
-                loc = { loc with coordinate = Location.step 1 loc.coordinate };
-              } ))
+let some = char_predicate (fun _ -> true) "a character"
 
 (** Grammar rule:
 
     horizontal_whitespace <- (' ' / '\t')+ *)
-let horizontal_whitespace :
-    'e.
-    (unit, ([> `ExpectedHorizontalWhitespace of Location.point ] as 'e)) parser
-    =
+let horizontal_whitespace : unit parser =
  fun { remaining = current; loc } ->
   let remaining = dropl (function ' ' | '\t' -> true | _ -> false) current in
   match stride current remaining with
-  | 0 -> Error (`ExpectedHorizontalWhitespace loc)
+  | 0 ->
+      Error
+        {
+          gotten =
+            Printf.sprintf "`%s`"
+              (BatSubstring.first current
+              |> Option.fold ~none:"EOF" ~some:(String.make 1));
+          (* TODO: improve error message *)
+          expected = "` ` or `\t`";
+          region = Location.double loc.filename loc.coordinate;
+        }
   | dropped ->
       Ok
         ( (),
@@ -266,7 +257,17 @@ let literal l { remaining; loc } =
           remaining = triml (String.length l) remaining;
           loc = { loc with coordinate = Location.plus_str l loc.coordinate };
         } )
-  else Error (`WrongPrefix (loc, l))
+  else
+    Error
+      {
+        gotten =
+          Printf.sprintf "`%s`"
+            (BatSubstring.first remaining
+            |> Option.fold ~none:"EOF" ~some:(String.make 1));
+        (* TODO: improve error message *)
+        expected = Printf.sprintf "`%s`" l;
+        region = Location.double loc.filename loc.coordinate;
+      }
 
 (** Grammar rule:
 
@@ -351,16 +352,18 @@ let holds = literal ":-"
 (** Grammar rule:
 
     line <- newline / (. line / !.) *)
-let rec line : 'e. (unit, 'e) parser =
+let rec line : unit parser =
  fun state -> state |> newline @|| ifte some (fun _ -> line) succeed
 
 (** Grammar rule:
 
     whitespace <- horizontal_whitespace? (newline whitespace / !newline) *)
-let rec whitespace : 'e. (unit, 'e) parser =
+let rec whitespace : unit parser =
  fun state ->
   state
   |> maybe horizontal_whitespace @&& ifte newline (fun _ -> whitespace) succeed
+
+(* TODO: maybe adding a note that for any character that satisfies `is_character` it must also satisfy `is_start` *)
 
 (** [ident_like is_start is_character fallthrough] constructs a parser that
     attempts to parse a sequence of characters where the first character
@@ -385,25 +388,20 @@ let ident_like is_start is_character fallthrough { remaining = current; loc } =
 (** Grammar rule:
 
     atom <- \[a-z\] (\[a-zA-Z0-9\] / '_' / '-')* *)
-let atom :
-    'e.
-    ( string Location.with_location,
-      ([> `UnexpectedEOF | `ExpectedLowercase of Location.point ] as 'e) )
-    parser =
+let atom : string Location.with_location parser =
   ident_like BatChar.is_lowercase
     (fun c -> BatChar.is_letter c || BatChar.is_digit c || c = '_' || c = '-')
     (fun loc -> `ExpectedLowercase loc)
 
 (** Grammar rule:
 
-    variable <- ('_' / \[A-Z\]) (\[a-zA-Z0-9\] / '_')* *)
-let variable :
-    'e.
-    ( string Location.with_location,
-      ([> `ExpectedUppercaseOrUnderscore of Location.point | `UnexpectedEOF ]
-       as
-       'e) )
-    parser =
+    variable <- '_'? \[A-Z\] (\[a-zA-Z0-9\] / '_')* *)
+let variable : string Location.with_location parser =
+  (* _ *)
+  (* _A *)
+  (* _AasdasdaASd123 *)
+  (* fun { remaining; loc } ->
+  failwith "" *)
   ident_like
     (function
       | '_' -> true | c when BatChar.is_uppercase c -> true | _ -> false)
@@ -413,11 +411,7 @@ let variable :
 (** Grammar rule:
 
     quoted_atom <- "'" (!"'" !'\n' .)* "'" *)
-let quoted_atom :
-    'e.
-    ( string Location.with_location,
-      ([> `UnexpectedEOF | `WrongPrefix of Location.point * string ] as 'e) )
-    parser =
+let quoted_atom : 'e. string Location.with_location parser =
  fun { remaining = current; loc } ->
   match getc current with
   | Some ('\'', remaining) ->
@@ -439,11 +433,7 @@ let quoted_atom :
 (** Grammar rule:
 
     integer <- '-'? \[0-9\]+ *)
-let integer :
-    'e.
-    ( int Location.with_location,
-      ([> `NotADigit of Location.point | `UnexpectedEOF ] as 'e) )
-    parser =
+let integer : 'e. int Location.with_location parser =
  fun ({ loc = startl; _ } as state) ->
   let positive_integer { remaining = current; loc = after_minus } =
     match size current with
@@ -476,12 +466,11 @@ let integer :
 
     item_loop <- separator item item_loop / !(separator item) end_delim *)
 let list_of :
-    'a 'e.
-    start_delim:(unit, 'e) parser ->
-    separator:(unit, 'e) parser ->
-    end_delim:(unit, 'e) parser ->
-    ('a, 'e) parser ->
-    ('a FT.t, 'e) parser =
+    start_delim:unit parser ->
+    separator:unit parser ->
+    end_delim:unit parser ->
+    'a parser ->
+    'a FT.t parser =
  fun ~start_delim ~separator ~end_delim item ->
   let open FT in
   let rec loop acc =
@@ -498,15 +487,7 @@ let list_of :
 (** Grammar rule:
 
     func_label <- (atom colon)* (quoted_atom / atom) *)
-let func_label :
-    'e.
-    ( Ast.Expr.func_label Location.with_location,
-      ([> `UnexpectedEOF
-       | `ExpectedLowercase of Location.point
-       | `WrongPrefix of Location.point * string ]
-       as
-       'e) )
-    parser =
+let func_label : 'e. Ast.Expr.func_label Location.with_location parser =
  fun ({ loc = startl; _ } as state) ->
   state
   |> star (atom @&&& colon) @>> fun qualifiers ->
@@ -514,36 +495,51 @@ let func_label :
      fun ({ loc = endl; _ } as state) ->
       Ok (Location.delimit startl endl (qualifiers, label_name), state)
 
-type parser_error = {
-  region : Location.region;
-  expected : string;
-  gotten : string;
-}
+let is_integer_start c = c = '-' || BatChar.is_digit c
+let is_variable_start c = c = '_' || BatChar.is_uppercase c
+let is_func_start c = c = '\'' || BatChar.is_lowercase c
+let is_list_start c = c = '['
 
-type expr_errors =
-  [ `ParserError of parser_error
-  | `ExpectedLowercase of Location.point
-  | `UnexpectedEOF
-  | `WrongPrefix of Location.point * string ]
+let expr_start =
+  char_predicate
+    (fun c ->
+      is_integer_start c || is_variable_start c || is_func_start c
+      || is_list_start c)
+    "expression" (* TODO: expression is not accurate *)
 
 (** Grammar rule:
 
-    expr <- whitespace_and_comments (integer / !integer (variable / !variable
-    (func / !func list))) *)
-let rec expr : 'e. (Ast.Expr.t, ([> expr_errors ] as 'e)) parser =
+    expr <- integer / variable / func / list *)
+let rec expr =
  fun state ->
   state
-  |> whitespace_and_comments
-     @&& ifte integer (Location.fmap Ast.Expr.integer @> return)
-     @@ ifte variable (Location.fmap Ast.Expr.variable @> return)
-     @@ ifte func (Location.fmap Ast.Expr.functorr @> return)
-     @@ list
+  |> ifte
+       (is @@ char_predicate is_integer_start "unreachable")
+       (fun _ -> integer |> parser_map @@ Location.fmap Ast.Expr.integer)
+     @@ ifte
+          (is @@ char_predicate is_variable_start "unreachable")
+          (fun _ -> variable |> parser_map @@ Location.fmap Ast.Expr.variable)
+     @@ ifte
+          (is @@ char_predicate is_func_start "unreachable")
+          (fun _ -> func |> parser_map @@ Location.fmap Ast.Expr.functorr)
+     @@ ifte (is @@ char_predicate is_list_start "unreachable") (fun _ -> list)
+     @@ fun state ->
+     Error
+       {
+         gotten =
+           Printf.sprintf "`%s`"
+             (BatSubstring.first state.remaining
+             |> Option.fold ~none:"EOF" ~some:(String.make 1));
+         (* TODO: improve error message *)
+         expected = "expression";
+         region = Location.double state.loc.filename state.loc.coordinate;
+       }
 
 (** Grammar rule:
 
     whitespace_and_comments <- whitespace (percent line whitespace_and_comments
     / !percent (hash percent expr whitespace_and_comments / !(hash percent))) *)
-and whitespace_and_comments : 'e. (unit, ([> expr_errors ] as 'e)) parser =
+and whitespace_and_comments : unit parser =
  fun state ->
   state
   |> whitespace
@@ -554,13 +550,14 @@ and whitespace_and_comments : 'e. (unit, ([> expr_errors ] as 'e)) parser =
 
 (** Grammar rules:
 
-    list <- left_bracket whitespace_and_comments (right_bracket / !right_bracket
-    expr whitespace_and_comments list_tail)
+    list <- left_bracket whitespace_and_comments (right_bracket / expr
+    whitespace_and_comments list_tail)
 
-    list_tail <- comma whitespace_and_comments expr whitespace_and_comments
-    list_tail / !comma (pipe whitespace_and_comments expr)?
-    whitespace_and_comments right_bracket *)
-and list : 'e. (Ast.Expr.t, ([> expr_errors ] as 'e)) parser =
+    list_tail <- right_bracket / pipe whitespace_and_comments expr
+    whitespace_and_comments right_bracket / comma whitespace_and_comments expr
+    whitespace_and_comments list_tail *)
+and list : 'e. Ast.Expr.t parser =
+ (* DONE *)
  fun ({ loc = startl; _ } as state) ->
   let build_cons (startl : Location.point) (endl : Location.point)
       (prefix : Ast.Expr.t FT.t) (tail : Ast.Expr.t) : Ast.Expr.t =
@@ -579,75 +576,160 @@ and list : 'e. (Ast.Expr.t, ([> expr_errors ] as 'e)) parser =
   in
   let nil startl endl = Location.delimit startl endl Ast.Expr.Nil in
   let rec list_tail acc =
-    ifte comma (fun _ ->
-        whitespace_and_comments @&& expr
-        @>> fun elem ->
-        whitespace_and_comments @&& list_tail @@ FT.snoc acc elem)
-    @@ (maybe (pipe @&& whitespace_and_comments @&& expr)
-       @&&& whitespace_and_comments @&& right_bracket)
-    @>> fun tail_expr ->
-    fun ({ loc = endl; _ } as state) ->
-     Ok
-       ( tail_expr
-         |> Option.fold ~none:(nil startl endl) ~some:Fun.id
-         |> build_cons startl endl acc,
-         state )
+    ifte right_bracket (fun _ ->
+        fun ({ loc = endl; _ } as state) ->
+         Ok (nil startl endl |> build_cons startl endl acc, state))
+    @@ ifte pipe (fun _ ->
+        (whitespace_and_comments @&& expr @&&& whitespace_and_comments
+       @&&& right_bracket)
+        @>> fun tail_expr ->
+        fun ({ loc = endl; _ } as state) ->
+         Ok (build_cons startl endl acc tail_expr, state))
+    @@ ifte comma
+         (fun _ ->
+           (whitespace_and_comments @&& expr @&&& whitespace_and_comments)
+           @>> fun element -> list_tail @@ FT.snoc acc element)
+         (fun state ->
+           Error
+             {
+               gotten =
+                 Printf.sprintf "`%s`"
+                   (BatSubstring.first state.remaining
+                   |> Option.fold ~none:"EOF" ~some:(String.make 1));
+               (* TODO: improve error message *)
+               expected = "`]` or `|` or `,`";
+               region = Location.double state.loc.filename state.loc.coordinate;
+             })
   in
   state
   |> left_bracket @&& whitespace_and_comments
      @&& ifte right_bracket (fun _ ->
          fun ({ loc = endl; _ } as state) -> Ok (nil startl endl, state))
-     @@ expr
-     @>> fun expr -> whitespace_and_comments @&& list_tail (FT.singleton expr)
+     @@ ifte (is expr_start)
+          (fun _ ->
+            (expr @&&& whitespace_and_comments) @>> fun expr ->
+            list_tail (FT.singleton expr))
+          (fun state ->
+            Error
+              {
+                gotten =
+                  Printf.sprintf "`%s`"
+                    (BatSubstring.first state.remaining
+                    |> Option.fold ~none:"EOF" ~some:(String.make 1));
+                (* TODO: improve error message *)
+                expected = "`]` or expression";
+                region = Location.double state.loc.filename state.loc.coordinate;
+              })
 
 (** Grammar rules:
 
-    func <- func_label ((&left_bracket / &left_paren) (prolog_elements /
-    karuta_elements) / !(&left_bracket / &left_paren))
+    func <- func_label (prolog_elements / karuta_elements)?
 
-    single_element <- whitespace_and_comments expr
+    prolog_elements <- left_paren whitespace_and_comments (right_paren /
+    single_element prolog_elements_loop)
 
-    karuta_elements <- left_bracket (whitespace_and_comments right_bracket /
-    !(whitespace_and_comments right_bracket) single_element
-    karuta_elements_loop)
+    prolog_elements_loop <- right_paren / comma whitespace_and_comments
+    single_element prolog_elements_loop
 
-    karuta_elements_loop <- whitespace_and_comments comma expr
-    karuta_elements_loop / !(whitespace_and_comments comma expr)
-    whitespace_and_comments right_bracket
+    karuta_elements <- left_bracket whitespace_and_comments (right_bracket /
+    single_element karuta_elements_loop)
 
-    prolog_elements <- left_paren (whitespace_and_comments right_paren /
-    !(whitespace_and_comments right_paren) single_element prolog_elements_loop)
+    karuta_elements_loop <- right_bracket / comma whitespace_and_comments
+    single_element karuta_elements_loop
 
-    prolog_elements_loop <- whitespace_and_comments comma expr
-    prolog_elements_loop / !(whitespace_and_comments comma expr)
-    whitespace_and_comments right_paren *)
-and func :
-    'e. (Ast.Expr.func Location.with_location, ([> expr_errors ] as 'e)) parser
-    =
+    single_element <- expr whitespace_and_comments *)
+and func : 'e. Ast.Expr.func Location.with_location parser =
+ (* DONE *)
+ (* TODO: create abstraction for elements *)
  fun ({ loc = startl; _ } as state) ->
-  let single_element = whitespace_and_comments @&& expr in
+  let single_element = expr @&&& whitespace_and_comments in
   let karuta_elements =
-    list_of ~start_delim:left_bracket
-      ~separator:(whitespace_and_comments @&& comma)
-      ~end_delim:(whitespace_and_comments @&& right_bracket)
-    @@ single_element
+    let rec loop acc =
+      ifte right_bracket (fun _ -> return acc)
+      @@ ifte comma
+           (fun _ ->
+             (whitespace_and_comments @&& single_element) @>> fun element ->
+             loop (FT.snoc acc element))
+           (fun state ->
+             Error
+               {
+                 gotten =
+                   Printf.sprintf "`%s`"
+                     (BatSubstring.first state.remaining
+                     |> Option.fold ~none:"EOF" ~some:(String.make 1));
+                 (* TODO: improve error message *)
+                 expected = "`]` or `,`";
+                 region =
+                   Location.double state.loc.filename state.loc.coordinate;
+               })
+    in
+    left_bracket @&& whitespace_and_comments
+    @&& ifte right_bracket (fun _ -> return FT.empty)
+    @@ ifte (is expr_start)
+         (fun _ ->
+           single_element @>> fun element -> loop (FT.singleton element))
+         (fun state ->
+           Error
+             {
+               gotten =
+                 Printf.sprintf "`%s`"
+                   (BatSubstring.first state.remaining
+                   |> Option.fold ~none:"EOF" ~some:(String.make 1));
+               (* TODO: improve error message *)
+               expected = "`]` or expression";
+               region = Location.double state.loc.filename state.loc.coordinate;
+             })
   in
   let prolog_elements =
-    list_of ~start_delim:left_paren
-      ~separator:(whitespace_and_comments @&& comma)
-      ~end_delim:(whitespace_and_comments @&& right_paren)
-    @@ single_element
+    let rec loop acc =
+      ifte right_paren (fun _ -> return acc)
+      @@ ifte comma
+           (fun _ ->
+             (whitespace_and_comments @&& single_element) @>> fun element ->
+             loop (FT.snoc acc element))
+           (fun state ->
+             Error
+               {
+                 gotten =
+                   Printf.sprintf "`%s`"
+                     (BatSubstring.first state.remaining
+                     |> Option.fold ~none:"EOF" ~some:(String.make 1));
+                 (* TODO: improve error message *)
+                 expected = "`)` or `,`";
+                 region =
+                   Location.double state.loc.filename state.loc.coordinate;
+               })
+    in
+    left_paren @&& whitespace_and_comments
+    @&& ifte right_paren (fun _ -> return FT.empty)
+    @@ ifte (is expr_start)
+         (fun _ ->
+           single_element @>> fun element -> loop (FT.singleton element))
+         (fun state ->
+           Error
+             {
+               gotten =
+                 Printf.sprintf "`%s`"
+                   (BatSubstring.first state.remaining
+                   |> Option.fold ~none:"EOF" ~some:(String.make 1));
+               (* TODO: improve error message *)
+               expected = "`)` or expression";
+               region = Location.double state.loc.filename state.loc.coordinate;
+             })
   in
   state
   |> func_label @>> fun label ->
-     ifte
-       (is left_bracket @|| is left_paren)
-       (fun _ ->
-         (prolog_elements @|| karuta_elements) @>> fun args ->
+     ifte (is left_paren) (fun _ ->
+         prolog_elements @>> fun args ->
          fun ({ loc = endl; _ } as state) ->
           Ok
-            ( Location.delimit startl endl
-                (Ast.Expr.func Location.(label.content) args),
+            ( Location.delimit startl endl (Ast.Expr.func label.content args),
+              state ))
+     @@ ifte (is left_bracket) (fun _ ->
+         karuta_elements @>> fun args ->
+         fun ({ loc = endl; _ } as state) ->
+          Ok
+            ( Location.delimit startl endl (Ast.Expr.func label.content args),
               state ))
      @@ return (Location.fmap Ast.Expr.atom label)
 
@@ -661,9 +743,7 @@ and func :
 let query :
     'e.
     Ast.Expr.func Location.with_location ->
-    ( Ast.Expr.func Location.with_location FT.t Location.with_location,
-      ([> expr_errors ] as 'e) )
-    parser =
+    Ast.Expr.func Location.with_location FT.t Location.with_location parser =
  (* DONE *)
  fun first_element ->
   let rec query_loop elements =
@@ -674,17 +754,15 @@ let query :
            @>> fun func -> query_loop (FT.snoc elements func))
          (fun state ->
            Error
-             (`ParserError
-                {
-                  gotten =
-                    Printf.sprintf "`%s`"
-                      (BatSubstring.first state.remaining
-                      |> Option.fold ~none:"EOF" ~some:(String.make 1));
-                  (* TODO: improve error message *)
-                  expected = "`?` or `,`";
-                  region =
-                    Location.double state.loc.filename state.loc.coordinate;
-                }))
+             {
+               gotten =
+                 Printf.sprintf "`%s`"
+                   (BatSubstring.first state.remaining
+                   |> Option.fold ~none:"EOF" ~some:(String.make 1));
+               (* TODO: improve error message *)
+               expected = "`?` or `,`";
+               region = Location.double state.loc.filename state.loc.coordinate;
+             })
   in
   query_loop (FT.singleton first_element)
   |> parser_map (fun l -> Location.add_loc l first_element.loc)
@@ -699,9 +777,7 @@ let query :
 let declaration :
     'e.
     Ast.Expr.func Location.with_location ->
-    ( Ast.ParserClause.decl Location.with_location,
-      ([> expr_errors ] as 'e) )
-    parser =
+    Ast.ParserClause.decl Location.with_location parser =
  (* DONE *)
  fun { Location.content = head; loc } ->
   let rec body_loop elements =
@@ -712,17 +788,15 @@ let declaration :
            @>> fun func -> body_loop (FT.snoc elements func))
          (fun state ->
            Error
-             (`ParserError
-                {
-                  gotten =
-                    Printf.sprintf "`%s`"
-                      (BatSubstring.first state.remaining
-                      |> Option.fold ~none:"EOF" ~some:(String.make 1));
-                  (* TODO: improve error message *)
-                  expected = "`.` or `,`";
-                  region =
-                    Location.double state.loc.filename state.loc.coordinate;
-                }))
+             {
+               gotten =
+                 Printf.sprintf "`%s`"
+                   (BatSubstring.first state.remaining
+                   |> Option.fold ~none:"EOF" ~some:(String.make 1));
+               (* TODO: improve error message *)
+               expected = "`.` or `,`";
+               region = Location.double state.loc.filename state.loc.coordinate;
+             })
   in
   ifte period (fun _ -> return FT.empty)
   @@ ifte holds
@@ -733,16 +807,15 @@ let declaration :
          (* TODO: this is actually unreachable, since in `clauses` we lookahead for first tokens of declaration and query,
          it's not the same case in `query` tho, since query is recursive  *)
          Error
-           (`ParserError
-              {
-                gotten =
-                  Printf.sprintf "`%s`"
-                    (BatSubstring.first state.remaining
-                    |> Option.fold ~none:"EOF" ~some:(String.make 1));
-                (* TODO: improve error message *)
-                expected = "`.` or `:-`";
-                region = Location.double state.loc.filename state.loc.coordinate;
-              }))
+           {
+             gotten =
+               Printf.sprintf "`%s`"
+                 (BatSubstring.first state.remaining
+                 |> Option.fold ~none:"EOF" ~some:(String.make 1));
+             (* TODO: improve error message *)
+             expected = "`.` or `:-`";
+             region = Location.double state.loc.filename state.loc.coordinate;
+           })
   |> parser_map (fun body ->
       Location.add_loc { Ast.ParserClause.head; body } loc)
 
@@ -751,10 +824,8 @@ let declaration :
     clauses <- !(holds / func) / holds whitespace_and_comments directive
     whitespace_and_comments clauses / func whitespace_and_comments (query /
     declaration) whitespace_and_comments clauses *)
-let rec clauses :
-    'e.
-    Ast.ParserClause.t FT.t ->
-    (Ast.ParserClause.t FT.t, ([> expr_errors ] as 'e)) parser =
+let rec clauses : 'e. Ast.ParserClause.t FT.t -> Ast.ParserClause.t FT.t parser
+    =
  (* DONE *)
  (* TODO: make it so that clauses doesn't need to take an ACC externally *)
  fun acc state ->
@@ -764,21 +835,24 @@ let rec clauses :
          @>> fun directive ->
          let clause = Location.fmap Ast.ParserClause.directive directive in
          clauses (FT.snoc acc clause))
-     @@ ifte func (fun func ->
-         (whitespace_and_comments
-         @&& ifte
-               (is @@ question_mark @|| comma)
-               (fun () ->
-                 query func
-                 |> parser_map @@ Location.fmap Ast.ParserClause.query)
-               (ifte
-                  (is @@ holds @|| period)
+     @@ ifte
+          (is @@ char_predicate is_func_start "unreachable")
+          (fun _ ->
+            func @>> fun func ->
+            (whitespace_and_comments
+            @&& ifte
+                  (is @@ question_mark @|| comma)
                   (fun () ->
-                    declaration func
-                    |> parser_map @@ Location.fmap Ast.ParserClause.declaration)
-                  (fun state ->
-                    Error
-                      (`ParserError
+                    query func
+                    |> parser_map @@ Location.fmap Ast.ParserClause.query)
+                  (ifte
+                     (is @@ holds @|| period)
+                     (fun () ->
+                       declaration func
+                       |> parser_map
+                          @@ Location.fmap Ast.ParserClause.declaration)
+                     (fun state ->
+                       Error
                          {
                            gotten =
                              Printf.sprintf "`%s`"
@@ -790,9 +864,9 @@ let rec clauses :
                            region =
                              Location.double state.loc.filename
                                state.loc.coordinate;
-                         })))
-         @&&& whitespace_and_comments)
-         @>> fun clause -> clauses (FT.snoc acc clause))
+                         }))
+            @&&& whitespace_and_comments)
+            @>> fun clause -> clauses (FT.snoc acc clause))
      @@ return acc
 
 (** Grammar rule:
@@ -803,10 +877,9 @@ let rec clauses :
     whitespace_and_comments directive_bodies *)
 and directive :
     'e.
-    ( (Ast.Expr.func Location.with_location
-      * Ast.ParserClause.t FT.t Location.with_location FT.t)
-      Location.with_location,
-      ([> expr_errors ] as 'e) )
+    (Ast.Expr.func Location.with_location
+    * Ast.ParserClause.t FT.t Location.with_location FT.t)
+    Location.with_location
     parser =
   (* DONE *)
   let rec directive_bodies bodies_acc =
@@ -818,32 +891,29 @@ and directive :
             state
             |> (right_curly_brace
                |> parser_map_error (fun _ ->
-                   `ParserError
-                     {
-                       gotten =
-                         Printf.sprintf "`%s`"
-                           (BatSubstring.first state.remaining
-                           |> Option.fold ~none:"EOF" ~some:(String.make 1));
-                       (* TODO: improve error message *)
-                       expected = "`}` or `:-` or FUNC";
-                       region =
-                         Location.double state.loc.filename state.loc.coordinate;
-                     }))
+                   {
+                     gotten =
+                       Printf.sprintf "`%s`"
+                         (BatSubstring.first state.remaining
+                         |> Option.fold ~none:"EOF" ~some:(String.make 1));
+                     (* TODO: improve error message *)
+                     expected = "`}` or `:-` or FUNC";
+                     region =
+                       Location.double state.loc.filename state.loc.coordinate;
+                   }))
                @&& whitespace_and_comments
                @&& directive_bodies (FT.snoc bodies_acc body))
          (fun state ->
            Error
-             (`ParserError
-                {
-                  gotten =
-                    Printf.sprintf "`%s`"
-                      (BatSubstring.first state.remaining
-                      |> Option.fold ~none:"EOF" ~some:(String.make 1));
-                  (* TODO: improve error message *)
-                  expected = "`.` or `{`";
-                  region =
-                    Location.double state.loc.filename state.loc.coordinate;
-                }))
+             {
+               gotten =
+                 Printf.sprintf "`%s`"
+                   (BatSubstring.first state.remaining
+                   |> Option.fold ~none:"EOF" ~some:(String.make 1));
+               (* TODO: improve error message *)
+               expected = "`.` or `{`";
+               region = Location.double state.loc.filename state.loc.coordinate;
+             })
   in
   fun state ->
     state
@@ -855,11 +925,8 @@ and directive :
 (** Grammar rule:
 
     top_level <- whitespace_and_comments clauses *)
-and top_level :
-    'e.
-    ( Ast.ParserClause.t FT.t Location.with_location,
-      ([> expr_errors ] as 'e) )
-    parser =
+(* NOTE: since clauses doesn't have an explicit terminator, when the terminator after top_level/clauses fail, the error should mention that besides the terminator being expected, the start of clauses/top_level also was expected *)
+and top_level : 'e. Ast.ParserClause.t FT.t Location.with_location parser =
  (* DONE *)
  fun ({ loc = startl; _ } as state) ->
   state
@@ -881,50 +948,28 @@ let parse (filename : string) (source : string) =
        state
        |> (is_not some
           |> parser_map_error (fun _ ->
-              `ParserError
-                {
-                  gotten =
-                    Printf.sprintf "`%s`"
-                      (BatSubstring.first state.remaining
-                      |> Option.get |> String.make 1);
-                  (* TODO: improve error message *)
-                  expected = "EOF or `:-` or FUNC";
-                  region =
-                    Location.double state.loc.filename state.loc.coordinate;
-                }))
+              {
+                gotten =
+                  Printf.sprintf "`%s`"
+                    (BatSubstring.first state.remaining
+                    |> Option.get |> String.make 1);
+                (* TODO: improve error message *)
+                expected = "EOF or `:-` or FUNC";
+                region = Location.double state.loc.filename state.loc.coordinate;
+              }))
   with
   | Ok (parsed, _) -> parsed.content
-  | Error e ->
-      (match e with
-      | `ParserError { region; gotten; expected } ->
-          Logger.error region
-            (Printf.sprintf "Expected %s, but got %s" expected gotten)
-      | `ExpectedLowercase { filename; coordinate } ->
-          Logger.error
-            (Location.double filename coordinate)
-            "Expected a lower case letter, but got something else"
-      | `UnexpectedEOF ->
-          Logger.simply_error
-            "File ended, but we expected it to continue; check for unbalanced \
-             delimiters"
-      | `WrongPrefix ({ coordinate; filename }, expected_prefix) ->
-          let we_were_expecting =
-            "We were expecting a \"" ^ String.escaped expected_prefix
-          in
-          if coordinate.offset < String.length source then
-            Logger.error
-              {
-                filename;
-                startl = coordinate;
-                endl = Location.plus_str expected_prefix coordinate;
-              }
-            @@ we_were_expecting ^ "\", but got this instead."
-          else
-            Logger.simply_error @@ we_were_expecting
-            ^ "\", but reached the end of the file.");
+  | Error { region; gotten; expected } ->
+      Logger.error region
+        (Printf.sprintf "Expected %s, but got %s" expected gotten);
       raise Exit
 
 (* TODO: bind needs lower precedence than sequencing *)
 (* TODO: logger might have a off by one error when printing the line and characters highlighted *)
 (* TODO: logger needs to print what kind of error it is *)
 (* TODO: abstract `ParserError creation *)
+(* TODO: remember to treat func as non-terminal, that is, with the
+same pattern of checking the first char or literal and commiting or not *)
+(* TODO: variables right now can have a lowercase right after underscore
+make it so it needs to be uppercase *)
+(* TODO: parse a more broad syntax to give better error, for example 'foo':bar, that is error that people are likely to make and specially ones that seem it could be valid, specially when no space are present, which would cause something with no space to be parsed in a non obvious way as two things, it's the same kind of thing as parsing the longest match  *)

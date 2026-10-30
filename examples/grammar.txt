@@ -16,16 +16,12 @@ directive_bodies <-
 query <-
 	question_mark
   	/ comma whitespace_and_comments func whitespace_and_comments query
-  	
 
 declaration <- period / holds whitespace_and_comments func whitespace_and_comments declaration_body
 
 declaration_body <- period / comma whitespace_and_comments func whitespace_and_comments declaration_body
 
-
-func <- func_label (
-	!(left_bracket / left_paren) / prolog_elements / karuta_elements
-	)
+func <- func_label (prolog_elements / karuta_elements)?
 
 func_label <- (atom colon)* (quoted_atom / atom)
 
