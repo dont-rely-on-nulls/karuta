@@ -109,13 +109,16 @@ type cycle_detection = {
   trace : string FT.t;
 }
 
-let files_being_compiled : cycle_detection External.Dynvar.dynvar =
-  External.Dynvar.dnew
-    ~init:{ dependents = BatMap.String.empty; trace = FT.empty }
-    ()
+let files_being_compiled : cycle_detection Eio.Fiber.key =
+  Eio.Fiber.create_key ()
 
 let check_dependency_cycle (filepath : string) (f : unit -> 'a) : 'a =
-  let { dependents; trace } = External.Dynvar.dref files_being_compiled in
+  let { dependents; trace } =
+    Option.fold
+      ~none:{ dependents = BatMap.String.empty; trace = FT.empty }
+      ~some:Fun.id
+      (Eio.Fiber.get files_being_compiled)
+  in
   match BatMap.String.find_opt filepath dependents with
   | Some { index } ->
       Logger.with_min_level Logger.Level.Error @@ fun () ->
@@ -127,7 +130,7 @@ let check_dependency_cycle (filepath : string) (f : unit -> 'a) : 'a =
            (FT.snoc cycle_start filepath);
       raise Exit
   | None ->
-      External.Dynvar.dlet files_being_compiled
+      Eio.Fiber.with_binding files_being_compiled
         {
           dependents =
             BatMap.String.add filepath
