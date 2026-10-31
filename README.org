@@ -29,17 +29,23 @@ you are crazy enough to use it.
 - [X] Modules
 - [X] Integration Testing (testing Karuta programs directly)
 - [ ] Unit Testing (testing stages of the compiler)
+ - [X] Parser
+ - [ ] Preprocessor
+ - [ ] Logger
+ - [ ] Code generator
+ - [ ] Lookup
 
 *** Advanced Features
 
+- [X] Concurrency
+- [ ] FFI
 - [ ] Static Type System
 - [ ] Mode System
 - [ ] ML Functors
 - [ ] Constraint-based
-- [ ] Effect System  
+- [ ] Effect System
 - [ ] Build System
 - [ ] REPL
-- [ ] Concurrency
 
 *** Challenges
 
