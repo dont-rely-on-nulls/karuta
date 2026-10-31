@@ -34,6 +34,8 @@ you are crazy enough to use it.
  - [ ] Logger
  - [ ] Code generator
  - [ ] Lookup
+ - [ ] Kanren Runtime
+ - [ ] Karuta Standard Library
 
 *** Advanced Features
 
