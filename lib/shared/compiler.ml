@@ -88,8 +88,8 @@ let karuta_builtins : compiled_module Location.with_location =
   builtin_module ~name:"karuta" ~modules:BatMap.String.empty
     ~predicates:
       [
-        { name = "t-dee"; arity = 0 };
-        { name = "t-dum"; arity = 0 };
+        { name = "dee"; arity = 0 };
+        { name = "dum"; arity = 0 };
         { name = "int"; arity = 1 };
         { name = "nat"; arity = 1 };
         { name = "eq"; arity = 2 };
