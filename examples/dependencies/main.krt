@@ -1,0 +1,4 @@
+:- import[a].
+:- import[b].
+
+a:best_number[N], b:c:e:best_color[Color]?

@@ -45,4 +45,7 @@ let run : cmd -> unit = function
            }
            files
 
-let () = exit @@ parse_command_line_and_run run
+let () =
+  Eio_main.run @@ fun _ ->
+  at_exit Logger.flush;
+  exit @@ parse_command_line_and_run run
