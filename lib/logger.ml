@@ -28,13 +28,16 @@ module Make (Output : OUTPUT) = struct
 
   let flush = Output.flush
   let in_file = Output.in_file
-  let current_min_level = External.Dynvar.dnew ~init:Level.default ()
+  let current_min_level = Eio.Fiber.create_key ()
+
+  let get_min_level () =
+    Eio.Fiber.get current_min_level
+    |> Option.fold ~none:Level.default ~some:Fun.id
 
   let with_min_level : 'a. Level.t -> (unit -> 'a) -> 'a =
-   fun level -> External.Dynvar.dlet current_min_level level
+   fun level -> Eio.Fiber.with_binding current_min_level level
 
-  let should_log level =
-    Level.compare (External.Dynvar.dref current_min_level) level <= 0
+  let should_log level = Level.compare (get_min_level ()) level <= 0
 
   let unreachable_suffix =
     "This is a compiler bug. Please report it in \
@@ -180,8 +183,8 @@ module Terminal (Write : WRITE) = Make (
     let format_warning_message prefix locMay msg =
       format_diverse_message (make_bold prefix) Yellow locMay msg
 
-    let format_info_message prefix locMay msg =
-      format_diverse_message (make_bold prefix) Blue locMay msg
+    let format_info_message prefix =
+      format_diverse_message (make_bold prefix) Blue
 
     let format_debug_message prefix msg =
       let color = Foreground in
@@ -208,8 +211,8 @@ module type API = sig
 end
 
 module Log = struct
-  let current_file : string External.Dynvar.dynvar = External.Dynvar.dnew ()
-  let in_file filename = External.Dynvar.dlet current_file filename
+  let current_file : string Eio.Fiber.key = Eio.Fiber.create_key ()
+  let in_file filename = Eio.Fiber.with_binding current_file filename
 
   let rec swap a f =
     let v = Atomic.get a in
@@ -219,7 +222,7 @@ module Log = struct
     Atomic.make BatMap.String.empty
 
   let export msg =
-    let filename = External.Dynvar.dref current_file in
+    Eio.Fiber.get current_file |> Option.get |> fun filename ->
     swap messages_by_file
       (BatMap.String.modify_def FT.empty filename (Fun.flip FT.snoc msg))
 
@@ -228,9 +231,14 @@ module Log = struct
     |> BatMap.String.iter (fun _ msg -> FT.iter Stdlib.print_endline msg)
 end
 
-let current = External.Dynvar.dnew ~init:(module Terminal (Log) : API) ()
-let with_logger logger = External.Dynvar.dlet current logger
-let get_current_module () = External.Dynvar.dref current
+let current = Eio.Fiber.create_key ()
+let with_logger logger = Eio.Fiber.with_binding current logger
+
+module Default_Logger = Terminal (Log)
+
+let get_current_module () =
+  Eio.Fiber.get current
+  |> Option.fold ~none:(module Default_Logger : API) ~some:Fun.id
 
 let simply_unreachable msg =
   let (module L) = get_current_module () in

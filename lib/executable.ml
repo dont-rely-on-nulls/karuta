@@ -25,11 +25,11 @@ let emit { persist; query = { name; arity }; sakura; filename; root_module } =
     Printf.sprintf
       "  (let ((take-fn\n\
       \          (case args\n\
-      \            ((list) (fun karuta:take-all 1))\n\
-      \            ((list 'inf) (fun karuta:take-all 1))\n\
+      \            ((list) (fun kanren:take-all 1))\n\
+      \            ((list 'inf) (fun kanren:take-all 1))\n\
       \            ((list n) (lambda (results)\n\
-      \                        (karuta:take (list_to_integer n) results))))))\n\
-      \    (karuta:pretty-print (funcall take-fn (karuta:run-lazy %s %s))))"
+      \                        (kanren:take (list_to_integer n) results))))))\n\
+      \    (kanren:pretty-print (funcall take-fn (kanren:run-lazy %s %s))))"
       config_map query
   in
   let main = "(defun main (args)\n" ^ body ^ ")\n" in

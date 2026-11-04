@@ -3,6 +3,7 @@
 (test
  (deps
   (source_tree "../examples/")
-  "../runtime/karuta.beam")
+  "../runtime/karuta.beam"
+  "../runtime/kanren.beam")
  (name runner)
  (libraries lib alcotest bin))

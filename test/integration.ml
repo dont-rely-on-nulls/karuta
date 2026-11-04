@@ -23,6 +23,8 @@ let make_test current_directory
   (try Unix.mkdir name 0o766 with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
   (try Unix.link "../runtime/karuta.beam" (name ^ "/karuta.beam")
    with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
+  (try Unix.link "../runtime/kanren.beam" (name ^ "/kanren.beam")
+   with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
   let test_directory = current_directory ^ "/" ^ name in
   let prefix file = current_directory ^ "/../examples/" ^ file in
   let filename = test_directory ^ "/play" in

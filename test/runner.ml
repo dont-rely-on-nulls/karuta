@@ -1,4 +1,5 @@
 let () =
+  Eio_main.run @@ fun _ ->
   let example_tests =
     Examples.tests
     |> List.map (fun (c, m) -> (c, BatMap.String.to_list m))

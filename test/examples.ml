@@ -7,4 +7,5 @@ let tests : (string * Outcome.t BatMap.String.t) list =
       ("Basic", Basic.tests);
       ("Lists", Lists.tests);
       ("Module System", Module_system.tests);
+      ("Dependencies", Dependencies.tests);
     ]

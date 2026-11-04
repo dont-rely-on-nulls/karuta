@@ -16,8 +16,6 @@ module Form = Beam.Core.Form (Beam.Core.Erlang)
 let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
     (persist : Shared.Compiler.Persist.both) (filepaths : string list) :
     unit attempt =
-  Eio_main.run @@ fun _ ->
-  at_exit Logger.flush;
   let sakura_files, karuta_files =
     BatSet.String.partition Sakura.Preprocessor.is_sakura_file
     @@ BatSet.String.of_list filepaths
