@@ -28,7 +28,3 @@ type inner_state = { schemas : relations Schema.t BatMap.String.t }
 type state = inner_state Atomic.t
 
 let init_state () = Atomic.make { schemas = BatMap.String.empty }
-
-type mods = unit
-
-let merge_state (_ : mods) = Fun.id

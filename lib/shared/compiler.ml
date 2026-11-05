@@ -102,43 +102,43 @@ let karuta_builtins : compiled_module Location.with_location =
         { name = "divmod"; arity = 4 };
       ]
 
-module type LOOKUP = sig
-  type t
+type dependent = { index : int }
 
-  val nested_env : t -> compiled_module
+type cycle_detection = {
+  dependents : dependent BatMap.String.t;
+  trace : string FT.t;
+}
 
-  val signature :
-    compiled_module ->
-    Ast.Expr.func_label ->
-    [> `Ok of compiled_signature Location.with_location
-    | `Undefined of string Location.with_location
-    | `UnexpectedModule of compiled_module Location.with_location
-    | `UnexpectedSignature of Location.region ]
+let files_being_compiled : cycle_detection Eio.Fiber.key =
+  Eio.Fiber.create_key ()
 
-  val m0dule :
-    compiled_module ->
-    Ast.Expr.func_label ->
-    [> `Ok of compiled_module Location.with_location
-    | `Undefined of string Location.with_location
-    | `UnexpectedSignature of Location.region ]
-
-  val nested_signature :
-    sig_env Location.with_location ->
-    compiled_module ->
-    Ast.Expr.func_label ->
-    [> `Ok of signature Location.with_location
-    | `Undefined of string Location.with_location
-    | `UnexpectedModule of compiled_module Location.with_location
-    | `UnexpectedSignature of Location.region ]
-
-  val predicate :
-    compiled_module ->
-    Ast.Expr.func_label ->
-    int ->
-    [> `Ok of predicate
-    | `Undefined of string Location.with_location
-    | `UnexpectedSignature of Location.region ]
-end
+let check_dependency_cycle (filepath : string) (f : unit -> 'a) : 'a =
+  let { dependents; trace } =
+    Option.fold
+      ~none:{ dependents = BatMap.String.empty; trace = FT.empty }
+      ~some:Fun.id
+      (Eio.Fiber.get files_being_compiled)
+  in
+  match BatMap.String.find_opt filepath dependents with
+  | Some { index } ->
+      Logger.with_min_level Logger.Level.Error @@ fun () ->
+      let _, cycle_start = FT.split_at trace index in
+      Logger.simply_error
+      @@ BatIO.to_string
+           (FT.print ~first:"Dependency cycle detected:\n" ~sep:"\n→  " ~last:""
+              BatIO.nwrite)
+           (FT.snoc cycle_start filepath);
+      raise Exit
+  | None ->
+      Eio.Fiber.with_binding files_being_compiled
+        {
+          dependents =
+            BatMap.String.add filepath
+              { index = BatMap.String.cardinal dependents }
+              dependents;
+          trace = FT.snoc trace filepath;
+        }
+        f
 
 module Options = struct
   type sakura = { root_module : string; address : string; port : int }
@@ -155,6 +155,19 @@ end
 
 type externals = compiled_module option Lazy.t env
 
+let rec print_module externals =
+  BatMap.String.print BatInnerIO.write_string
+    (fun out { Location.content; _ } ->
+      match content with
+      | Module { modules; predicates; _ } ->
+          print_module modules;
+          PredicateMap.print ~first:"|" ~last:"|"
+            (fun out h -> BatInnerIO.write_string out (Ast.show_head h))
+            (fun out _ -> BatInnerIO.write_string out "()")
+            out predicates
+      | Signature _ -> BatInnerIO.write_string out "<Sig>")
+    BatInnerIO.stderr externals
+
 type 'state t = {
   state : 'state;
   externals : externals;
@@ -164,34 +177,31 @@ type 'state t = {
   parent : 'state t option;
   env : compiled_module;
   persist : Persist.t;
-  lookup : (module LOOKUP with type t = 'state t);
 }
 
-type 'mods initialization = {
+type initialization = {
   persist : Persist.t;
   filename : string;
   externals : externals;
-  mods : 'mods;
+  imports : Ast.imports;
 }
 
-type ('state, 'mods) initialize_nested =
-  'mods initialization -> 'state t option -> string -> 'state t
+type 'state initialize_nested =
+  initialization -> 'state t option -> string -> 'state t
 
-type ('state, 'directives, 'mods) step =
-  ('directives, 'mods) Ast.Module.module_body * 'state t -> compiled_module
+type ('state, 'directives) step =
+  'directives Ast.Module.module_body * 'state t -> compiled_module
 
-type ('state, 'directives, 'mods) runner = {
-  step : ('state, 'directives, 'mods) step;
-  initialize_nested : ('state, 'mods) initialize_nested;
+type ('state, 'directives) runner = {
+  step : ('state, 'directives) step;
+  initialize_nested : 'state initialize_nested;
 }
 
 module type COMPILER_CONFIG = sig
   type directives
-  type mods
   type state
 
-  val init_state : mods -> state
-  val merge_state : mods -> state -> state
+  val init_state : unit -> state
 
   val compile_declaration :
     Ast.head ->
@@ -201,59 +211,102 @@ module type COMPILER_CONFIG = sig
     state t
 
   val compile_directive :
-    (state, directives, mods) runner ->
+    (state, directives) runner ->
     state t ->
-    (directives, mods) Ast.Module.directive Location.with_location ->
+    directives Ast.Module.directive Location.with_location ->
     state t
 
   val compile_query :
     Ast.Module.query_ref Location.with_location option -> state t -> state t
 
-  module Lookup : LOOKUP with type t = state t
-
   module Preprocessor :
-    Preprocessor.PREPROCESSOR_CONFIG
-      with type directives = directives
-      with type mods = mods
+    Preprocessor.PREPROCESSOR_CONFIG with type directives = directives
 end
 
 module type COMPILER = sig
   type directives
-  type mods
   type state
 
   val preprocess_clauses :
-    Preprocessor.t ->
-    Ast.ParserClause.t FT.t ->
-    (directives, mods) Preprocessor.output
+    Preprocessor.t -> Ast.ParserClause.t FT.t -> directives Preprocessor.output
 
   val compile_files : Persist.both -> BatSet.String.t -> externals -> externals
-  val initialize : mods initialization -> state t
+  val initialize : initialization -> state t
 end
 
 module Make (Config : COMPILER_CONFIG) :
   COMPILER
     with type state = Config.state
-    with type directives = Config.directives
-    with type mods = Config.mods = struct
+    with type directives = Config.directives = struct
   include (
     Preprocessor.Make
       (Config.Preprocessor) :
-        Preprocessor.PREPROCESSOR
-          with type directives = Config.directives
-          with type mods = Config.mods)
+        Preprocessor.PREPROCESSOR with type directives = Config.directives)
 
   type state = Config.state
   type directives = Config.directives
-  type mods = Config.mods
+
+  let nested_env ({ env; externals; filename; _ } : state t) imports :
+      compiled_module =
+    Eio.Switch.run @@ fun sw ->
+    let import_without_shadowing import_name (import_loc : Location.region)
+        additions =
+      match
+        ( BatMap.String.find_opt import_name externals,
+          BatMap.String.find_opt import_name env.modules )
+      with
+      | None, _ ->
+          Logger.error import_loc "Attempt to import a file that does not exist";
+          raise Exit
+      | Some { content = dependency; loc }, None ->
+          let compiled () =
+            Eio.Fiber.fork_promise ~sw @@ fun () ->
+            {
+              Location.content =
+                Module
+                  (match Lazy.force dependency with
+                  | Some v -> v
+                  | None -> raise Exit);
+              loc = import_loc;
+            }
+          in
+          FT.snoc additions
+            ( import_name,
+              if Lazy.is_done dependency then compiled ()
+              else check_dependency_cycle loc.filename compiled )
+      | Some _, Some { Location.loc; _ } when import_loc = Location.dummy ->
+          (* If the import does not have a location, that means the compiler inserted it
+           for a builtin module. This is inserted in all scopes, so we must not error out.
+           If the user tries to shadow it there will be an error elsewhere. *)
+          additions
+      | Some _, Some { Location.loc; _ } ->
+          Logger.error import_loc
+            "Attempt to shadow an existing name with an import";
+          if BatSet.String.mem import_name builtin_module_names then
+            Logger.simply_error @@ "Attempt to shadow " ^ import_name
+            ^ ", which is a builtin"
+          else Logger.error loc "Previous definition here";
+          raise Exit
+    in
+    let additions =
+      BatMap.String.fold import_without_shadowing imports FT.empty
+    in
+    {
+      env with
+      modules =
+        FT.fold_left
+          (fun acc (name, import) ->
+            BatMap.String.add name (Eio.Promise.await_exn import) acc)
+          env.modules additions;
+    }
 
   let initialize_nested
-      ({ persist; filename; externals; mods } : mods initialization) parent
+      ({ persist; filename; externals; imports } : initialization) parent
       module_name : Config.state t =
     let state, env =
       Option.fold
         ~none:
-          ( Config.init_state mods,
+          ( Config.init_state (),
             {
               qualifier = (FT.empty, module_name);
               modules = BatMap.String.empty;
@@ -264,7 +317,7 @@ module Make (Config : COMPILER_CONFIG) :
           let qualifier =
             (ft_of_original_module p.env.qualifier, module_name)
           in
-          (Config.merge_state mods p.state, { p.env with qualifier }))
+          (p.state, { p.env with qualifier }))
         parent
     in
     let full_module_name =
@@ -291,17 +344,15 @@ module Make (Config : COMPILER_CONFIG) :
         output = FT.empty;
         env;
         persist;
-        lookup = (module Config.Lookup);
       }
     in
-    { nested_compiler with env = Config.Lookup.nested_env nested_compiler }
+    { nested_compiler with env = nested_env nested_compiler imports }
 
-  let initialize ({ filename; _ } as init : mods initialization) :
-      Config.state t =
+  let initialize ({ filename; _ } as init : initialization) : Config.state t =
     let module_name = Module_name.of_filepath filename in
     initialize_nested init None module_name
 
-  let rec step : (Config.state, Config.directives, Config.mods) step =
+  let rec step : (Config.state, Config.directives) step =
    fun ({ declarations; directives; query; _ }, compiler) ->
     let forbid_shadowing _ lhs rhs =
       match (lhs, rhs) with
@@ -376,7 +427,7 @@ module Make (Config : COMPILER_CONFIG) :
                      persist = persist.beam;
                      filename = filepath;
                      externals = Eio.Promise.await env;
-                     mods = body.target_specific;
+                     imports = body.imports;
                    } )
         with Exit -> None
       in

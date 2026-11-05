@@ -2,7 +2,7 @@ include Types
 open Shared.Preprocessor
 
 let is_sakura_file filepath = Filename.extension filepath = ".skr"
-let init_mods = Fun.id
+let init_imports () = BatMap.String.empty
 
 let preprocess_declaration
     ({ loc; _ } : Ast.ParserClause.decl Location.with_location) _ =
@@ -35,9 +35,9 @@ let report_error_cases (directive_loc : Location.region)
       ^ Types.formatted_supported_directives
 
 let preprocess_directive :
-    (Types.directives, Types.mods) recur ->
+    Types.directives recur ->
     Ast.ParserClause.directive ->
-    (Types.directives, Types.mods) one_output =
+    Types.directives one_output =
  fun _recur (head, bodies) ->
   let preprocess_bodies
       (f : Ast.Module.multi_declaration_env -> Types.directives) =
@@ -83,7 +83,7 @@ let preprocess_directive :
 
 let preprocess_query (loc : Location.region)
     (_ : Ast.Expr.func Location.with_location FT.t)
-    (_ : (Types.directives, Types.mods) Ast.Module.module_body) :
-    (Types.directives, Types.mods) Ast.Module.module_body =
+    (_ : Types.directives Ast.Module.module_body) :
+    Types.directives Ast.Module.module_body =
   Logger.error loc "Queries are not allowed in Sakura";
   raise Exit

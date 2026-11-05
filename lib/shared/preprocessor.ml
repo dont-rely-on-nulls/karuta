@@ -126,24 +126,16 @@ type t = { filename : string }
 
 let initialize filename : t = { filename }
 
-type ('directives, 'mods) one_output =
-  | TargetSpecificDirective of 'directives
-  | Update of { action : 'mods -> 'mods }
-
-type ('directives, 'mods) output = {
-  module_ : ('directives, 'mods) Ast.Module.module_body;
-}
-
-type ('directives, 'mods) recur =
-  t -> Ast.ParserClause.t FT.t -> ('directives, 'mods) output
+type 'directives one_output = TargetSpecificDirective of 'directives
+type 'directives output = { module_ : 'directives Ast.Module.module_body }
+type 'directives recur = t -> Ast.ParserClause.t FT.t -> 'directives output
 
 let map_module f o = { module_ = f o.module_ }
 
 module type PREPROCESSOR_CONFIG = sig
   type directives
-  type mods
 
-  val init_mods : unit -> mods
+  val init_imports : unit -> Ast.imports
 
   val preprocess_declaration :
     Ast.ParserClause.decl Location.with_location ->
@@ -151,15 +143,13 @@ module type PREPROCESSOR_CONFIG = sig
     Ast.Module.multi_declaration_env
 
   val preprocess_directive :
-    (directives, mods) recur ->
-    Ast.ParserClause.directive ->
-    (directives, mods) one_output
+    directives recur -> Ast.ParserClause.directive -> directives one_output
 
   val preprocess_query :
     Location.region ->
     Ast.Expr.func Location.with_location FT.t ->
-    (directives, mods) Ast.Module.module_body ->
-    (directives, mods) Ast.Module.module_body
+    directives Ast.Module.module_body ->
+    directives Ast.Module.module_body
 end
 
 let group_declaration (name : string)
@@ -175,23 +165,19 @@ let group_declaration (name : string)
 
 module type PREPROCESSOR = sig
   type directives
-  type mods
 
-  val preprocess_clauses :
-    t -> Ast.ParserClause.t FT.t -> (directives, mods) output
+  val preprocess_clauses : t -> Ast.ParserClause.t FT.t -> directives output
 end
 
 module Make (Config : PREPROCESSOR_CONFIG) :
-  PREPROCESSOR
-    with type directives = Config.directives
-    with type mods = Config.mods = struct
+  PREPROCESSOR with type directives = Config.directives = struct
   include Config
 
   let rec preprocess_clauses ({ filename } : t)
       (clauses : Ast.ParserClause.t FT.t) =
     Logger.in_file filename @@ fun () ->
-    let split ({ module_ } : (directives, mods) output)
-        (parser_clause : Ast.ParserClause.t) : (directives, mods) output =
+    let split ({ module_ } : directives output)
+        (parser_clause : Ast.ParserClause.t) : directives output =
       let open Location in
       let { loc; content } = parser_clause in
       match content with
@@ -406,6 +392,47 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                 error_all_after 1 header.elements
                   "Extra signature argument here";
                 raise Exit)
+          else if Ast.Expr.match_func header [ "import" ] then
+            if FT.is_empty bodies then (
+              match FT.front header.elements with
+              | Some (rest, singleton) when FT.is_empty rest ->
+                  let external_dep =
+                    Ast.Expr.extract_unqualified_atom singleton
+                  in
+                  {
+                    module_ =
+                      {
+                        module_ with
+                        imports =
+                          (let previous_imports = module_.imports in
+                           match
+                             BatMap.String.find_opt external_dep
+                               previous_imports
+                           with
+                           | Some previous_loc ->
+                               Logger.error loc
+                                 "Cannot import the same module twice";
+                               if previous_loc = Location.dummy then
+                                 Logger.simply_info @@ external_dep
+                                 ^ " is a builtin module"
+                               else Logger.error previous_loc "Previous import";
+                               raise Exit
+                           | None ->
+                               BatMap.String.add external_dep loc
+                                 previous_imports);
+                      };
+                  }
+              | None ->
+                  Logger.error loc
+                    "Directive 'import' cannot be an empty functor";
+                  raise Exit
+              | _ ->
+                  Logger.error loc
+                    "Directive 'import' cannot have multiple expressions within";
+                  raise Exit)
+            else (
+              Logger.error loc "Directive 'import' cannot have a body";
+              raise Exit)
           else
             match Config.preprocess_directive preprocess_clauses directive with
             | TargetSpecificDirective directive ->
@@ -417,14 +444,6 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                         FT.snoc module_.directives
                         @@ Location.add_loc
                              (Ast.Module.TargetSpecific directive) loc;
-                    };
-                }
-            | Update { action } ->
-                {
-                  module_ =
-                    {
-                      module_ with
-                      target_specific = action module_.target_specific;
                     };
                 })
     in
@@ -439,10 +458,10 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                  Location.add_loc
                    (Module_name.of_filepath filename)
                    Location.dummy;
+               imports = Config.init_imports ();
                signature = None;
                declarations = BatMap.empty;
                directives = FT.empty;
-               target_specific = Config.init_mods ();
                query = None;
              };
          }
