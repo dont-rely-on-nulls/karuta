@@ -16,11 +16,7 @@
   sexplib
   eio
   eio_main
-  lwt
-  lwt.unix
-  lwt-exit
-  lambda-term
-  ppx_strip_payload)
+  ppx)
  (package karuta)
  (preprocess
   (pps
@@ -30,7 +26,7 @@
    ppx_enumerate
    ppx_variants_conv
    ppx_sexp_conv
-   ppx_strip_payload)))
+   ppx)))
 
 (documentation
  (package karuta))
