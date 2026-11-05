@@ -155,6 +155,19 @@ end
 
 type externals = compiled_module option Lazy.t env
 
+let rec print_module externals =
+  BatMap.String.print BatInnerIO.write_string
+    (fun out { Location.content; _ } ->
+      match content with
+      | Module { modules; predicates; _ } ->
+          print_module modules;
+          PredicateMap.print ~first:"|" ~last:"|"
+            (fun out h -> BatInnerIO.write_string out (Ast.show_head h))
+            (fun out _ -> BatInnerIO.write_string out "()")
+            out predicates
+      | Signature _ -> BatInnerIO.write_string out "<Sig>")
+    BatInnerIO.stderr externals
+
 type 'state t = {
   state : 'state;
   externals : externals;
