@@ -13,7 +13,7 @@ let compile prefix filepath forms =
   let forms =
     "[" ^ (String.concat "," @@ List.map Attribute.to_string forms) ^ "]"
   in
-  Logger.debug forms;
+  Logger.simply_debug forms;
   let erlangProgram =
     "{ok, _, BeamByte} = compile:forms(" ^ forms ^ "), file:write_file(\""
     ^ prefix ^ "/" ^ name ^ ".beam\", BeamByte)"

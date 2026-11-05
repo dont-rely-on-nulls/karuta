@@ -135,3 +135,24 @@ let zero_coordinate = origin
 
 (** Zero point. *)
 let zero_point = dummy_coord_to_point zero_coordinate
+
+(** [region_of_lexing pos_pair] Receive a pair of lexing positions and translate it to
+    our internal coordinate and region types.
+
+    This is exclusively being used for Logger.debug + ppx_logger.
+    
+    @param pos_pair pair of Lexing.position.
+    @return correspondent region. *)
+let region_of_lexing ((start_pos, end_pos) : Lexing.position * Lexing.position) : region =
+  let coordinate_of_lexing (pos : Lexing.position) : coordinate =
+    {
+      offset = pos.pos_cnum;
+      line_offset = pos.pos_bol;
+      line = pos.pos_lnum;
+    }
+  in
+  {
+    filename = start_pos.pos_fname;
+    startl = coordinate_of_lexing start_pos;
+    endl = coordinate_of_lexing end_pos;
+  }
