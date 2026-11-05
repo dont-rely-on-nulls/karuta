@@ -25,6 +25,10 @@ you are crazy enough to use it.
 - [X] Atom Literals
 - [X] Integer Literals
 - [X] List Literals
+- [ ] String Literals
+- [ ] Float Literals
+- [ ] Binary Literals
+- [ ] Tuple Literals (logic functors as records)
 - [X] Implement toolchain (i.e. compile to BEAM assembly, call ~erlc~ on that)
 - [X] Modules
 - [X] Integration Testing (testing Karuta programs directly)
@@ -39,7 +43,7 @@ you are crazy enough to use it.
 
 *** Advanced Features
 
-- [X] Concurrency
+- [X] Concurrent Compilation
 - [ ] FFI
 - [ ] Static Type System
 - [ ] Mode System
