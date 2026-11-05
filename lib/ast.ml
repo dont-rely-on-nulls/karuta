@@ -10,6 +10,7 @@ module type EXPR = sig
 end
 
 type head = { name : string; arity : int } [@@deriving show, ord]
+type imports = Location.region BatMap.String.t
 
 module ModuleF (Expr : EXPR) = struct
   type declaration = head * decl Location.with_location
@@ -47,7 +48,7 @@ module ModuleF (Expr : EXPR) = struct
     signature : 'directives signature_ref Location.with_location option;
     declarations : multi_declaration_env;
     directives : 'directives directive Location.with_location FT.t;
-    imports : Location.region BatMap.String.t;
+    imports : imports;
     query : query_ref Location.with_location option;
   }
 

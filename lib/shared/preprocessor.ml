@@ -108,7 +108,6 @@ let check_empty_heads (clause : Ast.ParserClause.t) : Ast.ParserClause.t =
 module S = BatSet
 
 type variable_set = string BatSet.t
-type import_env = Location.region BatMap.String.t
 
 let rec find_variables (element : Ast.Expr.base) : variable_set =
   let open Location in
@@ -136,7 +135,7 @@ let map_module f o = { module_ = f o.module_ }
 module type PREPROCESSOR_CONFIG = sig
   type directives
 
-  val init_imports : unit -> import_env
+  val init_imports : unit -> Ast.imports
 
   val preprocess_declaration :
     Ast.ParserClause.decl Location.with_location ->

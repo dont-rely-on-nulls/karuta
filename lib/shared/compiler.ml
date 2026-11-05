@@ -183,7 +183,7 @@ type initialization = {
   persist : Persist.t;
   filename : string;
   externals : externals;
-  imports : Preprocessor.import_env;
+  imports : Ast.imports;
 }
 
 type 'state initialize_nested =
