@@ -152,7 +152,6 @@ let rec compile_nested : type a directive.
     sig_env Location.with_location ->
     compiled_signature Location.with_location =
  fun loc body ({ env = { modules; _ }; _ } as compiler) sig_env ->
-  let module Lookup = (val compiler.lookup) in
   let directive_step (acc : compiled_signature)
       (next : directive Ast.Module.directive Location.with_location) =
     let happy_case (comptime_name : string)

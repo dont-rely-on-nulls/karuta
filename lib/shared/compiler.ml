@@ -102,43 +102,43 @@ let karuta_builtins : compiled_module Location.with_location =
         { name = "divmod"; arity = 4 };
       ]
 
-module type LOOKUP = sig
-  type t
+type dependent = { index : int }
 
-  val nested_env : t -> Preprocessor.import_env -> compiled_module
+type cycle_detection = {
+  dependents : dependent BatMap.String.t;
+  trace : string FT.t;
+}
 
-  val signature :
-    compiled_module ->
-    Ast.Expr.func_label ->
-    [> `Ok of compiled_signature Location.with_location
-    | `Undefined of string Location.with_location
-    | `UnexpectedModule of compiled_module Location.with_location
-    | `UnexpectedSignature of Location.region ]
+let files_being_compiled : cycle_detection Eio.Fiber.key =
+  Eio.Fiber.create_key ()
 
-  val m0dule :
-    compiled_module ->
-    Ast.Expr.func_label ->
-    [> `Ok of compiled_module Location.with_location
-    | `Undefined of string Location.with_location
-    | `UnexpectedSignature of Location.region ]
-
-  val nested_signature :
-    sig_env Location.with_location ->
-    compiled_module ->
-    Ast.Expr.func_label ->
-    [> `Ok of signature Location.with_location
-    | `Undefined of string Location.with_location
-    | `UnexpectedModule of compiled_module Location.with_location
-    | `UnexpectedSignature of Location.region ]
-
-  val predicate :
-    compiled_module ->
-    Ast.Expr.func_label ->
-    int ->
-    [> `Ok of predicate
-    | `Undefined of string Location.with_location
-    | `UnexpectedSignature of Location.region ]
-end
+let check_dependency_cycle (filepath : string) (f : unit -> 'a) : 'a =
+  let { dependents; trace } =
+    Option.fold
+      ~none:{ dependents = BatMap.String.empty; trace = FT.empty }
+      ~some:Fun.id
+      (Eio.Fiber.get files_being_compiled)
+  in
+  match BatMap.String.find_opt filepath dependents with
+  | Some { index } ->
+      Logger.with_min_level Logger.Level.Error @@ fun () ->
+      let _, cycle_start = FT.split_at trace index in
+      Logger.simply_error
+      @@ BatIO.to_string
+           (FT.print ~first:"Dependency cycle detected:\n" ~sep:"\n→  " ~last:""
+              BatIO.nwrite)
+           (FT.snoc cycle_start filepath);
+      raise Exit
+  | None ->
+      Eio.Fiber.with_binding files_being_compiled
+        {
+          dependents =
+            BatMap.String.add filepath
+              { index = BatMap.String.cardinal dependents }
+              dependents;
+          trace = FT.snoc trace filepath;
+        }
+        f
 
 module Options = struct
   type sakura = { root_module : string; address : string; port : int }
@@ -164,7 +164,6 @@ type 'state t = {
   parent : 'state t option;
   env : compiled_module;
   persist : Persist.t;
-  lookup : (module LOOKUP with type t = 'state t);
 }
 
 type initialization = {
@@ -207,8 +206,6 @@ module type COMPILER_CONFIG = sig
   val compile_query :
     Ast.Module.query_ref Location.with_location option -> state t -> state t
 
-  module Lookup : LOOKUP with type t = state t
-
   module Preprocessor :
     Preprocessor.PREPROCESSOR_CONFIG with type directives = directives
 end
@@ -235,6 +232,60 @@ module Make (Config : COMPILER_CONFIG) :
 
   type state = Config.state
   type directives = Config.directives
+
+  let nested_env ({ env; externals; filename; _ } : state t) imports :
+      compiled_module =
+    Eio.Switch.run @@ fun sw ->
+    let import_without_shadowing import_name (import_loc : Location.region)
+        additions =
+      match
+        ( BatMap.String.find_opt import_name externals,
+          BatMap.String.find_opt import_name env.modules )
+      with
+      | None, _ ->
+          Logger.error import_loc "Attempt to import a file that does not exist";
+          raise Exit
+      | Some { content = dependency; loc }, None ->
+          let compiled () =
+            Eio.Fiber.fork_promise ~sw @@ fun () ->
+            {
+              Location.content =
+                Module
+                  (match Lazy.force dependency with
+                  | Some v -> v
+                  | None -> raise Exit);
+              loc = import_loc;
+            }
+          in
+          FT.snoc additions
+            ( import_name,
+              if Lazy.is_done dependency then compiled ()
+              else check_dependency_cycle loc.filename compiled )
+      | Some _, Some { Location.loc; _ } when import_loc = Location.dummy ->
+          (* If the import does not have a location, that means the compiler inserted it
+           for a builtin module. This is inserted in all scopes, so we must not error out.
+           If the user tries to shadow it there will be an error elsewhere. *)
+          additions
+      | Some _, Some { Location.loc; _ } ->
+          Logger.error import_loc
+            "Attempt to shadow an existing name with an import";
+          if BatSet.String.mem import_name builtin_module_names then
+            Logger.simply_error @@ "Attempt to shadow " ^ import_name
+            ^ ", which is a builtin"
+          else Logger.error loc "Previous definition here";
+          raise Exit
+    in
+    let additions =
+      BatMap.String.fold import_without_shadowing imports FT.empty
+    in
+    {
+      env with
+      modules =
+        FT.fold_left
+          (fun acc (name, import) ->
+            BatMap.String.add name (Eio.Promise.await_exn import) acc)
+          env.modules additions;
+    }
 
   let initialize_nested
       ({ persist; filename; externals; imports } : initialization) parent
@@ -280,13 +331,9 @@ module Make (Config : COMPILER_CONFIG) :
         output = FT.empty;
         env;
         persist;
-        lookup = (module Config.Lookup);
       }
     in
-    {
-      nested_compiler with
-      env = Config.Lookup.nested_env nested_compiler imports;
-    }
+    { nested_compiler with env = nested_env nested_compiler imports }
 
   let initialize ({ filename; _ } as init : initialization) : Config.state t =
     let module_name = Module_name.of_filepath filename in

@@ -459,7 +459,7 @@ module Make (Config : PREPROCESSOR_CONFIG) :
                  Location.add_loc
                    (Module_name.of_filepath filename)
                    Location.dummy;
-               imports = Config.init_imports();
+               imports = Config.init_imports ();
                signature = None;
                declarations = BatMap.empty;
                directives = FT.empty;

@@ -1,5 +1,4 @@
 include Types
-module Lookup = Lookup
 module Preprocessor = Preprocessor
 
 let compile_directive = Directive.compile

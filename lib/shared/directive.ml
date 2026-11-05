@@ -26,7 +26,6 @@ let rec compile : type state.
     state t =
  fun directive_loc directive ({ env = { modules; _ } as env; _ } as compiler)
      ({ step; initialize_nested } as runner) ->
-  let module Lookup = (val compiler.lookup) in
   match directive with
   | Module
       ({

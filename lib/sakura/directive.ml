@@ -8,7 +8,6 @@ let compile :
  fun runner
      ({ env = { modules = _; _ } as _env; state; _ } as compiler :
        Types.state t) { content = directive; loc = directive_loc } ->
-  let module Lookup = (val compiler.lookup) in
   match directive with
   | Module _ -> Shared.Directive.compile directive_loc directive compiler runner
   | Signature _ ->

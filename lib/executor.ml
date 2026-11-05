@@ -20,7 +20,6 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
     BatSet.String.partition Sakura.Preprocessor.is_sakura_file
     @@ BatSet.String.of_list filepaths
   in
-  let module Lookup = Karuta.Lookup in
   let module Sakura : Shared.Compiler.COMPILER =
     Shared.Compiler.Make (Sakura.Module)
   in
@@ -69,7 +68,7 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
           exit 1
       | Some { content; loc } -> (
           match
-            Lookup.check_dependency_cycle loc.filename @@ fun () ->
+            Shared.Compiler.check_dependency_cycle loc.filename @@ fun () ->
             Lazy.force content
           with
           (* TODO: allow the use of queries from nested modules *)
