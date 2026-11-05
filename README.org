@@ -43,15 +43,16 @@ you are crazy enough to use it.
 
 *** Advanced Features
 
-- [X] Concurrent Compilation
 - [ ] FFI
 - [ ] Static Type System
 - [ ] Mode System
+- [ ] REPL
+- [ ] OTP  
 - [ ] ML Functors
 - [ ] Constraint-based
 - [ ] Effect System
+- [X] Concurrent Compilation
 - [ ] Build System
-- [ ] REPL
 
 *** Challenges
 
