@@ -16,7 +16,7 @@ let rec print_module externals =
       | Signature _ -> BatInnerIO.write_string out "<Sig>")
     BatInnerIO.stderr externals
 
-let nested_env ({ env; state = { imports }; externals; filename; _ } : t) :
+let nested_env ({ env; externals; filename; _ } : t) imports :
     Shared.Compiler.compiled_module =
   Eio.Switch.run @@ fun sw ->
   let import_without_shadowing import_name (import_loc : Location.region)

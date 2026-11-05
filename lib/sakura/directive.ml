@@ -1,9 +1,9 @@
 open Shared.Compiler
 
 let compile :
-    (Types.state, Types.directives, Types.mods) runner ->
+    (Types.state, Types.directives) runner ->
     Types.state t ->
-    (Types.directives, Types.mods) Ast.Module.directive Location.with_location ->
+    Types.directives Ast.Module.directive Location.with_location ->
     Types.state t =
  fun runner
      ({ env = { modules = _; _ } as _env; state; _ } as compiler :

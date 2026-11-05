@@ -1,10 +1,9 @@
 open Compiler
 
-let initialize_from_parent (type state) (type mods) (type directives)
-    ({ target_specific; name = { content = name; _ }; _ } :
-      (directives, mods) Ast.Module.module_body)
-    (initialize_nested : (state, mods) initialize_nested) (parent : state t) :
-    state t =
+let initialize_from_parent (type state) (type directives)
+    ({ name = { content = name; _ }; imports; _ } :
+      directives Ast.Module.module_body)
+    (initialize_nested : state initialize_nested) (parent : state t) : state t =
   let inner_filename =
     Module_name.of_filepath parent.filename
     ^ "." ^ name
@@ -15,15 +14,15 @@ let initialize_from_parent (type state) (type mods) (type directives)
       externals = parent.externals;
       persist = parent.persist;
       filename = inner_filename;
-      mods = target_specific;
+      imports;
     }
     (Some parent) name
 
-let rec compile : type state mods.
+let rec compile : type state.
     Location.region ->
-    ('directives, mods) Ast.Module.directive ->
+    'directives Ast.Module.directive ->
     state t ->
-    (state, 'directives, mods) Compiler.runner ->
+    (state, 'directives) Compiler.runner ->
     state t =
  fun directive_loc directive ({ env = { modules; _ } as env; _ } as compiler)
      ({ step; initialize_nested } as runner) ->

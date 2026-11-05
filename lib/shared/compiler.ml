@@ -105,7 +105,7 @@ let karuta_builtins : compiled_module Location.with_location =
 module type LOOKUP = sig
   type t
 
-  val nested_env : t -> compiled_module
+  val nested_env : t -> Preprocessor.import_env -> compiled_module
 
   val signature :
     compiled_module ->
@@ -167,31 +167,29 @@ type 'state t = {
   lookup : (module LOOKUP with type t = 'state t);
 }
 
-type 'mods initialization = {
+type initialization = {
   persist : Persist.t;
   filename : string;
   externals : externals;
-  mods : 'mods;
+  imports : Preprocessor.import_env;
 }
 
-type ('state, 'mods) initialize_nested =
-  'mods initialization -> 'state t option -> string -> 'state t
+type 'state initialize_nested =
+  initialization -> 'state t option -> string -> 'state t
 
-type ('state, 'directives, 'mods) step =
-  ('directives, 'mods) Ast.Module.module_body * 'state t -> compiled_module
+type ('state, 'directives) step =
+  'directives Ast.Module.module_body * 'state t -> compiled_module
 
-type ('state, 'directives, 'mods) runner = {
-  step : ('state, 'directives, 'mods) step;
-  initialize_nested : ('state, 'mods) initialize_nested;
+type ('state, 'directives) runner = {
+  step : ('state, 'directives) step;
+  initialize_nested : 'state initialize_nested;
 }
 
 module type COMPILER_CONFIG = sig
   type directives
-  type mods
   type state
 
-  val init_state : mods -> state
-  val merge_state : mods -> state -> state
+  val init_state : unit -> state
 
   val compile_declaration :
     Ast.head ->
@@ -201,9 +199,9 @@ module type COMPILER_CONFIG = sig
     state t
 
   val compile_directive :
-    (state, directives, mods) runner ->
+    (state, directives) runner ->
     state t ->
-    (directives, mods) Ast.Module.directive Location.with_location ->
+    directives Ast.Module.directive Location.with_location ->
     state t
 
   val compile_query :
@@ -212,48 +210,39 @@ module type COMPILER_CONFIG = sig
   module Lookup : LOOKUP with type t = state t
 
   module Preprocessor :
-    Preprocessor.PREPROCESSOR_CONFIG
-      with type directives = directives
-      with type mods = mods
+    Preprocessor.PREPROCESSOR_CONFIG with type directives = directives
 end
 
 module type COMPILER = sig
   type directives
-  type mods
   type state
 
   val preprocess_clauses :
-    Preprocessor.t ->
-    Ast.ParserClause.t FT.t ->
-    (directives, mods) Preprocessor.output
+    Preprocessor.t -> Ast.ParserClause.t FT.t -> directives Preprocessor.output
 
   val compile_files : Persist.both -> BatSet.String.t -> externals -> externals
-  val initialize : mods initialization -> state t
+  val initialize : initialization -> state t
 end
 
 module Make (Config : COMPILER_CONFIG) :
   COMPILER
     with type state = Config.state
-    with type directives = Config.directives
-    with type mods = Config.mods = struct
+    with type directives = Config.directives = struct
   include (
     Preprocessor.Make
       (Config.Preprocessor) :
-        Preprocessor.PREPROCESSOR
-          with type directives = Config.directives
-          with type mods = Config.mods)
+        Preprocessor.PREPROCESSOR with type directives = Config.directives)
 
   type state = Config.state
   type directives = Config.directives
-  type mods = Config.mods
 
   let initialize_nested
-      ({ persist; filename; externals; mods } : mods initialization) parent
+      ({ persist; filename; externals; imports } : initialization) parent
       module_name : Config.state t =
     let state, env =
       Option.fold
         ~none:
-          ( Config.init_state mods,
+          ( Config.init_state (),
             {
               qualifier = (FT.empty, module_name);
               modules = BatMap.String.empty;
@@ -264,7 +253,7 @@ module Make (Config : COMPILER_CONFIG) :
           let qualifier =
             (ft_of_original_module p.env.qualifier, module_name)
           in
-          (Config.merge_state mods p.state, { p.env with qualifier }))
+          (p.state, { p.env with qualifier }))
         parent
     in
     let full_module_name =
@@ -294,14 +283,16 @@ module Make (Config : COMPILER_CONFIG) :
         lookup = (module Config.Lookup);
       }
     in
-    { nested_compiler with env = Config.Lookup.nested_env nested_compiler }
+    {
+      nested_compiler with
+      env = Config.Lookup.nested_env nested_compiler imports;
+    }
 
-  let initialize ({ filename; _ } as init : mods initialization) :
-      Config.state t =
+  let initialize ({ filename; _ } as init : initialization) : Config.state t =
     let module_name = Module_name.of_filepath filename in
     initialize_nested init None module_name
 
-  let rec step : (Config.state, Config.directives, Config.mods) step =
+  let rec step : (Config.state, Config.directives) step =
    fun ({ declarations; directives; query; _ }, compiler) ->
     let forbid_shadowing _ lhs rhs =
       match (lhs, rhs) with
@@ -376,7 +367,7 @@ module Make (Config : COMPILER_CONFIG) :
                      persist = persist.beam;
                      filename = filepath;
                      externals = Eio.Promise.await env;
-                     mods = body.target_specific;
+                     imports = body.imports;
                    } )
         with Exit -> None
       in

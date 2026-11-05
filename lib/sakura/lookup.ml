@@ -3,4 +3,5 @@ include Types
 
 type t = state Shared.Compiler.t
 
-let nested_env (compiler : t) = compiler.env
+(* TODO: Update this later *)
+let nested_env (compiler : t) _ = compiler.env
