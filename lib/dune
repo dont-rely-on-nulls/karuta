@@ -11,12 +11,7 @@
 
 (library
  (name lib)
- (libraries
-  batteries
-  sexplib
-  eio
-  eio_main
-  ppx)
+ (libraries batteries sexplib eio eio_main ppx)
  (package karuta)
  (preprocess
   (pps

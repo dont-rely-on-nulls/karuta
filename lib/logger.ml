@@ -19,7 +19,7 @@ module type OUTPUT = sig
 
   val format_debug_message :
     string -> Location.region option -> string -> string
-  
+
   val in_file : string -> (unit -> 'a) -> 'a
   val export : string -> unit
   val flush : unit -> unit
@@ -86,7 +86,6 @@ module Make (Output : OUTPUT) = struct
   let simply_info (msg : string) : unit = internal Info None msg
   let debug loc msg = internal Debug (Some loc) msg
   let simply_debug msg = internal Debug None msg
-
 end
 
 module type WRITE = sig
@@ -202,7 +201,6 @@ module type API = sig
   val simply_info : string -> unit
   val debug : Location.region -> string -> unit
   val simply_debug : string -> unit
-  
   val with_min_level : 'a. Level.t -> (unit -> 'a) -> 'a
   val flush : unit -> unit
   val in_file : string -> (unit -> 'a) -> 'a
