@@ -1,4 +1,5 @@
-(* ppx_logger.ml *)
+(* TODO: Double check this code *)
+
 open Ppxlib
 open Ast_helper
 
