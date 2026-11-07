@@ -73,8 +73,8 @@ the first fetch), f reads the next batch and c forgets about it."
   "Let every loaded module register its programs with RNT at boot time,
 for example a compiled Karuta query registering itself as an image."
   (lc ((<- (tuple mod _) (code:all_loaded))
-       (erlang:function_exported mod 'rnt_init 0))
-    (call mod 'rnt_init)))
+       (erlang:function_exported mod '|| 0))
+    (funcall (mref (call mod '||) 'rnt-init))))
 
 (defun load (name beam)
   "Loads the .beam an image carries, unless that exact code is already
@@ -156,7 +156,7 @@ RNT answers us it may need batches from images running here."
 (defun relation (mod goal)
   "Turns Mod's query into the fun(Limit) RNT pages, so a compiled
 query can run as a karuta:beam program image."
-  (batches (atom_to_binary mod) (karuta:run-lazy #m() goal)))
+  (batches (atom_to_binary mod) (kanren:run-lazy #m() goal)))
 
 (defun batches (type stream)
   "One batch of up to Limit solutions as RNT tuples; the rest of the
@@ -170,7 +170,7 @@ stream waits for the next fetch."
   "Like take/2, but also returns what is left of the stream."
   (if (=< n 0)
     (tuple '() stream)
-    (case (karuta:pull stream)
+    (case (kanren:pull stream)
       ((tuple 'ok solution next)
        (let (((tuple solutions rest) (split (- n 1) next)))
          (tuple (cons solution solutions) rest)))
@@ -203,7 +203,7 @@ image. Every attribute is declared as a string until Karuta has types."
          (heading (maps:from_list
                     (lc ((<- variable variables))
                       (tuple (attribute-name variable) #"string"))))
-         (program (tuple (atom_to_binary mod) #"rnt_query" beam heading)))
+         (program (tuple (atom_to_binary mod) beam heading)))
     (define (list #"karuta" #"program" (atom_to_binary mod))
             #"karuta:beam"
             (term_to_binary program))))

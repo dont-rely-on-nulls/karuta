@@ -6,7 +6,7 @@
 Path through RNT's fol evaluator and unifies each row with Pattern."
   (lambda (state)
     (let ((plan (fol:base (lists:map (fun unicode:characters_to_binary 1) path))))
-      (funcall (karuta:bind-results pattern (rows (rnt:evaluate #"fol" (fol:source plan))))
+      (funcall (kanren:bind-results pattern (rows (rnt:evaluate #"fol" (fol:source plan))))
                state))))
 
 (defun rows (relation)

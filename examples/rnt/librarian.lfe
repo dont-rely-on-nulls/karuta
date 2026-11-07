@@ -1,13 +1,15 @@
 (defmodule librarian
-  (export (rnt_init 0) (titles 0)))
+  (export ('|| 0) (titles 0)))
 
-(defun rnt_init ()
+(defun '|| ()
   "Registers, from inside the node, a FOL program over main's Karuta
 query: the distinct authors, at \\karuta\\program\\authors."
-  (rnt:define '(#"karuta" #"program" #"authors")
-              #"fol"
-              (fol:source (fol:project (fol:base '(#"karuta" #"program" #"main"))
-                                       '(#"author")))))
+  (map
+    'rnt-init (lambda ()
+                (rnt:define '(#"karuta" #"program" #"authors")
+                  #"fol"
+                  (fol:source (fol:project (fol:base '(#"karuta" #"program" #"main"))
+                                           '(#"author")))))))
 
 (defun titles ()
   "A plan for the titles, issued inline and read back here, so a BEAM
