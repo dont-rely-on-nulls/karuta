@@ -6,7 +6,7 @@ let spawn_compile_process args = create_erlc_process args |> Posix.treat_pid
 
 let create_tmp_file name forms_str =
   let temp_dir = Filename.get_temp_dir_name () in
-  let temp_file = Filename.concat temp_dir (name ^ ".abstr") in
+  let temp_file = Filename.concat temp_dir @@ name ^ ".abstr" in
   Out_channel.with_open_bin temp_file @@ fun oc ->
   output_string oc forms_str;
   temp_file
