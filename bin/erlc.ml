@@ -32,9 +32,9 @@ let create_file prefix filepath forms =
   let forms_str =
     (String.concat ".\n" @@ List.map Attribute.to_string forms) ^ ".\n"
   in
-  Logger.debug forms_str;
+  Logger.simply_debug forms_str;
   let temp_file = prefix ^ "/" ^ name ^ ".abstr" in
-  Logger.debug @@ "Persisting " ^ name ^ " in " ^ temp_file;
+  Logger.simply_debug @@ "Persisting " ^ name ^ " in " ^ temp_file;
   Out_channel.with_open_bin temp_file @@ fun oc ->
   output_string oc forms_str;
   temp_file

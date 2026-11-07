@@ -17,7 +17,9 @@ module type OUTPUT = sig
   val format_unreachable_message :
     string -> Location.region option -> string -> string
 
-  val format_debug_message : string -> string -> string
+  val format_debug_message :
+    string -> Location.region option -> string -> string
+
   val in_file : string -> (unit -> 'a) -> 'a
   val export : string -> unit
   val flush : unit -> unit
@@ -57,16 +59,12 @@ module Make (Output : OUTPUT) = struct
     | Info -> Output.format_info_message prefix locMay msg
     | Error -> Output.format_error_message prefix locMay msg
     | Unreachable -> Output.format_unreachable_message prefix locMay msg
-    | _ -> create_simply_msg Unreachable "Output functor is broken"
+    | Debug -> Output.format_debug_message prefix locMay msg
 
   and report level locMay msg = msg |> format level locMay |> Output.export
-  and create_simply_msg level msg = format level None msg
 
   and internal level (locMay : Location.region option) (msg : string) : unit =
-    if should_log level then
-      match locMay with
-      | None -> msg |> create_simply_msg level |> print_endline
-      | Some _ -> report level locMay msg
+    if should_log level then report level locMay msg
 
   and unreachable (loc : Location.region) (msg : string) : unit =
     internal Unreachable (Some loc) msg
@@ -82,11 +80,8 @@ module Make (Output : OUTPUT) = struct
   let simply_warning (msg : string) : unit = internal Warning None msg
   let info loc msg = internal Info (Some loc) msg
   let simply_info (msg : string) : unit = internal Info None msg
-
-  let debug (msg : string) : unit =
-    if should_log Debug then
-      let prefix = get_prefix Debug in
-      print_endline @@ Output.format_debug_message prefix msg
+  let debug loc msg = internal Debug (Some loc) msg
+  let simply_debug msg = internal Debug None msg
 end
 
 module type WRITE = sig
@@ -186,10 +181,8 @@ module Terminal (Write : WRITE) = Make (
     let format_info_message prefix =
       format_diverse_message (make_bold prefix) Blue
 
-    let format_debug_message prefix msg =
-      let color = Foreground in
-      let prefix = prefix |> make_bold |> add_color color in
-      prefix ^ msg
+    let format_debug_message prefix =
+      format_diverse_message (make_bold prefix) Foreground
   end :
     OUTPUT)
 
@@ -202,10 +195,9 @@ module type API = sig
   val simply_unreachable : string -> unit
   val info : Location.region -> string -> unit
   val simply_info : string -> unit
+  val debug : Location.region -> string -> unit
+  val simply_debug : string -> unit
   val with_min_level : 'a. Level.t -> (unit -> 'a) -> 'a
-
-  (* TODO: Debug should receive location but location of THE SOURCE CODE OF THE COMPILER instead of Karuta source code. *)
-  val debug : string -> unit
   val flush : unit -> unit
   val in_file : string -> (unit -> 'a) -> 'a
 end
@@ -268,9 +260,13 @@ let info loc msg =
   let (module L) = get_current_module () in
   L.info loc msg
 
-let debug msg =
+let simply_debug msg =
   let (module L) = get_current_module () in
-  L.debug msg
+  L.simply_debug msg
+
+let debug ?pos_pair msg =
+  let (module L) = get_current_module () in
+  L.debug (Location.region_of_lexing @@ Option.get pos_pair) msg
 
 let flush () =
   let (module L) = get_current_module () in
