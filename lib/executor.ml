@@ -95,12 +95,10 @@ let run ?(limit : int option = None)
     (initialize ?sakura:None ~artifact:(Executable executable) ())
     persist filepaths
   |> fun () ->
-  try
-    Posix.run_process
-      (match limit with
-      | None -> [| executable.filename |]
-      | Some n -> [| executable.filename; string_of_int n |])
-  with Exit -> raise Exit
+  Posix.run_process
+    (match limit with
+    | None -> [| executable.filename |]
+    | Some n -> [| executable.filename; string_of_int n |])
 
 (* let load' filter_fn (filepath : string) : Compiler.t * Machine.t = *)
 (*   filepath |> parse |> List.filter filter_fn |> compile *)
