@@ -39,7 +39,7 @@ let make_test current_directory
       {
         beam =
           (fun name forms ->
-            Bin.Erl.compile test_directory name @@ BatFingerTree.to_list forms);
+            Bin.Erlc.compile test_directory name @@ BatFingerTree.to_list forms);
         executable = Lib.Executable.create_file;
       }
       (List.map prefix filepaths)

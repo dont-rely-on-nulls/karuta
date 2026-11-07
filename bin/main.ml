@@ -1,7 +1,7 @@
 open Bin.Cmd
 open Lib
 open Error
-module Erl = Bin.Erl
+module Erlc = Bin.Erlc
 
 (* let show_clauses (clauses : Ast.clause list) : string = *)
 (*   let folder acc clause = acc ^ Ast.show_clause clause in *)
@@ -39,7 +39,7 @@ let run : cmd -> unit = function
            {
              beam =
                (fun name forms ->
-                 Erl.compile output_path name @@ BatFingerTree.to_list forms);
+                 Erlc.compile output_path name @@ BatFingerTree.to_list forms);
              executable =
                (fun name -> Executable.create_file (output_path ^ "/" ^ name));
            }
