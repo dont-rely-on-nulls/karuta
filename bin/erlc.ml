@@ -20,5 +20,4 @@ let compile prefix filepath forms =
   Logger.debug forms_str;
   let temp_file = create_tmp_file name forms_str in
   Logger.debug @@ "Persisting " ^ name ^ " in " ^ temp_file;
-  (* Execute erlc, targeting the destination prefix folder for the .beam output *)
   Fun.const () @@ spawn_compile_process [| "erlc"; "-o"; prefix; temp_file |]
