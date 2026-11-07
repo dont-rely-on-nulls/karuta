@@ -6,6 +6,7 @@ result
 *.cmo
 .direnv
 *.beam
+*.abstr
 *.S
 *.core
 runtime/play

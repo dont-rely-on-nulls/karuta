@@ -211,24 +211,20 @@ module type API = sig
 end
 
 module Log = struct
-  let current_file : string Eio.Fiber.key = Eio.Fiber.create_key ()
-  let in_file filename = Eio.Fiber.with_binding current_file filename
+  type key = string
+  type value = string FT.t
 
-  let rec swap a f =
-    let v = Atomic.get a in
-    if Atomic.compare_and_set a v (f v) then () else swap a f
+  module Internal = Dict.Make (struct
+    type nonrec key = key
+    type nonrec value = value
 
-  let messages_by_file : string FT.t BatMap.String.t Atomic.t =
-    Atomic.make BatMap.String.empty
+    let empty_value = FT.empty
+    let key_value_flush _ msg = FT.iter Stdlib.print_endline msg
+  end)
 
-  let export msg =
-    Eio.Fiber.get current_file |> Option.get |> fun filename ->
-    swap messages_by_file
-      (BatMap.String.modify_def FT.empty filename (Fun.flip FT.snoc msg))
-
-  let flush () =
-    Atomic.get messages_by_file
-    |> BatMap.String.iter (fun _ msg -> FT.iter Stdlib.print_endline msg)
+  let in_file = Internal.with_key
+  let export msg = Internal.update @@ Fun.flip FT.snoc msg
+  let flush = Internal.flush_iter
 end
 
 let current = Eio.Fiber.create_key ()
