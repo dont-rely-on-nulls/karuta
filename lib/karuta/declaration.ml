@@ -51,7 +51,9 @@ let compile_declaration_bodies
            locations yet, hence they are not being sent as arguments *)
         let make_function { content = { Ast.Expr.name; elements } as call; loc }
             =
-          match Lookup.predicate compiler.env name (FT.size elements) with
+          match
+            Shared.Lookup.predicate compiler.env name (FT.size elements)
+          with
           | `Undefined _ -> raise Exit
           | `UnexpectedSignature loc ->
               Logger.error loc

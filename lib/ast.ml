@@ -10,6 +10,7 @@ module type EXPR = sig
 end
 
 type head = { name : string; arity : int } [@@deriving show, ord]
+type imports = Location.region BatMap.String.t
 
 module ModuleF (Expr : EXPR) = struct
   type declaration = head * decl Location.with_location
@@ -25,30 +26,29 @@ module ModuleF (Expr : EXPR) = struct
   and declaration_env = (head, decl Location.with_location) BatMap.t
   and query_ref = { name : string; args : string FT.t }
 
-  and ('directives, 'mods) signature_body = {
+  and 'directives signature_body = {
     declarations : declaration_env;
-    directives : ('directives, 'mods) directive Location.with_location FT.t;
+    directives : 'directives directive Location.with_location FT.t;
   }
 
-  and ('directives, 'mods) signature_ref =
+  and 'directives signature_ref =
     | Named of Expr.func_label
-    | Inlined of ('directives, 'mods) signature_body
+    | Inlined of 'directives signature_body
 
-  and ('directives, 'mods) directive =
-    | Module of ('directives, 'mods) module_body
+  and 'directives directive =
+    | Module of 'directives module_body
     | Signature of {
         name : string Location.with_location;
-        body : ('directives, 'mods) signature_body;
+        body : 'directives signature_body;
       }
     | TargetSpecific of 'directives
 
-  and ('directives, 'mods) module_body = {
+  and 'directives module_body = {
     name : string Location.with_location;
-    signature :
-      ('directives, 'mods) signature_ref Location.with_location option;
+    signature : 'directives signature_ref Location.with_location option;
     declarations : multi_declaration_env;
-    directives : ('directives, 'mods) directive Location.with_location FT.t;
-    target_specific : 'mods;
+    directives : 'directives directive Location.with_location FT.t;
+    imports : imports;
     query : query_ref Location.with_location option;
   }
 
@@ -57,10 +57,9 @@ module ModuleF (Expr : EXPR) = struct
     original_arg_list : Expr.t FT.t;
   }
 
-  and ('directives, 'mods) t =
-    ('directives, 'mods) module_body Location.with_location
+  and 'directives t = 'directives module_body Location.with_location
 
-  let signature_populated (s : ('directives, 'mods) signature_body) : bool =
+  let signature_populated (s : 'directives signature_body) : bool =
     not (FT.is_empty s.directives && BatMap.is_empty s.declarations)
 
   let multi_declaration_env_to_declaration_env

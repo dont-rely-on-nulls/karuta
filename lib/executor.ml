@@ -16,13 +16,10 @@ module Form = Beam.Core.Form (Beam.Core.Erlang)
 let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
     (persist : Shared.Compiler.Persist.both) (filepaths : string list) :
     unit attempt =
-  Eio_main.run @@ fun _ ->
-  at_exit Logger.flush;
   let sakura_files, karuta_files =
     BatSet.String.partition Sakura.Preprocessor.is_sakura_file
     @@ BatSet.String.of_list filepaths
   in
-  let module Lookup = Karuta.Lookup in
   let module Sakura : Shared.Compiler.COMPILER =
     Shared.Compiler.Make (Sakura.Module)
   in
@@ -71,7 +68,7 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
           exit 1
       | Some { content; loc } -> (
           match
-            Lookup.check_dependency_cycle loc.filename @@ fun () ->
+            Shared.Compiler.check_dependency_cycle loc.filename @@ fun () ->
             Lazy.force content
           with
           (* TODO: allow the use of queries from nested modules *)

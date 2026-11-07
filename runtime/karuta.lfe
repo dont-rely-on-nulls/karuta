@@ -1,10 +1,5 @@
 (defmodule karuta
   (export
-    (fresh 1)
-    (unify 3)
-    (deref 2)
-    (is-variable 2)
-    (boundedness 2)
     (leq 2)
     (lt 2)
     (int 1)
@@ -13,29 +8,10 @@
     (minus 3)
     (neg 2)
     (mult 3)
-    (ifte 3)
     (divmod 4)
-    (call-with-fresh 1)
     (eq 2)
-    (conj 1)
-    (disj 1)
-    (conj 2)
-    (disj 2)
-    (delay 1)
-    (pull 1)
-    (start 2)
-    (true 1)
-    (false 1)
-    (t-dee 1)
-    (t-dum 1)
-    (take-all 1)
-    (take 2)
-    (deref-query-var 2)
-    (deref-query 1)
-    (query-variable 3)
-    (bind-results 2)
-    (run-lazy 2)
-    (pretty-print 1)))
+    (dee 1)
+    (dum 1)))
 
 (eval-when-compile
   (defun gensym ()
@@ -57,14 +33,14 @@
                (let (((tuple name-acc bindings-acc case-acc checks-acc position) acc)
                      ((list pred-name arg-name) arg-pair))
                  (tuple (cons arg-name name-acc)
-                        (cons (list arg-name `(karuta:deref ,state-sym ,arg-name))
+                        (cons (list arg-name `(kanren:deref ,state-sym ,arg-name))
                               bindings-acc)
-                        (cons `(karuta:boundedness ,arg-name ,state-sym)
+                        (cons `(kanren:boundedness ,arg-name ,state-sym)
                               case-acc)
                         (cons `((tuple ,@(tuple-pattern arg-count
                                                         (+ arg-count position)))
                                 (when (not (,pred-name ,arg-name)))
-                                (fun karuta:false 1))
+                                (fun kanren:false 1))
                               checks-acc)
                         (- position 1))))
              (tuple '() '() '() '() -1)
@@ -87,178 +63,14 @@
                ,@clauses)
              ,state-sym)))))))
 
-(defun is-variable (var bindings)
-  (and (is_reference var) (is_map_key var bindings)))
-
-(defun boundedness (var bindings)
-  (if (is-variable var bindings)
-    'unbound
-    'bound))
-
-(defun fresh (bindings)
-  (let ((var (make_ref)))
-    (tuple var (mset bindings var 'unbound))))
-
-(defun deref
-  ((state var) (when (is_reference var))
-   (case (maps:find var state)
-     ((tuple 'ok (tuple 'bound value)) (deref state value))
-     (_ var)))
-  ((_ value) value))
-
-(defun deref-tuple
-  ((state position tuple) (when (=< position (tuple_size tuple)))
-   (deref-tuple state
-                (+ position 1)
-                (setelement position tuple (deref-all state (element position tuple)))))
-  ((_ _ tuple) tuple))
-
-(defun deref-map (state m)
-  (maps:map (lambda (_ v) (deref-all state v)) m))
-
-(defun deref-all (state var)
-  (case (deref state var)
-    ((cons h t) (cons (deref-all state h) (deref-all state t)))
-    (t (when (is_tuple t)) (deref-tuple state 1 t))
-    (m (when (is_map m)) (deref-map state m))
-    (something-else something-else)))
-
-(defun deref-query-var (state var-name)
-  (deref-all state
-    (clj:-> state (mref 'query) (mref var-name))))
-
-(defun deref-query (state)
-  (deref-all state (maps:get 'query state #m())))
-
-(defun query-variable (var name goal)
-  (lambda (state)
-    (let* ((query (maps:get 'query state #m()))
-           (next-query (mset query name var))
-           (next-state (mset state 'query next-query)))
-      (funcall goal next-state))))
-
-(defun unify (state lhs rhs)
-  (unify-dereferenced state (deref state lhs) (deref state rhs)))
-
-(defun discard? (state var)
-  (=:= (maps:get var state 'not-found) 'discard))
-
-(defun unify-variable (state var value)
-  (if (or (discard? state var) (discard? state value))
-    (list state)
-    (list (mset state var (tuple 'bound value)))))
-
-(defun unify-tuple
-  ((state size position left right) (when (=< position size))
-   (maybe
-     (?= (list next-state)
-         (unify state (element position left) (element position right)))
-     (unify-tuple next-state size (+ position 1) left right)))
-  ((state _ _ _ _) (list state)))
-
-(defun unify-kv
-  ((key value (list state) m) (when (is_map_key key m))
-    (unify state value (mref m key)))
-  ((_ _ _ _) ()))
-
-(defun unify-map (state a b)
-  (maps:fold
-    (lambda (key value acc) (unify-kv key value acc b))
-    (list state)
-    a))
-
-(defun same_primitive (a b)
-  (andalso
-    (orelse
-      (andalso (is_atom a) (is_atom b))
-      (andalso (is_bitstring a) (is_bitstring b))
-      (andalso (is_float a) (is_float b))
-      (andalso (is_integer a) (is_integer b))
-      (andalso (is_pid a) (is_pid b))
-      (andalso (is_port a) (is_port b))
-      (andalso (is_reference a) (is_reference b)))
-    (=:= a b)))
-
-(defun unify-dereferenced (state a b)
-  (cond
-    ((same_primitive a b) (list state))
-    ((andalso (is_reference a) (is_map_key a state)) (unify-variable state a b))
-    ((andalso (is_reference b) (is_map_key b state)) (unify-variable state b a))
-    ((andalso (is_map a) (is_map b) (== (map_size a) (map_size b)))
-     (unify-map state a b))
-    ((andalso (is_tuple a) (is_tuple b) (== (tuple_size a) (tuple_size b)))
-     (unify-tuple state (tuple_size a) 1 a b))
-    ('true
-     (case (tuple a b)
-       ((tuple (cons ha ta) (cons hb tb))
-        (maybe
-          (?= (list next-state) (unify state ha hb))
-          (unify next-state ta tb)))
-       ((tuple '() '()) (list state))
-       (_ (list))))))
-
-(defun mplus
-  ((() rhs) rhs)
-  (((cons h t) rhs) (cons h (mplus t rhs)))
-  ((lhs rhs) (when (is_function lhs))
-   (lambda () (mplus rhs (funcall lhs)))))
-
-(defun bind
-  ((() _) ())
-  (((cons h t) goal) (mplus (funcall goal h) (bind t goal)))
-  ((stream goal) (when (is_function stream))
-   (lambda () (bind (funcall stream) goal))))
-
-(defun delay (goal)
-  (lambda (state)
-    (lambda () (funcall goal state))))
-
-(defun pull
-  ((()) #(error no-result))
-  (((cons h t)) (tuple 'ok h t))
-  ((stream) (when (is_function stream)) (pull (funcall stream))))
-
-(defun start
-  (((= config (map 'db_port port 'db_address address 'db_root db-root)) goal)
-   (let* ((timeout-map (maps:get 'db_timeouts config (map)))
-          (connect-timeout (maps:get 'connect timeout-map (* 60 1000)))
-          (send-timeout (maps:get 'send timeout-map (* 5 1000)))
-          (tcp-opts (list 'binary
-                          #(active false)
-                          #(packet 0)
-                          (tuple 'send_timeout send-timeout))))
-     (case (gen_tcp:connect address port tcp-opts connect-timeout)
-       ((tuple 'ok socket)
-        (funcall goal
-                 ; TODO: uncomment this when we add the DB schema check
-                 ; (conj
-                 ;   (sakura:ask (map) (funcall (fun db-root 'init-payload 0)))
-                 ;   goal)
-                 (map 'db_config (map 'socket socket
-                                      'timeouts timeout-map))))
-       ((tuple 'error error) (erlang:error (tuple 'bad_start error))))))
-  ((_ goal) (funcall goal #m())))
-
-(defun take-all (stream)
-  (case (pull stream)
-    ((tuple 'ok res next) (cons res (take-all next)))
-    ((tuple 'error 'no-result) '())))
-
-(defun take (n stream)
-  (if (=< n 0)
-    '()
-    (case (pull stream)
-      ((tuple 'ok res next) (cons res (take (- n 1) next)))
-      ((tuple 'error 'no-result) '()))))
-
 (defun eq (lhs rhs)
-  (lambda (state) (unify state lhs rhs)))
+  (lambda (state) (kanren:unify state lhs rhs)))
 
 (defun ifte (test then else)
   (lambda (state)
     (let ((test-results (funcall test state)))
-      (case (pull test-results)
-        ((tuple 'ok res next) (bind (cons res next) then))
+      (case (kanren:pull test-results)
+        ((tuple 'ok res next) (kanren:bind (cons res next) then))
         ((tuple 'error 'no-result) (funcall else state))))))
 
 (defun next-int (n)
@@ -269,13 +81,13 @@
 (defun next-nat (n) (+ n 1))
 
 (defun generate (next variable current)
-  (disj
+  (kanren:disj
    (list (eq variable current)
      (lambda (state)
        (funcall (generate next variable (funcall next current)) state)))))
 
 (defun generate-while (pred next variable current)
-  (disj
+  (kanren:disj
    (if (funcall pred current)
      (list (eq variable current)
        (lambda (state)
@@ -305,8 +117,8 @@
 (defun type (pred generate)
   (lambda (v)
     (lambda (state)
-      (let* ((deref-v (deref state v))
-             (goal (if (is-variable deref-v state)
+      (let* ((deref-v (kanren:deref state v))
+             (goal (if (kanren:is-variable deref-v state)
                      (funcall generate deref-v)
                      (eq 'true (funcall pred deref-v)))))
         (funcall goal state)))))
@@ -337,33 +149,33 @@
            n))
 
 (defpred leq ((is_integer lhs) (is_integer rhs))
-  ((tuple 'bound 'bound) (if (=< lhs rhs) (fun true 1) (fun false 1)))
-  ((tuple 'unbound 'unbound) (conj (int lhs) (leq lhs rhs)))
+  ((tuple 'bound 'bound) (if (=< lhs rhs) (fun kanren:true 1) (fun kanren:false 1)))
+  ((tuple 'unbound 'unbound) (kanren:conj (int lhs) (leq lhs rhs)))
   ((tuple _ _)
-   (call-with-fresh
+   (kanren:call-with-fresh
     (lambda (n)
-      (conj (nat n)
+      (kanren:conj (nat n)
         (plus lhs n rhs))))))
 
 (defpred lt ((is_integer lhs) (is_integer rhs))
-  ((tuple 'bound 'bound) (if (< lhs rhs) (fun true 1) (fun false 1)))
-  ((tuple 'unbound 'unbound) (conj (int lhs) (lt lhs rhs)))
+  ((tuple 'bound 'bound) (if (< lhs rhs) (fun kanren:true 1) (fun kanren:false 1)))
+  ((tuple 'unbound 'unbound) (kanren:conj (int lhs) (lt lhs rhs)))
   ((tuple _ _)
-   (call-with-fresh
+   (kanren:call-with-fresh
     (lambda (n)
-      (conj (nat n)
+      (kanren:conj (nat n)
         (ifte (eq n 0)
-          (fun false 1)
+          (fun kanren:false 1)
           (plus lhs n rhs)))))))
 
 (defpred plus ((is_integer lhs) (is_integer rhs) (is_integer out))
   ((tuple 'bound 'bound _) (eq out (+ lhs rhs)))
   ((tuple 'unbound 'bound 'bound) (eq lhs (- out rhs)))
   ((tuple 'bound 'unbound 'bound) (eq rhs (- out lhs)))
-  ((tuple 'unbound 'unbound 'bound) (conj (int lhs) (plus lhs rhs out)))
-  ((tuple 'unbound 'bound 'unbound) (conj (int lhs) (plus lhs rhs out)))
-  ((tuple 'bound 'unbound 'unbound) (conj (int rhs) (plus lhs rhs out)))
-  ((tuple 'unbound 'unbound 'unbound) (conj (int out) (plus lhs rhs out))))
+  ((tuple 'unbound 'unbound 'bound) (kanren:conj (int lhs) (plus lhs rhs out)))
+  ((tuple 'unbound 'bound 'unbound) (kanren:conj (int lhs) (plus lhs rhs out)))
+  ((tuple 'bound 'unbound 'unbound) (kanren:conj (int rhs) (plus lhs rhs out)))
+  ((tuple 'unbound 'unbound 'unbound) (kanren:conj (int out) (plus lhs rhs out))))
 
 (defun minus (lhs rhs out)
   (plus rhs out lhs))
@@ -384,32 +196,32 @@
   ((tuple 'bound 'bound _) (eq out (* lhs rhs)))
   ((tuple 'unbound 'bound 'bound)
    (ifte (eq rhs 0)
-     (conj (eq out 0) (int lhs))
+     (kanren:conj (eq out 0) (int lhs))
      (ifte (eq out 0)
        (eq lhs 0)
        (lambda (state)
          (funcall (eq (tuple lhs 0) (divmod out rhs)) state)))))
   ((tuple 'bound 'unbound 'bound)
    (ifte (eq lhs 0)
-     (conj (eq out 0) (int rhs))
+     (kanren:conj (eq out 0) (int rhs))
      (ifte (eq out 0)
        (eq rhs 0)
        (lambda (state)
          (funcall (eq (tuple rhs 0) (divmod out lhs)) state)))))
   ((tuple 'unbound 'unbound 'bound)
    (ifte (eq out 0)
-     (disj (conj (eq lhs 0) (int rhs))
-       (conj (eq rhs 0) (every-int lhs -1)))
-     (conj (int lhs out) (mult lhs rhs out))))
+     (kanren:disj (kanren:conj (eq lhs 0) (int rhs))
+       (kanren:conj (eq rhs 0) (every-int lhs -1)))
+     (kanren:conj (int lhs out) (mult lhs rhs out))))
   ((tuple 'unbound 'bound 'unbound)
    (ifte (eq rhs 0)
-     (conj (eq out 0) (int lhs))
-     (conj (int lhs) (mult lhs rhs out))))
+     (kanren:conj (eq out 0) (int lhs))
+     (kanren:conj (int lhs) (mult lhs rhs out))))
   ((tuple 'bound 'unbound 'unbound)
    (ifte (eq lhs 0)
-     (conj (eq out 0) (int rhs))
-     (conj (int rhs) (mult lhs rhs out))))
-  ((tuple 'unbound 'unbound 'unbound) (conj (int lhs) (mult lhs rhs out))))
+     (kanren:conj (eq out 0) (int rhs))
+     (kanren:conj (int rhs) (mult lhs rhs out))))
+  ((tuple 'unbound 'unbound 'unbound) (kanren:conj (int lhs) (mult lhs rhs out))))
 
 (defmacro non_zero_integer (n)
   `(andalso (is_integer ,n) (not (=:= ,n 0))))
@@ -423,104 +235,14 @@
   ((tuple 'unbound 'bound 'bound 'bound)
    (eq dividend (+ remainder (* divisor quotient))))
   ((tuple 'unbound 'bound _ 'unbound)
-   (conj (nat remainder (abs divisor))
+   (kanren:conj (nat remainder (abs divisor))
      (divmod dividend divisor quotient remainder)))
   ((tuple 'unbound 'bound 'unbound 'bound)
-   (conj (int quotient)
+   (kanren:conj (int quotient)
      (divmod dividend divisor quotient remainder)))
   ((tuple _ 'unbound _ _) ; TODO: revisit this when we have not-equals
-   (conj (int divisor)
+   (kanren:conj (int divisor)
      (divmod dividend divisor quotient remainder))))
 
-(defun true (state) (list state))
-(defun false (_) '())
-(defun t-dee (state) (list state))
-(defun t-dum (_) '())
-
-(defun call-with-fresh (f)
-  (lambda (state)
-    (let* (((tuple var new-state) (fresh state))
-           (goal (funcall f var)))
-      (funcall goal new-state))))
-
-(defun disj (g1 g2)
-  (lambda (state) (mplus (funcall g1 state) (funcall g2 state))))
-
-(defun conj (g1 g2)
-  (lambda (state) (bind (funcall g1 state) g2)))
-
-(defun disj (goals)
-  (lists:foldr
-    (lambda (elem acc) (disj (delay elem) acc))
-    (fun false 1)
-    goals))
-
-(defun conj (goals)
-  (lists:foldr
-    (lambda (elem acc) (conj (delay elem) acc))
-    (fun true 1)
-    goals))
-
-(defun bind-results (pattern results)
-  (lambda (state)
-    (case (pull results)
-      ((tuple 'ok head tail)
-       (funcall
-         (disj (eq pattern head)
-               (bind-results pattern tail))
-         state))
-      ((tuple 'error 'no-result) '()))))
-
-(defun stream-map
-  ((_ ()) '())
-  ((f (cons h t)) (cons (funcall f h) (stream-map f t)))
-  ((f stream) (when (is_function stream))
-   (lambda () (stream-map f (funcall stream)))))
-
-(defun run-lazy (config goal)
-  (stream-map (fun deref-query 1) (start config goal)))
-
-(defun pretty-print-tuple (t)
-  (let ((tuple-size (erlang:tuple_size t)))
-    (cond
-     ((=:= tuple-size 1) (erlang:error (tuple 'compiler_error "Unreachable: Singleton tuples should be impossible in Karuta values")))
-     ((=:= tuple-size 0) (erlang:error (tuple 'compiler_error "Unreachable: Nullary tuples are not supported as values in Karuta")))
-     ('true
-      (let (((cons head tail) (erlang:tuple_to_list t)))
-        (list (erlang:atom_to_list head) (pretty-print-term tail)))))))
-
-(defun pretty-print-term (term)
-  (cond
-   ((erlang:is_map term) (erlang:error (tuple 'compiler_error "Unreachable: Maps are not supported as values in Karuta yet")))
-   ((erlang:is_atom term) (erlang:atom_to_list term))
-   ((erlang:is_list term)
-    (list "["
-          (clj:->> term
-                   (lists:map (fun pretty-print-term 1))
-                   (lists:join ", "))
-          "]"))
-   ((is_tuple term) (pretty-print-tuple term))
-   ((is_integer term) (erlang:integer_to_list term))
-   ((is_reference term)
-    ;; TODO: figure out a nice way to distinguish variables from non-variables
-    (list "Var" (integer_to_list (lists:foldl (lambda (elem acc)
-                                                (+ (* acc 256) elem))
-                                              0
-                                              (erlang:ref_to_list term)))))
-   ('true (erlang:error (tuple 'compiler_error "Unreachable: Unsupported term in Karuta yet")))))
-
-(defun pretty-print-single (solution)
-  (if (erlang:is_map solution)
-      (list "---------\n"
-        (maps:fold
-          (lambda (key value acc)
-            (list acc (atom_to_list key) " = " (pretty-print-term value) "\n"))
-          "" (maps:iterator solution 'ordered)))
-    (erlang:error (tuple 'compiler_error "Unreachable: Kanren solution returned something that is not a map"))))
-
-(defun pretty-print-all (output) (lists:map (fun pretty-print-single 1) output))
-
-(defun pretty-print (output)
-  (if (erlang:is_list output)
-    (io:format "~s" (list (pretty-print-all output)))
-    (erlang:error (tuple 'compiler_error "Unreachable: Kanren output returned something that is not a list"))))
+(defun dee (state) (kanren:true state))
+(defun dum (state) (kanren:false state))

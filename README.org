@@ -22,24 +22,37 @@ you are crazy enough to use it.
 - [X] Comments
 - [X] BEAM runtime library (logic variables, backtracking)
 - [X] Compilation
-- [X] Atom Literals  
+- [X] Atom Literals
 - [X] Integer Literals
 - [X] List Literals
+- [ ] String Literals
+- [ ] Float Literals
+- [ ] Binary Literals
+- [ ] Tuple Literals (logic functors as records)
 - [X] Implement toolchain (i.e. compile to BEAM assembly, call ~erlc~ on that)
 - [X] Modules
 - [X] Integration Testing (testing Karuta programs directly)
 - [ ] Unit Testing (testing stages of the compiler)
+ - [X] Parser
+ - [ ] Preprocessor
+ - [ ] Logger
+ - [ ] Code generator
+ - [ ] Lookup
+ - [ ] Kanren Runtime
+ - [ ] Karuta Standard Library
 
 *** Advanced Features
 
+- [ ] FFI
 - [ ] Static Type System
 - [ ] Mode System
+- [ ] REPL
+- [ ] OTP  
 - [ ] ML Functors
 - [ ] Constraint-based
-- [ ] Effect System  
+- [ ] Effect System
+- [X] Concurrent Compilation
 - [ ] Build System
-- [ ] REPL
-- [ ] Concurrency
 
 *** Challenges
 
@@ -56,7 +69,6 @@ you are crazy enough to use it.
 * References
 
 - [[http://webyrd.net/scheme-2013/papers/HemannMuKanren2013.pdf][μKanren: A Minimal Functional Core for Relational Programming]]
-- [[https://okmij.org/ftp/ML/index.html#dynvar][Dynamic scoping implementation using OCaml Effect handlers]]
 - [[https://www.erlang.org/doc/apps/erts/absform.html][BEAM Abstract Form]]
 - [[https://webperso.info.ucl.ac.be/~pvr/VanRoyHaridi2003-book.pdf][Computer, Techniques, and Models of Computer Programming]]
 - [[https://users.dimi.uniud.it/~marco.comini/Students/Documentation/wam-book.pdf][Warren's Abtract Machine]]

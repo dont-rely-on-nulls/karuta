@@ -145,16 +145,15 @@ let rec ascribe_to_module
     }
     module_loc
 
-let rec compile_nested : type a mods directive.
+let rec compile_nested : type a directive.
     Location.region ->
-    (directive, mods) Ast.Module.signature_body ->
+    directive Ast.Module.signature_body ->
     a t ->
     sig_env Location.with_location ->
     compiled_signature Location.with_location =
  fun loc body ({ env = { modules; _ }; _ } as compiler) sig_env ->
-  let module Lookup = (val compiler.lookup) in
   let directive_step (acc : compiled_signature)
-      (next : (directive, mods) Ast.Module.directive Location.with_location) =
+      (next : directive Ast.Module.directive Location.with_location) =
     let happy_case (comptime_name : string)
         (definition : signature Location.with_location) =
       {
@@ -280,9 +279,9 @@ let rec compile_nested : type a mods directive.
        body.directives)
     loc
 
-and compile : type a mods directive.
+and compile : type a directive.
     Location.region ->
-    (directive, mods) Ast.Module.signature_body ->
+    directive Ast.Module.signature_body ->
     a t ->
     compiled_signature Location.with_location =
  fun loc body compiler ->

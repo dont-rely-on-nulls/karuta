@@ -2,7 +2,7 @@ include Types
 open Shared.Preprocessor
 
 let initial_mods = Fun.id
-let init_mods () = { imports = BatMap.String.singleton "karuta" Location.dummy }
+let init_imports () = BatMap.String.singleton "karuta" Location.dummy
 
 let rename_arg ({ loc; _ } as expr : Ast.Expr.t) (counter : int) :
     Ast.Expr.func Location.with_location =
@@ -67,53 +67,17 @@ let preprocess_declaration (decl : Ast.ParserClause.decl Location.with_location)
     renamed declarations
 
 let preprocess_directive :
-    (Types.directives, Types.mods) recur ->
+    Types.directives recur ->
     Ast.ParserClause.directive ->
-    (Types.directives, Types.mods) one_output =
- fun _recur (head, bodies) ->
-  let open Location in
-  if Ast.Expr.match_func head.content [ "import" ] then
-    if FT.is_empty bodies then (
-      match FT.front head.content.elements with
-      | Some (rest, singleton) when FT.is_empty rest ->
-          let external_dep = Ast.Expr.extract_unqualified_atom singleton in
-          Update
-            {
-              action =
-                (fun { imports } ->
-                  match BatMap.String.find_opt external_dep imports with
-                  | Some previous_loc ->
-                      Logger.error head.loc
-                        "Cannot import the same module twice";
-                      if previous_loc = Location.dummy then
-                        Logger.simply_info @@ external_dep
-                        ^ " is a builtin module"
-                      else Logger.error previous_loc "Previous import";
-                      raise Exit
-                  | None ->
-                      {
-                        imports =
-                          BatMap.String.add external_dep head.loc imports;
-                      });
-            }
-      | None ->
-          Logger.error head.loc "Directive 'import' cannot be an empty functor";
-          raise Exit
-      | _ ->
-          Logger.error head.loc
-            "Directive 'import' cannot have multiple expressions within";
-          raise Exit)
-    else (
-      Logger.error head.loc "Directive 'import' cannot have a body";
-      raise Exit)
-  else (
-    Logger.error head.loc "Unknown Karuta directive";
-    raise Exit)
+    Types.directives one_output =
+ fun _recur (head, _bodies) ->
+  Logger.error head.loc "Unknown Karuta directive";
+  raise Exit
 
 let preprocess_query (loc : Location.region)
     (calls : Ast.Expr.func Location.with_location FT.t)
-    (module_ : (Types.directives, Types.mods) Ast.Module.module_body) :
-    (Types.directives, Types.mods) Ast.Module.module_body =
+    (module_ : Types.directives Ast.Module.module_body) :
+    Types.directives Ast.Module.module_body =
   let open Ast in
   let open Location in
   let folder set call =
