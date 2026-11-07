@@ -1,5 +1,13 @@
 include BatFingerTree
 
+(* BatFingerTree.split_at only accepts indices inside the tree, so
+   splitting at its size raises. Here an index past the end leaves
+   everything on the left, and one before the start, on the right. *)
+let split_at ft n =
+  if n >= size ft then (ft, empty)
+  else if n <= 0 then (empty, ft)
+  else split_at ft n
+
 let rec mattch (compare : 'a -> 'a -> bool) (ft : 'a t) (to_compare : 'a list) =
   match (front ft, to_compare) with
   | None, [] -> true

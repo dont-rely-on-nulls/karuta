@@ -1,13 +1,16 @@
 (defmodule sakura
-  (export (ask 2)))
+  (export (ask 2) (rows 1) (solution 1)))
 
 (defun ask (pattern path)
-  "What a persisted Sakura predicate compiles to: reads the relation at
-Path through RNT's fol evaluator and unifies each row with Pattern."
+  "What a persisted Sakura predicate compiles to: calls what is at Path
+in RNT, telling it the arguments already bound, and unifies each row
+it answers with Pattern. Plans belong to the programs, not here."
   (lambda (state)
-    (let ((plan (fol:base (lists:map (fun unicode:characters_to_binary 1) path))))
-      (funcall (kanren:bind-results pattern (rows (rnt:evaluate #"fol" (fol:source plan))))
-               state))))
+    (let* ((bound (maps:filter (lambda (_ value) (not (is_reference value)))
+                               (maps:map (lambda (_ value) (kanren:deref state value)) pattern)))
+           (relation (rnt:invoke (lists:map (fun unicode:characters_to_binary 1) path)
+                                 (rnt:attributes bound))))
+      (funcall (kanren:bind-results pattern (rows relation)) state))))
 
 (defun rows (relation)
   "An RNT relation as a Karuta lazy stream, fetching 64 rows only when

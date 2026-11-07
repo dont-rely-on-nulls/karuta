@@ -14,7 +14,8 @@
 ;; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 (defmodule rnt
-  (export (start 0) (define 3) (invoke 1) (evaluate 2) (relation 2) (image 2)))
+  (export (start 0) (define 3) (invoke 1) (invoke 2) (evaluate 2)
+          (relation 2) (attributes 1) (image 2) (image 3)))
 
 (defun start ()
   "RNT boots the node with rnt:start(). It turns stdin/stdout, the pipe
@@ -52,29 +53,34 @@ program becomes an RNT condition, instead of killing the entire node."
 
 (defun serve
   "Answers to RNT requests where `h` runs the initialization procedures,
-i prepares a program image (loaded lazily, so load errors bubble on
-the first fetch), f reads the next batch and c forgets about it."
+i prepares a program image, the query in its module's || map, with
+what its caller already knows bound (loaded lazily, so load errors
+bubble on the first fetch), f reads the next batch and c forgets about
+it."
   (((binary #\h))
    (send (answering (lambda () (initialize) #"o"))))
   (((binary #\i (id (size 64))
             (m (size 16)) (mod binary (size m))
-            (f (size 16)) (func binary (size f))
-            (b (size 32)) (beam binary (size b))))
+            (b (size 32)) (beam binary (size b))
+            (bound binary)))
    (put (tuple 'poll id)
         (lambda (limit)
-          (let ((name (load (binary_to_atom mod) beam)))
-            (funcall (call name (binary_to_existing_atom func)) limit)))))
+          (let* ((name (load (binary_to_atom mod) beam))
+                 (query (mref (call name '||) 'query)))
+            (funcall (relation name (call-query query bound)) limit)))))
   (((binary #\f (id (size 64)) (limit (size 32))))
    (send (answering (lambda () (fetch id limit)))))
   (((binary #\c (id (size 64))))
    (erase (tuple 'poll id))))
 
 (defun initialize ()
-  "Let every loaded module register its programs with RNT at boot time,
-for example a compiled Karuta query registering itself as an image."
+  "Let every loaded module register its programs with RNT at boot time
+through the rnt-init in its || map, for example a compiled Karuta
+query registering itself as an image. Modules without one are skipped."
   (lc ((<- (tuple mod _) (code:all_loaded))
-       (erlang:function_exported mod '|| 0))
-    (funcall (mref (call mod '||) 'rnt-init))))
+       (erlang:function_exported mod '|| 0)
+       (<- (tuple 'ok init) (list (maps:find 'rnt-init (call mod '||)))))
+    (funcall init)))
 
 (defun load (name beam)
   "Loads the .beam an image carries, unless that exact code is already
@@ -97,6 +103,15 @@ its stream for the next fetch."
        (put (tuple 'poll id) rest)
        (batch rows (=:= rest 'done))))))
 
+(defun call-query (query bound)
+  "The goal of an image's query. A query of one argument is procedural:
+it gets the bound attributes, as Karuta values, and checks them. A
+compiled Karuta query takes none, and its caller filters its rows."
+  (case (erlang:fun_info query 'arity)
+    ((tuple 'arity 0) (funcall query))
+    ((tuple 'arity 1)
+     (funcall query (if (=:= bound #"") #m() (sakura:solution (binary_to_term bound)))))))
+
 (defun batch (rows exhausted)
   "Encodes a b frame: the exhausted flag, then each {Type, #{Name =>
 Value}} tuple as a sized term_to_binary."
@@ -113,7 +128,15 @@ at Path in RNT's tree, so it can be invoked later by anyone."
 (defun invoke (path)
   "Runs the program registered at Path and hands back its result, an
 ephemeral relation, as a lazy fun(Limit)."
-  (relation (request (list #\X (encode-path path)))))
+  (invoke path #m()))
+
+(defun invoke (path bound)
+  "Like invoke/1, telling the program the attributes its caller already
+knows, an RNT attribute map, so a procedural one can be called."
+  (relation (request (list #\X (encode-path path)
+                           (if (=:= bound #m())
+                             #""
+                             (term_to_binary (tuple (lists:last path) bound)))))))
 
 (defun evaluate (evaluator source)
   "Runs a program without registering it, for plans built on the fly
@@ -196,14 +219,17 @@ lists, tuples and unbound variables are refused for now."
   ((value) (error (tuple 'unrepresentable value))))
 
 (defun image (mod variables)
-  "Called by a compiled module's rnt_init/0: registers its query in RNT
-at \\karuta\\program\\<module>, carrying the module's own .beam as the
-image. Every attribute is declared as a string until Karuta has types."
+  "Called by a compiled module's rnt-init closure: registers its query
+in RNT at \\karuta\\program\\<module>."
+  (image mod variables (list #"karuta" #"program" (atom_to_binary mod))))
+
+(defun image (mod variables path)
+  "Registers Mod's query in RNT at Path, carrying the module's own
+.beam as the image. Every attribute is declared as a string until
+Karuta has types."
   (let* (((tuple 'ok beam) (file:read_file (code:which mod)))
          (heading (maps:from_list
                     (lc ((<- variable variables))
                       (tuple (attribute-name variable) #"string"))))
          (program (tuple (atom_to_binary mod) beam heading)))
-    (define (list #"karuta" #"program" (atom_to_binary mod))
-            #"karuta:beam"
-            (term_to_binary program))))
+    (define path #"karuta:beam" (term_to_binary program))))
