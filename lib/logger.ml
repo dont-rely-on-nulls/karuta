@@ -62,13 +62,9 @@ module Make (Output : OUTPUT) = struct
     | Debug -> Output.format_debug_message prefix locMay msg
 
   and report level locMay msg = msg |> format level locMay |> Output.export
-  and create_simply_msg level msg = format level None msg
 
   and internal level (locMay : Location.region option) (msg : string) : unit =
-    if should_log level then
-      match locMay with
-      | None -> msg |> create_simply_msg level |> print_endline
-      | Some _ -> report level locMay msg
+    if should_log level then report level locMay msg
 
   and unreachable (loc : Location.region) (msg : string) : unit =
     internal Unreachable (Some loc) msg
