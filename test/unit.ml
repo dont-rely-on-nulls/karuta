@@ -1,1 +1,1 @@
-let tests = Parser.tests
+let tests = Parser.tests @ [ ("Logger", Logger_test.tests) ]
