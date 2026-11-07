@@ -4,8 +4,8 @@ open Lib
 let create_erlc_process args = create_process "erlc" args stdin stdout stderr
 let spawn_compile_process args = create_erlc_process args |> Posix.treat_pid
 
-let dispatch_erlc prefix (abstr_files : string list) : unit =
-  abstr_files |> Array.of_list
+let dispatch_erlc prefix (abstr_files : string array) : unit =
+  abstr_files
   |> Array.append [| "erlc"; "-o"; prefix |]
   |> spawn_compile_process |> Fun.const ()
 
@@ -23,7 +23,7 @@ module Persist = struct
 
   let compile prefix =
     Internal.flush_one_shot (fun file_unit_map ->
-        file_unit_map |> BatMap.keys |> BatList.of_enum |> dispatch_erlc prefix)
+        file_unit_map |> BatMap.keys |> BatArray.of_enum |> dispatch_erlc prefix)
 end
 
 let create_file prefix filepath forms =

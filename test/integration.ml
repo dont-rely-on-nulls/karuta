@@ -46,10 +46,11 @@ let make_test current_directory
     Alcotest.test_case name `Quick @@ fun () ->
     Unix.chdir test_directory;
     try
-      let output = Lib.Posix.run_process
-        (match limit with
-        | None -> [| filename |]
-        | Some n -> [| filename; string_of_int n |])
+      let output =
+        Lib.Posix.run_process
+          (match limit with
+          | None -> [| filename |]
+          | Some n -> [| filename; string_of_int n |])
       in
       output |> split_results
       |> Alcotest.(check batset_string)
