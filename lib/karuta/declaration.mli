@@ -1,7 +1,7 @@
 open Beam
 open Types
 
-val call_with_fresh : string -> Builder.Expr.t -> Builder.Expr.t
+val call_with_fresh : string -> Builder.Expr.t list -> Builder.Expr.t
 
 val compile_single_body :
   state Shared.Compiler.t ->

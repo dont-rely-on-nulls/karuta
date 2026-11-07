@@ -16,7 +16,9 @@ let emit { persist; sakura; filename; root_module } =
         Printf.sprintf "(map 'db_port %d 'db_address \"%s\" 'db_root '|%s|)"
           port address root_module
   in
-  let query = Printf.sprintf "(call '%s '||)" root_module in
+  let query =
+    Printf.sprintf "(funcall (mref (call '%s '||) 'query))" root_module
+  in
   let body =
     Printf.sprintf
       "  (let ((take-fn\n\

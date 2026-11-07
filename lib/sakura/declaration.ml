@@ -38,34 +38,36 @@ let compile_persisted ({ name; arity } as head : Ast.head)
     in
     Beam.Builder.single_function_declaration name
       (List.map (fun v -> Beam.Builder.Pattern.Variable v) args)
-    @@ Beam.Builder.call_with_module
-         (Beam.Builder.atom "sakura")
-         (Beam.Builder.atom "ask")
-         [
-           Beam.Builder.map
-             (original_arg_list |> FT.enum
-             |> BatEnum.map
-                  (Fun.compose Beam.Builder.atom Ast.Expr.extract_variable)
-             |> BatList.of_enum)
-             (List.map Beam.Builder.var args);
-           (* TODO: the branch is always master for now *)
-           (* TODO: Multi group namespace needs to be treated at some point *)
-           Beam.Builder.list_expr
-           @@ List.map Beam.Builder.string
-                [
-                  "system";
-                  "branch";
-                  "master";
-                  "multigroup";
-                  FT.head_exn multigroup_and_schema;
-                  "schema";
-                  FT.last_exn multigroup_and_schema;
-                  "relation";
-                  (* TODO: Revisit this when we implement writing the schema.
+      [
+        Beam.Builder.call_with_module
+          (Beam.Builder.atom "sakura")
+          (Beam.Builder.atom "ask")
+          [
+            Beam.Builder.map
+              (original_arg_list |> FT.enum
+              |> BatEnum.map
+                   (Fun.compose Beam.Builder.atom Ast.Expr.extract_variable)
+              |> BatList.of_enum)
+              (List.map Beam.Builder.var args);
+            (* TODO: the branch is always master for now *)
+            (* TODO: Multi group namespace needs to be treated at some point *)
+            Beam.Builder.list_expr
+            @@ List.map Beam.Builder.string
+                 [
+                   "system";
+                   "branch";
+                   "master";
+                   "multigroup";
+                   FT.head_exn multigroup_and_schema;
+                   "schema";
+                   FT.last_exn multigroup_and_schema;
+                   "relation";
+                   (* TODO: Revisit this when we implement writing the schema.
                      We may not want this name mangling. *)
-                  name_without_multigroup_and_schema;
-                ];
-         ]
+                   name_without_multigroup_and_schema;
+                 ];
+          ];
+      ]
   in
   let export = Beam.Builder.Attribute.export [ (name, arity) ] in
   {

@@ -73,7 +73,7 @@ let compile_declaration_bodies
             Str.string_match (Str.regexp "^[A-Z]") name 0)
       in
       let body = compile_single_body compiler body in
-      BatSet.fold call_with_fresh vars body
+      BatSet.fold (fun var body -> call_with_fresh var [ body ]) vars body
     in
     clauses |> FT.map compile_one |> FT.to_list |> Ukanren.disj
 
@@ -90,8 +90,10 @@ let compile ({ name; arity } : Ast.head)
     in
     Beam.Builder.single_function_declaration name
       (List.map (fun v -> Beam.Builder.Pattern.Variable v) args)
-    @@ compile_declaration_bodies compiler
-         (FT.cons remaining_clauses first_clause)
+      [
+        compile_declaration_bodies compiler
+          (FT.cons remaining_clauses first_clause);
+      ]
   in
   let export = Beam.Builder.Attribute.export [ (name, arity) ] in
   {

@@ -14,6 +14,7 @@ let int i = Expr.Literal (Primitives.Integer i)
 let tuple ts = Expr.Tuple ts
 let cons h t = Expr.Cons (h, t)
 let nil = lit Primitives.Nil
+let eq v e = Expr.Match (Pattern.Variable v, e)
 let rec list_expr = function [] -> nil | x :: xs -> cons x (list_expr xs)
 let pattern_var v = Pattern.Variable v
 let pattern_wildcard = Pattern.Wildcard
@@ -28,19 +29,19 @@ let call_with_module m f args = Expr.Fun (Expr.CallWithModule (m, f, args))
 let function_declaration name arity clauses = Function { name; arity; clauses }
 let map keys vals = Expr.Map (Expr.MapCreation (BatList.combine keys vals))
 
-let single_function_declaration name args expr =
+let single_function_declaration name args body =
   Function
     {
       name;
       arity = List.length args;
-      clauses = [ { guards = []; patterns = args; body = [ expr ] } ];
+      clauses = [ { guards = []; patterns = args; body } ];
     }
 
 let lambda args body =
   Expr.Lambda
     [
       {
-        body = [ body ];
+        body;
         guards = [];
         patterns = List.map (fun v -> Pattern.Variable v) args;
       };
