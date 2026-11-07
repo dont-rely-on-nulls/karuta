@@ -6,7 +6,7 @@
 (library
  (name bin)
  (libraries lib num cmds)
- (modules erl cmd)
+ (modules erlc cmd)
  (preprocess
   (pps ppx_deriving.show ppx_enumerate)))
 
