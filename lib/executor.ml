@@ -77,7 +77,6 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
               Executable.emit
                 {
                   persist = persist.executable;
-                  query = query.content;
                   sakura =
                     (if BatSet.String.is_empty sakura_files then None
                      else sakura);

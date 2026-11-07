@@ -1,7 +1,6 @@
 include Types
 
-let compile (query : Ast.Module.query_ref Location.with_location option)
-    compiler =
+let compile query compiler =
   match query with
   | None -> compiler
   | Some _ ->

@@ -36,9 +36,15 @@ let single_function_declaration name args expr =
       clauses = [ { guards = []; patterns = args; body = [ expr ] } ];
     }
 
-let lambda arg body =
+let lambda args body =
   Expr.Lambda
-    [ { body = [ body ]; guards = []; patterns = [ Pattern.Variable arg ] } ]
+    [
+      {
+        body = [ body ];
+        guards = [];
+        patterns = List.map (fun v -> Pattern.Variable v) args;
+      };
+    ]
 
 let rec pattern_list = function
   | [] -> pattern_nil
