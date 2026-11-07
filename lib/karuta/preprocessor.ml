@@ -80,32 +80,4 @@ let preprocess_query (loc : Location.region)
     Types.directives Ast.Module.module_body =
   let open Ast in
   let open Location in
-  let folder set call =
-    S.union set (find_variables @@ Expr.Functor (strip_loc call))
-  in
-  let variables = FT.fold_left folder S.empty calls |> S.remove "_" in
-  let list_variables = FT.of_list @@ S.to_list variables in
-  let query_name = "" in
-  let head : Expr.func =
-    {
-      name = (FT.empty, { content = query_name; loc });
-      elements =
-        FT.map (fun var -> { content = Expr.Variable var; loc }) list_variables;
-    }
-  in
-  let fake_decl : ParserClause.decl = { head; body = calls } in
-  let declaration_body = ({ content = renamer fake_decl; loc }, FT.empty) in
-  let query : Ast.Module.query_ref with_location =
-    { content = { name = query_name; args = list_variables }; loc }
-  in
-  {
-    module_ with
-    query = Some query;
-    declarations =
-      BatMap.add
-        {
-          Ast.name = Ast.Expr.extract_func_label head;
-          arity = FT.size list_variables;
-        }
-        declaration_body module_.declarations;
-  }
+  { module_ with query = Some { content = calls; loc } }

@@ -1,0 +1,5 @@
+:- module[public] {
+  :- sakura:persisted {
+    leap[Year].
+  }.
+}.
