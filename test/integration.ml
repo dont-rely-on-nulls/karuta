@@ -45,13 +45,11 @@ let make_test current_directory
       (List.map prefix filepaths);
     Alcotest.test_case name `Quick @@ fun () ->
     Unix.chdir test_directory;
-    let output =
-      Lib.Posix.run_process
-        (match limit with
-        | None -> [| filename |]
-        | Some n -> [| filename; string_of_int n |])
-    in
-    output |> split_results
+    Lib.Posix.run_process
+      (match limit with
+      | None -> [| filename |]
+      | Some n -> [| filename; string_of_int n |])
+    |> split_results
     |> Alcotest.(check batset_string) ("Ran " ^ name) (format_expected expected)
   with Exit -> Alcotest.fail ("Could not compile example: " ^ name ^ " (exit)")
 
