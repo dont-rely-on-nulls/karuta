@@ -1,7 +1,6 @@
 open Bin.Cmd
 open Lib
-open Error
-module Erl = Bin.Erl
+module Erlc = Bin.Erlc
 
 (* let show_clauses (clauses : Ast.clause list) : string = *)
 (*   let folder acc clause = acc ^ Ast.show_clause clause in *)
@@ -16,7 +15,7 @@ let check_extensions (ext : BatSet.String.t) (files : string list) : unit =
   in
   let check_single_extension (file : string) : unit =
     if not @@ BatSet.String.mem (Filename.extension file) ext then (
-      Logger.simply_error @@ display (InvalidExtension file);
+      Logger.simply_error @@ "Input file '" ^ file ^ "' has invalid extension";
       Logger.simply_info @@ ext_string ();
       raise Exit)
   in
@@ -34,16 +33,19 @@ let run : cmd -> unit = function
             (Some (Options.initialize_sakura ~address:"localhost" ~port:3435 ()))
           ~artifact ()
       in
-      Error.void
-      @@ Executor.compile options
-           {
-             beam =
-               (fun name forms ->
-                 Erl.compile output_path name @@ BatFingerTree.to_list forms);
-             executable =
-               (fun name -> Executable.create_file (output_path ^ "/" ^ name));
-           }
-           files
+      Executor.compile options
+        {
+          beam =
+            (fun name forms ->
+              let file =
+                Erlc.create_file output_path name @@ BatFingerTree.to_list forms
+              in
+              Erlc.Persist.in_file file @@ fun () -> Erlc.Persist.add ());
+          executable =
+            (fun name -> Executable.create_file (output_path ^ "/" ^ name));
+        }
+        files;
+      Erlc.Persist.compile output_path
 
 let () =
   Eio_main.run @@ fun _ ->
