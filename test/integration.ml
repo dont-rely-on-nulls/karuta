@@ -28,8 +28,7 @@ let make_test current_directory
   let test_directory = current_directory ^ "/" ^ name in
   let prefix file = current_directory ^ "/../examples/" ^ file in
   let filename = test_directory ^ "/play" in
-  let open Lib.Error in
-  match
+  try
     Lib.Executor.compile
       {
         artifact =
@@ -39,31 +38,24 @@ let make_test current_directory
       {
         beam =
           (fun name forms ->
-            Bin.Erlc.compile test_directory name @@ BatFingerTree.to_list forms);
+            Bin.Erlc.compile_test test_directory name
+            @@ BatFingerTree.to_list forms);
         executable = Lib.Executable.create_file;
       }
-      (List.map prefix filepaths)
-  with
-  | Error e ->
-      Alcotest.fail
-        ("Could not compile example: " ^ name ^ " (" ^ display e ^ ")")
-  | Ok () -> (
-      Alcotest.test_case name `Quick @@ fun () ->
-      Unix.chdir test_directory;
-      match
-        Lib.Posix.run_process
-          (match limit with
-          | None -> [| filename |]
-          | Some n -> [| filename; string_of_int n |])
-      with
-      | Error e ->
-          Alcotest.fail
-            ("Could not run example: " ^ name ^ " (" ^ process_status_message e
-           ^ ")")
-      | Ok output ->
-          output |> split_results
-          |> Alcotest.(check batset_string)
-               ("Ran " ^ name) (format_expected expected))
+      (List.map prefix filepaths);
+    Alcotest.test_case name `Quick @@ fun () ->
+    Unix.chdir test_directory;
+    try
+      let output = Lib.Posix.run_process
+        (match limit with
+        | None -> [| filename |]
+        | Some n -> [| filename; string_of_int n |])
+      in
+      output |> split_results
+      |> Alcotest.(check batset_string)
+           ("Ran " ^ name) (format_expected expected)
+    with Exit -> raise Exit
+  with Exit -> Alcotest.fail ("Could not compile example: " ^ name ^ " (exit)")
 
 let make_test_suite current_directory (category, tests) =
   (category, List.map (make_test current_directory) tests)

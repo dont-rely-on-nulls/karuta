@@ -1,4 +1,3 @@
-open Error
 module Form = Beam.Core.Form (Beam.Core.Erlang)
 
 (* let eval ((compiler, computer) : Compiler.t * Machine.t) : *)
@@ -14,8 +13,7 @@ module Form = Beam.Core.Form (Beam.Core.Erlang)
 
 (* TODO: compilation cache *)
 let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
-    (persist : Shared.Compiler.Persist.both) (filepaths : string list) :
-    unit attempt =
+    (persist : Shared.Compiler.Persist.both) (filepaths : string list) : unit =
   let sakura_files, karuta_files =
     BatSet.String.partition Sakura.Preprocessor.is_sakura_file
     @@ BatSet.String.of_list filepaths
@@ -58,7 +56,7 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
     with Exit -> exit 1
   in
   match artifact with
-  | Library -> Ok ()
+  | Library -> ()
   | Executable { root_module; filename } -> (
       let module Map = BatMap.String in
       match Map.find_opt root_module compiled_modules with
@@ -76,38 +74,33 @@ let compile ({ sakura; artifact } : Shared.Compiler.Options.t)
               Logger.error loc "Module does not have a query";
               exit 1
           | Some { query = Some query; _ } ->
-              Ok
-                (Executable.emit
-                   {
-                     persist = persist.executable;
-                     query = query.content;
-                     sakura =
-                       (if BatSet.String.is_empty sakura_files then None
-                        else sakura);
-                     filename;
-                     root_module;
-                   })
+              Executable.emit
+                {
+                  persist = persist.executable;
+                  query = query.content;
+                  sakura =
+                    (if BatSet.String.is_empty sakura_files then None
+                     else sakura);
+                  filename;
+                  root_module;
+                }
           | None -> exit 1))
 
 let run ?(limit : int option = None)
     (executable : Shared.Compiler.Options.executable)
-    (persist : Shared.Compiler.Persist.both) (filepaths : string list) :
-    string attempt =
+    (persist : Shared.Compiler.Persist.both) (filepaths : string list) : string
+    =
   let open Shared.Compiler.Options in
-  let open Error in
   compile
     (initialize ?sakura:None ~artifact:(Executable executable) ())
     persist filepaths
-  ||> fun () ->
-  match
+  |> fun () ->
+  try
     Posix.run_process
       (match limit with
       | None -> [| executable.filename |]
       | Some n -> [| executable.filename; string_of_int n |])
-  with
-  | Ok _ as ok -> ok
-  | Error status ->
-      Error (FailedToRunExternalProgram (executable.filename, status))
+  with Exit -> raise Exit
 
 (* let load' filter_fn (filepath : string) : Compiler.t * Machine.t = *)
 (*   filepath |> parse |> List.filter filter_fn |> compile *)
