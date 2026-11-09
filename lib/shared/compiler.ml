@@ -354,7 +354,6 @@ module Make (Config : COMPILER_CONFIG) :
 
   let rec step : (Config.state, Config.directives) step =
    fun ({ declarations; directives; query; _ }, compiler) ->
-    Logger.debug "This is a test";
     let forbid_shadowing _ lhs rhs =
       match (lhs, rhs) with
       | None, None -> None
