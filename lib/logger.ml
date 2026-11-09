@@ -438,12 +438,10 @@ module Terminal : OUTPUT = struct
       @return message formatted with provided log level. *)
   let format_message (level : Level.t) (locMay : Location.region option)
       (msg : string) : string =
-    let prefix = Level.get_prefix level in
+    let prefix = make_bold @@ Level.get_prefix level in
     let color = level_color level in
     match locMay with
-    | None ->
-        let prefix = prefix |> make_bold |> add_color color in
-        prefix ^ msg
+    | None -> prefix |> add_color color |> Fun.flip BatString.cat msg
     | Some loc -> prepare_message color prefix loc msg
 end
 
