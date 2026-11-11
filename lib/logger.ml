@@ -83,7 +83,7 @@ end
 
 (** Module signature of what the logger functor should provide.
 
-    This should be the only set of functions the compiler use. *)
+    This should be the only set of functions the compiler uses. *)
 module type API = sig
   val error : Location.region -> string -> unit
   (** [error loc msg] logs [msg] with location [loc] with log level Error.
@@ -318,8 +318,8 @@ end
 
     This implementation assumes a terminal-like environment. *)
 module Terminal : OUTPUT = struct
-  (** In the terminal, we use different colors for immediate differentiation
-      between log levels. *)
+  (** In the terminal, we use different colors to distinguish between log
+      levels. *)
   type color = Red | Yellow | Blue | Magenta | Foreground
 
   (** [color_code color] determines what is the color code for the terminal

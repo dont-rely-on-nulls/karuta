@@ -11,8 +11,7 @@ end
 
 (** Functor to create a mutable dictionary.
 
-    For this implementation to be concurrency-safe and performant you need to
-    assess your particular use case. *)
+    This implementation assumes low write contention. *)
 module Make (Config : CONFIG) = struct
   type key = Config.key
   (** Key type comes from Config *)
