@@ -1,5 +1,6 @@
 let () =
   Eio_main.run @@ fun _ ->
+  at_exit Lib.Logger.flush;
   let example_tests =
     Examples.tests
     |> List.map (fun (c, m) -> (c, BatMap.String.to_list m))
