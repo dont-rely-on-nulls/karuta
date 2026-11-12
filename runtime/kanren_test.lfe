@@ -255,3 +255,6 @@
       (tuple "Falls back to 'else' goal with original state when nested suspended thunks yield no results"
              (_assertEqual '(#(else init))
                            (funcall (kanren:ifte fail-lazy then-goal else-goal) 'init))))))
+
+;; lfec kanren_test.lfe
+;; lfe -noshell -eval "(eunit:test 'kanren_test '(verbose)) (init:stop)"
