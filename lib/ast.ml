@@ -101,6 +101,7 @@ module Expr = struct
     | Variable of string
     | Functor of func
     | Integer of int
+    | String of string
     | Nil
     | Cons of t * t
 
@@ -111,7 +112,7 @@ module Expr = struct
       | Variable name -> Variable (f name)
       | Functor ({ elements } as func) ->
           Functor { func with elements = FT.map (rename_vars f) elements }
-      | (Nil | Integer _) as atomic -> atomic
+      | (Nil | String _ | Integer _) as atomic -> atomic
       | Cons (lhs, rhs) -> Cons (rename_vars f lhs, rename_vars f rhs))
 
   let on f2 f1 v1 v2 = f2 (f1 v1) (f1 v2)
@@ -131,6 +132,7 @@ module Expr = struct
 
   let functorr f = Functor f
   let integer i = Integer i
+  let string i = String i
   let variable v = Variable v
 
   let extract_variable : t -> string = function

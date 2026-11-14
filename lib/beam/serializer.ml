@@ -127,6 +127,8 @@ module Expression = struct
         ^ ", {'else',1,"
         ^ comma_separated_list string_of_clause else_clauses
         ^ "}}"
+    | Bitstring {value; size = None; type_specifier = [Expr.Utf8]} ->
+       "{bin, 1, [{bin_element, 1, " ^ to_string value ^ ", default, [utf8]}]}"
     | Comprehension _ | Bitstring _ | Block _ | Case _ | Catch _ | If _
     | Match _ | Receive _ | Record _ | Try _ ->
         Logger.simply_unreachable "TODO";

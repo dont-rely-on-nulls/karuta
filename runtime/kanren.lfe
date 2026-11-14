@@ -259,6 +259,7 @@
   (cond
    ((erlang:is_map term) (erlang:error (tuple 'compiler_error "Unreachable: Maps are not supported as values in Karuta yet")))
    ((erlang:is_atom term) (erlang:atom_to_list term))
+   ((erlang:is_bitstring term) (list "\"" (unicode:characters_to_list term) "\""))
    ((erlang:is_list term)
     (list "["
           (clj:->> term

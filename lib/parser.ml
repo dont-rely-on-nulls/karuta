@@ -282,6 +282,11 @@ let single_quote = literal "'"
 
 (** Grammar rule:
 
+    double_quote <- "\"" *)
+let double_quote = literal "\""
+
+(** Grammar rule:
+
     comma <- ',' *)
 let comma = literal ","
 
@@ -399,19 +404,14 @@ let variable :
     (fun c -> BatChar.is_letter c || BatChar.is_digit c || c = '_')
     (fun loc -> `ExpectedUppercaseOrUnderscore loc)
 
-(** Grammar rule:
-
-    quoted_atom <- "'" (!"'" !'\n' .)* "'" *)
-let quoted_atom :
-    'e.
-    ( string Location.with_location,
-      ([> `UnexpectedEOF | `WrongPrefix of Location.point * string ] as 'e) )
-    parser =
- fun { remaining = current; loc } ->
+let delimited_chars :
+    char * (unit, [> `WrongPrefix of Location.point * string] as 'a) parser ->
+    (string Location.with_location, 'a) parser =  
+ fun (char, char_parser) { remaining = current; loc } ->
   match getc current with
-  | Some ('\'', remaining) ->
+  | Some (c, remaining) when c = char ->
       let atom_name, remaining =
-        splitl (function '\'' | '\n' -> false | _ -> true) remaining
+        splitl (function '\n' -> false | c when c = char -> false | _ -> true) remaining
       in
       let next_loc =
         {
@@ -420,9 +420,18 @@ let quoted_atom :
         }
       in
       { remaining; loc = next_loc }
-      |> single_quote @>> fun ((), ({ loc = endl; _ } as state)) ->
+      |> char_parser @>> fun ((), ({ loc = endl; _ } as state)) ->
          Ok (Location.delimit loc endl (to_string atom_name), state)
-  | Some _ | None -> Error (`WrongPrefix (loc, "\'"))
+  | Some _ | None -> Error (`WrongPrefix (loc, Char.escaped char))
+
+(** Grammar rule:
+
+    quoted_atom <- "'" (!"'" !'\n' .)* "'" *)
+let quoted_atom :
+    'e.
+    ( string Location.with_location,
+      ([> `WrongPrefix of Location.point * string ] as 'e) )
+    parser = delimited_chars ('\'', single_quote)
 
 (** Grammar rule:
 
@@ -456,6 +465,15 @@ let integer :
   |> ifte (literal "-")
        (snd @> positive_integer @> replace @@ Location.fmap Int.neg)
        positive_integer
+
+(** Grammar rule:
+
+    string <- "\"" (!"\"" !'\n' .)* "\"" *)
+let string :
+    'e.
+    ( string Location.with_location,
+      ([> `UnexpectedEOF | `WrongPrefix of Location.point * string ] as 'e) )
+    parser = delimited_chars ('"', double_quote)
 
 (** [list_of ~start_delim ~separator ~end_delim item] constructs a parser with
     the following structure:
@@ -513,7 +531,7 @@ type expr_errors =
 (** Grammar rule:
 
     expr <- whitespace_and_comments (integer / !integer (variable / !variable
-    (func / !func list))) *)
+    (func / !func (string / !string list))) *)
 let rec expr : 'e. (Ast.Expr.t, ([> expr_errors ] as 'e)) parser =
  fun state ->
   state
@@ -521,6 +539,7 @@ let rec expr : 'e. (Ast.Expr.t, ([> expr_errors ] as 'e)) parser =
      @&& ifte integer (capture @@ Location.fmap Ast.Expr.integer @> return)
      @@ ifte variable (capture @@ Location.fmap Ast.Expr.variable @> return)
      @@ ifte func (capture @@ Location.fmap Ast.Expr.functorr @> return)
+     @@ ifte string (capture @@ Location.fmap Ast.Expr.string @> return)
      @@ list
 
 (** Grammar rule:

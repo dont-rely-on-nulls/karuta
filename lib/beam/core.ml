@@ -84,7 +84,7 @@ module type ERLANG = sig
       type_specifier : binary_type list;
     }
 
-    and binary_type = Integer | Binary
+    and binary_type = Integer | Binary | Utf8
   end
 
   and Pattern : sig
@@ -282,7 +282,7 @@ module Erlang : ERLANG = struct
       type_specifier : Expr.binary_type list;
     }
 
-    and binary_type = Integer | Binary
+    and binary_type = Integer | Binary | Utf8
   end = struct
     type t =
       | Literal of Primitives.literal
@@ -366,7 +366,7 @@ module Erlang : ERLANG = struct
       type_specifier : Expr.binary_type list;
     }
 
-    and binary_type = Integer | Binary
+    and binary_type = Integer | Binary | Utf8
   end
 
   and Pattern : sig

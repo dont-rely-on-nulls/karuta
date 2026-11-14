@@ -120,7 +120,7 @@ let rec find_variables (element : Ast.Expr.base) : variable_set =
         S.empty more_elements
   | Cons (lhs, rhs) ->
       S.union (find_variables lhs.content) (find_variables rhs.content)
-  | Nil | Integer _ -> S.empty
+  | Nil | Integer _ | String _ -> S.empty
 
 type t = { filename : string }
 

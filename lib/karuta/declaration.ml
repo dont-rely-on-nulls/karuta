@@ -18,6 +18,7 @@ let rec compile_expr (expr : Ast.Expr.t) : Beam.Builder.Expr.t =
       let name = Builder.atom @@ Ast.Expr.extract_func_label f in
       (* TODO: use finger trees in Builder *)
       Builder.tuple @@ FT.to_list (FT.cons (FT.map compile_expr elements) name)
+  | String str -> Builder.string str
   | Integer number -> Builder.int number
 
 let call_with_fresh (name : string) expr =
