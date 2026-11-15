@@ -1,9 +1,0 @@
-{0 karuta}
-
-Welcome to [karuta]'s documentation!
-
-{1 API documentation}
-
-{!modules:
-  ast
-}
