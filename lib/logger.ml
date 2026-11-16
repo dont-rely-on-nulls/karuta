@@ -266,7 +266,7 @@ module Make (Output : OUTPUT) (Write : WRITE) : API = struct
       @param loc Location to be reported alongside message.
       @param msg Message to be logged.
       @return saves message into logger context. *)
-  let error loc = internal Warning (Some loc)
+  let error loc = internal Error (Some loc)
 
   (** [simply_error msg] logs [msg] with log level Error.
 
@@ -340,7 +340,7 @@ module Terminal : OUTPUT = struct
       @param color Color to identify the color.
       @return string of the color code. *)
   let level_color : Level.t -> color = function
-    | Warning -> Red
+    | Warning -> Yellow
     | Info -> Blue
     | Error -> Red
     | Debug -> Foreground
