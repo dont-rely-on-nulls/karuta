@@ -22,7 +22,34 @@ let rec compile_expr (expr : Ast.Expr.t) : Beam.Builder.Expr.t =
 
 let call_with_fresh (name : string) expr =
   let open Beam in
-  Ukanren.call_with_fresh @@ Builder.lambda name expr
+  Ukanren.call_with_fresh @@ Builder.lambda [ name ] expr
+
+let compile_single_body ({ env; _ } as compiler : state Shared.Compiler.t)
+    ({ content; _ } : Ast.Module.decl Location.with_location) :
+    Beam.Builder.Expr.t =
+  let open Beam in
+  let open Location in
+  (* TODO: We should use locations when calling Beam helpers. They don't use
+           locations yet, hence they are not being sent as arguments *)
+  let make_function { content = { Ast.Expr.name; elements } as call; loc } =
+    match Shared.Lookup.predicate compiler.env name (FT.size elements) with
+    | `Undefined _ -> raise Exit
+    | `UnexpectedSignature loc ->
+        Logger.error loc "Expected module name but found a signature instead";
+        raise Exit
+    | `Ok { original_module } when original_module = env.qualifier ->
+        let args = FT.map compile_expr elements in
+        Builder.call (Builder.atom @@ Ast.Expr.extract_func_label call)
+        @@ FT.to_list args
+    | `Ok { original_module } ->
+        let args = FT.map compile_expr elements in
+        let _, { content = fun_name; _ } = name in
+        Builder.call_with_module
+          (original_module |> Shared.Compiler.ft_of_original_module
+         |> FT.to_list |> flat_module_name |> Builder.atom)
+          (Builder.atom fun_name) (FT.to_list args)
+  in
+  content.body |> FT.map make_function |> FT.to_list |> Ukanren.conj
 
 let compile_declaration_bodies
     ({ state; env; _ } as compiler : state Shared.Compiler.t)
@@ -32,8 +59,8 @@ let compile_declaration_bodies
     raise Exit)
   else
     let open Beam in
-    let compile_single_body
-        ({ content; _ } : Ast.Module.decl Location.with_location) :
+    let compile_one
+        ({ content; _ } as body : Ast.Module.decl Location.with_location) :
         Builder.Expr.t =
       let find_variables call =
         Shared.Preprocessor.find_variables (Functor call)
@@ -45,37 +72,10 @@ let compile_declaration_bodies
         |> BatSet.filter (fun name ->
             Str.string_match (Str.regexp "^[A-Z]") name 0)
       in
-      let open Location in
-      let body =
-        (* TODO: We should use locations when calling Beam helpers. They don't use
-           locations yet, hence they are not being sent as arguments *)
-        let make_function { content = { Ast.Expr.name; elements } as call; loc }
-            =
-          match
-            Shared.Lookup.predicate compiler.env name (FT.size elements)
-          with
-          | `Undefined _ -> raise Exit
-          | `UnexpectedSignature loc ->
-              Logger.error loc
-                "Expected module name but found a signature instead";
-              raise Exit
-          | `Ok { original_module } when original_module = env.qualifier ->
-              let args = FT.map compile_expr elements in
-              Builder.call (Builder.atom @@ Ast.Expr.extract_func_label call)
-              @@ FT.to_list args
-          | `Ok { original_module } ->
-              let args = FT.map compile_expr elements in
-              let _, { content = fun_name; _ } = name in
-              Builder.call_with_module
-                (original_module |> Shared.Compiler.ft_of_original_module
-               |> FT.to_list |> flat_module_name |> Builder.atom)
-                (Builder.atom fun_name) (FT.to_list args)
-        in
-        content.body |> FT.map make_function |> FT.to_list |> Ukanren.conj
-      in
-      BatSet.fold call_with_fresh vars body
+      let body = compile_single_body compiler body in
+      BatSet.fold (fun var body -> call_with_fresh var [ body ]) vars body
     in
-    clauses |> FT.map compile_single_body |> FT.to_list |> Ukanren.disj
+    clauses |> FT.map compile_one |> FT.to_list |> Ukanren.disj
 
 let compile ({ name; arity } : Ast.head)
     ((first_clause, remaining_clauses) :
@@ -90,8 +90,10 @@ let compile ({ name; arity } : Ast.head)
     in
     Beam.Builder.single_function_declaration name
       (List.map (fun v -> Beam.Builder.Pattern.Variable v) args)
-    @@ compile_declaration_bodies compiler
-         (FT.cons remaining_clauses first_clause)
+      [
+        compile_declaration_bodies compiler
+          (FT.cons remaining_clauses first_clause);
+      ]
   in
   let export = Beam.Builder.Attribute.export [ (name, arity) ] in
   {

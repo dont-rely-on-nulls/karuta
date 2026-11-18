@@ -1,0 +1,11 @@
+:- import[db].
+
+year[1900].
+year[1996].
+year[2000].
+year[2023].
+year[2024].
+year[2100].
+year[2400].
+
+year[Year], db:calendar:public:leap[Year]?

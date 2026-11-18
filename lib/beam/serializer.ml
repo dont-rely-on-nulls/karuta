@@ -127,9 +127,11 @@ module Expression = struct
         ^ ", {'else',1,"
         ^ comma_separated_list string_of_clause else_clauses
         ^ "}}"
+    | Match (patt, expr) ->
+        "{'match',1," ^ string_of_pattern patt ^ "," ^ to_string expr ^ "}"
     | Comprehension _ | Bitstring _ | Block _ | Case _ | Catch _ | If _
-    | Match _ | Receive _ | Record _ | Try _ ->
-        Logger.simply_unreachable "TODO";
+    | Receive _ | Record _ | Try _ ->
+        Logger.simply_unreachable "Serializer doesn't handle this case";
         raise Exit
 end
 

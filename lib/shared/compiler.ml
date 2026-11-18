@@ -49,7 +49,7 @@ and compiled_module = {
   qualifier : string FT.t * string;
   modules : comptime env;
   predicates : predicate PredicateMap.t;
-  query : predicate_name Location.with_location option;
+  query : Location.region option;
 }
 
 and comptime = Module of compiled_module | Signature of compiled_signature
@@ -216,8 +216,7 @@ module type COMPILER_CONFIG = sig
     directives Ast.Module.directive Location.with_location ->
     state t
 
-  val compile_query :
-    Ast.Module.query_ref Location.with_location option -> state t -> state t
+  val compile_query : Ast.Module.query option -> state t -> state t
 
   module Preprocessor :
     Preprocessor.PREPROCESSOR_CONFIG with type directives = directives

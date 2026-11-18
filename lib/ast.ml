@@ -13,6 +13,8 @@ type head = { name : string; arity : int } [@@deriving show, ord]
 type imports = Location.region BatMap.String.t
 
 module ModuleF (Expr : EXPR) = struct
+  type query = Expr.func Location.with_location FT.t Location.with_location
+
   type declaration = head * decl Location.with_location
 
   and multi_declaration =
@@ -24,7 +26,6 @@ module ModuleF (Expr : EXPR) = struct
     BatMap.t
 
   and declaration_env = (head, decl Location.with_location) BatMap.t
-  and query_ref = { name : string; args : string FT.t }
 
   and 'directives signature_body = {
     declarations : declaration_env;
@@ -49,7 +50,7 @@ module ModuleF (Expr : EXPR) = struct
     declarations : multi_declaration_env;
     directives : 'directives directive Location.with_location FT.t;
     imports : imports;
-    query : query_ref Location.with_location option;
+    query : query option;
   }
 
   and decl = {
