@@ -47,7 +47,9 @@ let fails_when_minus_has_no_digits () =
 
   match integer state with
   | Ok _ -> fail "integer should fail when minus is not followed by digits"
-  | Error `UnexpectedEOF -> ()
+  | Error (`UnexpectedEOF loc) ->
+      check int "reports original position" startl.coordinate.offset
+        loc.coordinate.offset
   | Error (`NotADigit _) ->
       fail "integer should return UnexpectedEOF when no input follows minus"
   | Error _ -> fail "integer returned an unexpected error"
@@ -63,8 +65,8 @@ let fails_when_first_character_is_not_a_digit () =
   | Ok _ -> fail "integer should reject non-digit input"
   | Error (`NotADigit loc) ->
       check int "reports original position" startl.coordinate.offset
-        startl.coordinate.offset
-  | Error `UnexpectedEOF -> fail "input is not empty"
+        loc.coordinate.offset
+  | Error (`UnexpectedEOF _) -> fail "input is not empty"
   | Error _ -> fail "integer returned an unexpected error"
 
 let fails_on_empty_input () =
@@ -74,7 +76,9 @@ let fails_on_empty_input () =
 
   match integer state with
   | Ok _ -> fail "integer should fail on empty input"
-  | Error `UnexpectedEOF -> ()
+  | Error (`UnexpectedEOF loc) ->
+      check int "reports original position" zero_point.coordinate.offset
+        loc.coordinate.offset
   | Error (`NotADigit _) ->
       fail "integer should return UnexpectedEOF on empty input"
   | Error _ -> fail "integer returned an unexpected error"

@@ -103,14 +103,18 @@ let succeeds_with_quoted_label_and_qualifier () =
 
 let fails_when_label_is_missing () =
   let startl = zero_point in
+  let qualifier = "module:" in
 
   let state : parser_state =
-    { remaining = BatSubstring.of_string "module:"; loc = startl }
+    { remaining = BatSubstring.of_string qualifier; loc = startl }
   in
 
   match func_label state with
   | Ok _ -> fail "func_label should require a label after the qualifier"
-  | Error `UnexpectedEOF -> ()
+  | Error (`UnexpectedEOF loc) ->
+      check int "reports original position"
+        (startl.coordinate.offset + String.length qualifier)
+        loc.coordinate.offset
   | Error _ -> fail "func_label should fail with UnexpectedEOF"
 
 let fails_when_quoted_label_is_unclosed () =
@@ -147,7 +151,9 @@ let fails_on_empty_input () =
 
   match func_label state with
   | Ok _ -> fail "func_label should fail on empty input"
-  | Error `UnexpectedEOF -> ()
+  | Error (`UnexpectedEOF loc) ->
+      check int "reports original position" zero_point.coordinate.offset
+        loc.coordinate.offset
   | Error _ -> fail "func_label should fail with UnexpectedEOF"
 
 let tests =
