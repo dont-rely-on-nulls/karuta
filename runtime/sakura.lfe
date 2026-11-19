@@ -87,7 +87,7 @@
        ; TODO: uncomment this when SCL is back.
        ; (?= (tuple 'ok session-id) (create-session socket receive-timeout query))
        (funcall
-         (karuta:bind-results pattern
+         (kanren:bind-results pattern
            (lambda () (get-response' socket receive-timeout query)))
          state)
        (else
