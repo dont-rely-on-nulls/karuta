@@ -30,7 +30,7 @@ let run : cmd -> unit = function
       let options : Options.t =
         Options.initialize
           ~sakura:
-            (Some (Options.initialize_sakura ~address:"localhost" ~port:3435 ()))
+            (Some (Options.initialize_sakura ~address:"localhost" ~port:7777 ()))
           ~artifact ()
       in
       Executor.compile options
