@@ -67,7 +67,7 @@ let fails_when_first_character_is_uppercase () =
   | Ok _ -> fail "atom should require a lowercase first character"
   | Error (`ExpectedLowercase loc) ->
       check int "reports original position" startl.coordinate.offset
-        startl.coordinate.offset
+        loc.coordinate.offset
   | Error _ -> fail "atom should fail with ExpectedLowercase"
 
 let fails_when_first_character_is_digit () =
@@ -81,7 +81,7 @@ let fails_when_first_character_is_digit () =
   | Ok _ -> fail "atom should reject a digit as its first character"
   | Error (`ExpectedLowercase loc) ->
       check int "reports original position" startl.coordinate.offset
-        startl.coordinate.offset
+        loc.coordinate.offset
   | Error _ -> fail "atom should fail with ExpectedLowercase"
 
 let fails_when_input_is_empty () =
@@ -91,7 +91,9 @@ let fails_when_input_is_empty () =
 
   match atom state with
   | Ok _ -> fail "atom should fail on empty input"
-  | Error `UnexpectedEOF -> ()
+  | Error (`UnexpectedEOF loc) ->
+      check int "reports original position" zero_point.coordinate.offset
+        loc.coordinate.offset
   | Error _ -> fail "atom should fail with UnexpectedEOF"
 
 let tests =

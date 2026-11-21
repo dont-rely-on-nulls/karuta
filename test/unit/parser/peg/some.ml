@@ -10,7 +10,7 @@ let succeeds () =
   in
 
   match some state with
-  | Error `UnexpectedEOF -> fail "some should succeed when input remains"
+  | Error (`UnexpectedEOF _) -> fail "some should succeed when input remains"
   | Ok (value, resulting_state) ->
       check unit "returns unit" () value;
 
@@ -33,7 +33,9 @@ let fails_when_input_is_empty () =
 
   match some state with
   | Ok _ -> fail "some should fail when input is empty"
-  | Error `UnexpectedEOF -> check bool "returns UnexpectedEOF" true true
+  | Error (`UnexpectedEOF loc) ->
+      check int "reports original position" zero_point.coordinate.offset
+        loc.coordinate.offset
 
 let tests =
   [

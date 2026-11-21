@@ -76,7 +76,7 @@ let fails_when_first_character_is_invalid () =
   | Ok _ -> fail "ident_like should reject an invalid starting character"
   | Error (`ExpectedIdentifier loc) ->
       check int "reports original position" startl.coordinate.offset
-        startl.coordinate.offset
+        loc.coordinate.offset
   | Error _ ->
       fail "ident_like should fail with UnexpectedEOF or via fallthrough"
 
@@ -87,7 +87,9 @@ let fails_when_input_is_empty () =
 
   match ident_like_test state with
   | Ok _ -> fail "ident_like should fail on empty input"
-  | Error `UnexpectedEOF -> ()
+  | Error (`UnexpectedEOF loc) ->
+      check int "reports original position" zero_point.coordinate.offset
+        loc.coordinate.offset
   | Error _ -> fail "ident_like should fail with UnexpectedEOF"
 
 let tests =

@@ -68,7 +68,7 @@ let fails_without_opening_quote () =
   | Error (`WrongPrefix (loc, expected)) ->
       check string "expects opening quote" "'" expected;
       check int "reports original position" startl.coordinate.offset
-        startl.coordinate.offset
+        loc.coordinate.offset
   | Error _ -> fail "quoted_atom should fail with WrongPrefix"
 
 let fails_without_closing_quote () =
@@ -80,10 +80,10 @@ let fails_without_closing_quote () =
 
   match quoted_atom state with
   | Ok _ -> fail "quoted_atom should require a closing quote"
-  | Error (`WrongPrefix (loc, expected)) ->
-      check string "expects closing quote" "'" expected;
-      check int "reports original position" 0 startl.coordinate.offset
-  | Error _ -> fail "quoted_atom should fail with WrongPrefix"
+  | Error (`UnexpectedEOF loc) ->
+      check int "reports original position" startl.coordinate.offset
+        loc.coordinate.offset
+  | Error _ -> fail "quoted_atom should fail with UnexpectedEOF"
 
 let fails_when_newline_occurs_before_closing_quote () =
   let startl = zero_point in

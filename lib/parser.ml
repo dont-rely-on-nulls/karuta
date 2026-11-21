@@ -210,10 +210,11 @@ let stride previous current = size previous - size current
     Corresponds to the following parsing expression:
 
     . *)
-let some : 'e. (unit, ([> `UnexpectedEOF ] as 'e)) parser = function
+let some : 'e. (unit, ([> `UnexpectedEOF of Location.point ] as 'e)) parser =
+  function
   | { remaining; loc } -> (
       match first remaining with
-      | None -> Error `UnexpectedEOF
+      | None -> Error (`UnexpectedEOF loc)
       | Some _ ->
           Ok
             ( (),
@@ -274,16 +275,6 @@ let percent = literal "%"
 
     hash <- '#' *)
 let hash = literal "#"
-
-(** Grammar rule:
-
-    single_quote <- "'" *)
-let single_quote = literal "'"
-
-(** Grammar rule:
-
-    double_quote <- "\"" *)
-let double_quote = literal "\""
 
 (** Grammar rule:
 
@@ -362,7 +353,7 @@ let rec whitespace : 'e. (unit, 'e) parser =
     [is_character]. *)
 let ident_like is_start is_character fallthrough { remaining = current; loc } =
   match first current with
-  | None -> Error `UnexpectedEOF
+  | None -> Error (`UnexpectedEOF loc)
   | Some c when is_start c ->
       let atom, remaining = splitl is_character current in
       let next_loc =
@@ -382,7 +373,10 @@ let ident_like is_start is_character fallthrough { remaining = current; loc } =
 let atom :
     'e.
     ( string Location.with_location,
-      ([> `UnexpectedEOF | `ExpectedLowercase of Location.point ] as 'e) )
+      ([> `UnexpectedEOF of Location.point
+       | `ExpectedLowercase of Location.point ]
+       as
+       'e) )
     parser =
   ident_like BatChar.is_lowercase
     (fun c -> BatChar.is_letter c || BatChar.is_digit c || c = '_' || c = '-')
@@ -394,7 +388,8 @@ let atom :
 let variable :
     'e.
     ( string Location.with_location,
-      ([> `ExpectedUppercaseOrUnderscore of Location.point | `UnexpectedEOF ]
+      ([> `ExpectedUppercaseOrUnderscore of Location.point
+       | `UnexpectedEOF of Location.point ]
        as
        'e) )
     parser =
@@ -404,25 +399,52 @@ let variable :
     (fun c -> BatChar.is_letter c || BatChar.is_digit c || c = '_')
     (fun loc -> `ExpectedUppercaseOrUnderscore loc)
 
-let delimited_chars :
-    char * (unit, [> `WrongPrefix of Location.point * string] as 'a) parser ->
-    (string Location.with_location, 'a) parser =  
- fun (char, char_parser) { remaining = current; loc } ->
-  match getc current with
-  | Some (c, remaining) when c = char ->
-      let atom_name, remaining =
-        splitl (function '\n' -> false | c when c = char -> false | _ -> true) remaining
-      in
-      let next_loc =
-        {
-          loc with
-          coordinate = Location.step (stride current remaining) loc.coordinate;
-        }
-      in
-      { remaining; loc = next_loc }
-      |> char_parser @>> fun ((), ({ loc = endl; _ } as state)) ->
-         Ok (Location.delimit loc endl (to_string atom_name), state)
-  | Some _ | None -> Error (`WrongPrefix (loc, Char.escaped char))
+type delimiters = Single of string | OpenClose of string * string
+
+let delimited_chars : delimiters -> (string Location.with_location, 'a) parser =
+ fun delimiters { remaining = current; loc } ->
+  let split_on str substr =
+    let original, start, _ = BatSubstring.base substr in
+    Result.bind
+      (try Ok (BatString.find_from original start str - start) with
+      | Not_found -> Error `UnexpectedEOF
+      | Invalid_argument _ ->
+          Logger.simply_unreachable
+            "The start index comes from the substring we are searching, so it \
+             should be valid";
+          raise Exit)
+    @@ fun size ->
+    let capture = BatSubstring.extract original start (Some size) in
+    if BatSubstring.contains capture '\n' then Error `UnexpectedNewline
+    else
+      Ok
+        ( BatString.sub original start size,
+          BatSubstring.extract original
+            (start + size + BatString.length str)
+            None )
+  in
+  let opem, close =
+    match delimiters with
+    | Single delimiter -> (delimiter, delimiter)
+    | OpenClose (opem, close) -> (opem, close)
+  in
+  if BatSubstring.is_prefix opem current then
+    match
+      BatSubstring.slice current (BatString.length opem) None |> split_on close
+    with
+    | Error `UnexpectedEOF -> Error (`UnexpectedEOF loc)
+    | Error `UnexpectedNewline -> Error (`WrongPrefix (loc, close))
+    | Ok (atom_name, remaining) ->
+        let next_loc =
+          {
+            loc with
+            coordinate = Location.step (stride current remaining) loc.coordinate;
+          }
+        in
+        Ok
+          ( Location.delimit loc next_loc atom_name,
+            { remaining; loc = next_loc } )
+  else Error (`WrongPrefix (loc, opem))
 
 (** Grammar rule:
 
@@ -430,8 +452,25 @@ let delimited_chars :
 let quoted_atom :
     'e.
     ( string Location.with_location,
-      ([> `WrongPrefix of Location.point * string ] as 'e) )
-    parser = delimited_chars ('\'', single_quote)
+      ([> `WrongPrefix of Location.point * string
+       | `UnexpectedEOF of Location.point ]
+       as
+       'e) )
+    parser =
+  delimited_chars (Single "'")
+
+(** Grammar rule:
+
+    binary <- "<<" (!"<<" !'\n' .)* ">>" *)
+let binary :
+    'e.
+    ( string Location.with_location,
+      ([> `WrongPrefix of Location.point * string
+       | `UnexpectedEOF of Location.point ]
+       as
+       'e) )
+    parser =
+  delimited_chars (OpenClose ("<<", ">>"))
 
 (** Grammar rule:
 
@@ -439,12 +478,14 @@ let quoted_atom :
 let integer :
     'e.
     ( int Location.with_location,
-      ([> `NotADigit of Location.point | `UnexpectedEOF ] as 'e) )
+      ([> `NotADigit of Location.point | `UnexpectedEOF of Location.point ]
+       as
+       'e) )
     parser =
  fun ({ loc = startl; _ } as state) ->
   let positive_integer { remaining = current; loc = after_minus } =
     match size current with
-    | 0 -> Error `UnexpectedEOF
+    | 0 -> Error (`UnexpectedEOF startl)
     | _ -> (
         let digits, remaining = splitl BatChar.is_digit current in
         let endl =
@@ -472,8 +513,12 @@ let integer :
 let string :
     'e.
     ( string Location.with_location,
-      ([> `UnexpectedEOF | `WrongPrefix of Location.point * string ] as 'e) )
-    parser = delimited_chars ('"', double_quote)
+      ([> `UnexpectedEOF of Location.point
+       | `WrongPrefix of Location.point * string ]
+       as
+       'e) )
+    parser =
+  delimited_chars (Single "\"")
 
 (** [list_of ~start_delim ~separator ~end_delim item] constructs a parser with
     the following structure:
@@ -508,7 +553,7 @@ let list_of :
 let func_label :
     'e.
     ( Ast.Expr.func_label Location.with_location,
-      ([> `UnexpectedEOF
+      ([> `UnexpectedEOF of Location.point
        | `ExpectedLowercase of Location.point
        | `WrongPrefix of Location.point * string ]
        as
@@ -525,7 +570,7 @@ let func_label :
 
 type expr_errors =
   [ `ExpectedLowercase of Location.point
-  | `UnexpectedEOF
+  | `UnexpectedEOF of Location.point
   | `WrongPrefix of Location.point * string ]
 
 (** Grammar rule:
@@ -796,10 +841,11 @@ let parse (filename : string) (source : string) =
           Logger.error
             (Location.double filename coordinate)
             "Expected a lower case letter, but got something else"
-      | `UnexpectedEOF ->
-          Logger.simply_error
+      | `UnexpectedEOF { filename; coordinate } ->
+          Logger.error
+            (Location.double filename coordinate)
             "File ended, but we expected it to continue; check for unbalanced \
-             delimiters"
+             delimiters starting here"
       | `WrongPrefix ({ coordinate; filename }, expected_prefix) ->
           Logger.error
             {
