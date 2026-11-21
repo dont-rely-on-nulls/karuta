@@ -127,12 +127,26 @@ module Expression = struct
         ^ ", {'else',1,"
         ^ comma_separated_list string_of_clause else_clauses
         ^ "}}"
-    | Bitstring { value; size = None; type_specifier = [ Expr.Utf8 ] } ->
-        "{bin, 1, [{bin_element, 1, " ^ to_string value ^ ", default, [utf8]}]}"
-    | Comprehension _ | Bitstring _ | Block _ | Case _ | Catch _ | If _
-    | Match _ | Receive _ | Record _ | Try _ ->
-        Logger.simply_unreachable "TODO";
+    | Bitstring elements ->
+        "{bin, 1, "
+        ^ comma_separated_list string_of_binary_element (FT.to_list elements)
+        ^ "}"
+    | Comprehension _ | Block _ | Case _ | Catch _ | If _ | Match _ | Receive _
+    | Record _ | Try _ ->
+        Logger.simply_unreachable "Serialization not implemented for this type";
         raise Exit
+
+  and string_of_binary_element { value; size; type_specifier } =
+    "{bin_element, 1, " ^ to_string value ^ ", "
+    ^ Option.fold size ~none:"default" ~some:to_string
+    ^ ", "
+    ^ comma_separated_list
+        (function
+          | Expr.Binary -> "binary"
+          | Expr.Integer -> "integer"
+          | Expr.Utf8 -> "utf8")
+        type_specifier
+    ^ "}"
 end
 
 module Attribute = struct

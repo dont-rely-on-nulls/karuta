@@ -51,7 +51,8 @@ let compile_persisted ({ name; arity } as head : Ast.head)
              (* TODO: Multi group namespace needs to be treated at some point *)
              [
                Beam.Builder.atom "Base";
-               Beam.Builder.string @@ "sakura:" ^ full_name;
+               "sakura:" ^ full_name |> Beam.Builder.string |> FT.singleton
+               |> Beam.Builder.binary;
              ];
          ]
   in

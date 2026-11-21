@@ -7,7 +7,7 @@ module type ERLANG = sig
     and t =
       | Literal of Primitives.literal
       | Comprehension of comprehension
-      | Bitstring of bitstring
+      | Bitstring of bitstring FT.t
       | Block of t list
       | Case of t
       | Catch of t
@@ -203,7 +203,7 @@ module Erlang : ERLANG = struct
     type t =
       | Literal of Primitives.literal
       | Comprehension of comprehension
-      | Bitstring of bitstring
+      | Bitstring of bitstring FT.t
       | Block of t list
       | Case of t
       | Catch of t
@@ -287,7 +287,7 @@ module Erlang : ERLANG = struct
     type t =
       | Literal of Primitives.literal
       | Comprehension of comprehension
-      | Bitstring of bitstring
+      | Bitstring of bitstring FT.t
       | Block of t list
       | Case of t
       | Catch of t

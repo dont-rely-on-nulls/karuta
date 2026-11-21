@@ -11,13 +11,20 @@ let var v = Expr.Variable v
 let atom a = Expr.Literal (Primitives.Atom a)
 
 let string a =
-  Expr.Bitstring
-    {
-      value = Expr.Literal (Primitives.String a);
-      size = None;
-      type_specifier = [ Expr.Utf8 ];
-    }
+  {
+    Expr.value = Expr.Literal (Primitives.String a);
+    size = None;
+    type_specifier = [ Expr.Utf8 ];
+  }
 
+let byte n =
+  {
+    Expr.value = Expr.Literal (Primitives.Integer n);
+    size = None;
+    type_specifier = [ Expr.Integer ];
+  }
+
+let binary vs = Expr.Bitstring vs
 let int i = Expr.Literal (Primitives.Integer i)
 let tuple ts = Expr.Tuple ts
 let cons h t = Expr.Cons (h, t)

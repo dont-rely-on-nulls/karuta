@@ -9,6 +9,14 @@ let flat_module_name (path : string list) =
 let rec compile_expr (expr : Ast.Expr.t) : Beam.Builder.Expr.t =
   let open Beam in
   match Location.strip_loc expr with
+  | Binary bins ->
+      Builder.binary
+      @@ FT.map
+           (Fun.compose
+              (function
+                | Ast.Expr.Byte n -> Builder.byte n | Text t -> Builder.string t)
+              Location.strip_loc)
+           bins
   | Variable var -> Builder.var var
   | Nil -> Builder.nil
   | Cons (h, t) -> Builder.cons (compile_expr h) (compile_expr t)
@@ -18,7 +26,7 @@ let rec compile_expr (expr : Ast.Expr.t) : Beam.Builder.Expr.t =
       let name = Builder.atom @@ Ast.Expr.extract_func_label f in
       (* TODO: use finger trees in Builder *)
       Builder.tuple @@ FT.to_list (FT.cons (FT.map compile_expr elements) name)
-  | String str -> Builder.string str
+  | String str -> Builder.binary @@ FT.singleton (Builder.string str)
   | Integer number -> Builder.int number
 
 let call_with_fresh (name : string) expr =

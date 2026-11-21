@@ -461,19 +461,6 @@ let quoted_atom :
 
 (** Grammar rule:
 
-    binary <- "<<" (!"<<" !'\n' .)* ">>" *)
-let binary :
-    'e.
-    ( string Location.with_location,
-      ([> `WrongPrefix of Location.point * string
-       | `UnexpectedEOF of Location.point ]
-       as
-       'e) )
-    parser =
-  delimited_chars (OpenClose ("<<", ">>"))
-
-(** Grammar rule:
-
     integer <- '-'? \[0-9\]+ *)
 let integer :
     'e.
@@ -576,7 +563,7 @@ type expr_errors =
 (** Grammar rule:
 
     expr <- whitespace_and_comments (integer / !integer (variable / !variable
-    (func / !func (string / !string list))) *)
+    (func / !func (string / !string (binary / !binary list)))) *)
 let rec expr : 'e. (Ast.Expr.t, ([> expr_errors ] as 'e)) parser =
  fun state ->
   state
@@ -585,7 +572,32 @@ let rec expr : 'e. (Ast.Expr.t, ([> expr_errors ] as 'e)) parser =
      @@ ifte variable (capture @@ Location.fmap Ast.Expr.variable @> return)
      @@ ifte func (capture @@ Location.fmap Ast.Expr.functorr @> return)
      @@ ifte string (capture @@ Location.fmap Ast.Expr.string @> return)
+     @@ ifte binary (capture return)
      @@ list
+
+(** Grammar rule:
+
+    binary_element <- (integer / !integer string) whitespace_and_comments
+
+    binary <- "<<" whitespace_and_comments (binary_element
+    whitespace_and_comments ("," whitespace_and_comments binary_element)* )?
+    ">>" whitespace_and_comments *)
+and binary : 'e. (Ast.Expr.t, ([> expr_errors ] as 'e)) parser =
+ (* TODO: earn bits *)
+ fun ({ loc = startl; _ } as state) ->
+  state
+  |> list_of
+       ~start_delim:(literal "<<" @&& whitespace_and_comments)
+       ~separator:(literal "," @&& whitespace_and_comments)
+       ~end_delim:(literal ">>")
+       ((ifte integer (capture @@ Location.fmap Ast.Expr.byte @> return)
+        @@ string @> replace
+        @@ Location.fmap Ast.Expr.text)
+       @>> ignoring whitespace_and_comments)
+     @>> fun (bin_expr, ({ loc = endl } as state)) ->
+     state
+     |> whitespace_and_comments
+        @&& return (bin_expr |> Ast.Expr.binary |> Location.delimit startl endl)
 
 (** Grammar rule:
 

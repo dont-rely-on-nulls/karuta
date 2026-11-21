@@ -1,0 +1,6 @@
+main["My String"].
+main[<<72, 101, 108, 108, 111, ", World!">>].
+main["☯️"].
+main["🍰"].
+
+main[What]?

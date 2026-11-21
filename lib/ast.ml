@@ -95,6 +95,11 @@ module Expr = struct
     | 0 -> compare_segment lhs_name rhs_name
     | n -> n
 
+  type binary_element = Byte of int | Text of string
+
+  let byte n = Byte n
+  let text n = Text n
+
   type func = { name : func_label; elements : t FT.t }
 
   and base =
@@ -102,6 +107,7 @@ module Expr = struct
     | Functor of func
     | Integer of int
     | String of string
+    | Binary of binary_element Location.with_location FT.t
     | Nil
     | Cons of t * t
 
@@ -112,7 +118,7 @@ module Expr = struct
       | Variable name -> Variable (f name)
       | Functor ({ elements } as func) ->
           Functor { func with elements = FT.map (rename_vars f) elements }
-      | (Nil | String _ | Integer _) as atomic -> atomic
+      | (Binary _ | Nil | String _ | Integer _) as atomic -> atomic
       | Cons (lhs, rhs) -> Cons (rename_vars f lhs, rename_vars f rhs))
 
   let on f2 f1 v1 v2 = f2 (f1 v1) (f1 v2)
@@ -134,6 +140,7 @@ module Expr = struct
   let integer i = Integer i
   let string i = String i
   let variable v = Variable v
+  let binary v = Binary v
 
   let extract_variable : t -> string = function
     | { content = Variable name; _ } -> name

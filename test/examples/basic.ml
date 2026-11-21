@@ -15,4 +15,17 @@ let tests : Outcome.t BatMap.String.t =
           limit = None;
           expected = [ [ ("What", "abc[def]") ] ];
         } );
+      ( "binaries",
+        {
+          Outcome.filepaths = [ "basic/binaries.krt" ];
+          root_module = "binaries";
+          limit = None;
+          expected =
+            [
+              [ ("What", "\"My String\"") ];
+              [ ("What", "\"Hello, World!\"") ];
+              [ ("What", "\"☯️\"") ];
+              [ ("What", "\"🍰\"") ];
+            ];
+        } );
     ]
