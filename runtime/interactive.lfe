@@ -25,7 +25,7 @@ stdin/stdout become the channel to karuta, so logs go to stderr."
 
 (defun loop (port)
   "Answers one frame at a time, with the node halting when karuta hangs up!"
-  (receve
+  (receive
    ((tuple p (tuple 'data frame)) (when (=:= p port))
     (port_command port (answering (lambda () (serve frame))))
     (loop port))
