@@ -28,6 +28,8 @@
   lwt
   lwt-exit
   num
+  printbox
+  printbox-text
   ppx_deriving
   ppx_enumerate
   ppx_sexp_conv

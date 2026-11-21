@@ -5,8 +5,8 @@
 
 (library
  (name bin)
- (libraries lib num cmds)
- (modules erlc cmd)
+ (libraries lib num cmds printbox printbox-text)
+ (modules erlc cmd repl)
  (preprocess
   (pps ppx_deriving.show ppx_enumerate)))
 

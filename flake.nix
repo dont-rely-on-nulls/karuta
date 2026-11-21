@@ -95,6 +95,8 @@
               ocamlPackages.lwt
               ocamlPackages.lwt-exit
               ocamlPackages.num
+              ocamlPackages.printbox
+              ocamlPackages.printbox-text
               ocamlPackages.ppx_deriving
               ocamlPackages.ppx_enumerate
               ocamlPackages.ppxlib

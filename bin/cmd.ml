@@ -1,12 +1,16 @@
 open Cmdliner
 
-type cmd = Compile of Cmds.Compile.t
+type cmd = Compile of Cmds.Compile.t | Repl of Cmds.Repl.t
 
 let compile runner =
   let combine files artifact output_path log_level =
     Compile { files; artifact; output_path; log_level } |> runner
   in
   Cmds.Compile.cmd combine
+
+let repl runner =
+  Cmds.Repl.cmd (fun path page_size log_level ->
+      Repl {path; page_size; log_level} |> runner)
 
 let root_doc = "Welcome to Karuta!"
 
@@ -23,7 +27,7 @@ let help =
   let info = Cmd.info "help" in
   Cmd.v info root_term
 
-let subcommands runner = [ compile runner; help ]
+let subcommands runner = [ compile runner; help; repl runner ]
 
 let parse_command_line_and_run (runner : cmd -> unit) =
   runner |> subcommands |> Cmd.group root_info ~default:root_term |> Cmd.eval

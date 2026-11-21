@@ -46,6 +46,8 @@ let run : cmd -> unit = function
         }
         files;
       Erlc.Persist.compile output_path
+  | Repl {path; page_size; log_level} ->
+     Logger.with_min_level log_level @@ fun () -> Bin.Repl.run ~path ~page_size
 
 let () =
   Eio_main.run @@ fun _ ->
