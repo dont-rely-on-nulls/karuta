@@ -63,16 +63,17 @@ module Make (Config : CONFIG) = struct
       entries of the internal BatMap.t.
 
       @param unit
-      @return flushed all the entries one by one using pair flush function. *)
+      @return flushed all the entries one by one using pair flush
+        function, leaving the dictionary empty. *)
   let flush_iter () =
-    key_by_value |> Atomic.get |> BatMap.iter Config.key_value_flush
+    Atomic.exchange key_by_value BatMap.empty
+    |> BatMap.iter Config.key_value_flush
 
   (** [flush_one_shot f] allows a flush to happen in the internal BatMap.t in a
       single shot. This exposes the internal BatMap.t data structure.
 
       @param f Function to be called on the inner dictionary.
-      @return
-        flushed the BatMap.t in a single shot with the provided flush function.
-  *)
-  let flush_one_shot f = key_by_value |> Atomic.get |> f
+      @return flushed the BatMap.t in a single shot with the provided
+        flush function, leaving the dictionary empty.  *)
+  let flush_one_shot f = Atomic.exchange key_by_value BatMap.empty |> f
 end
