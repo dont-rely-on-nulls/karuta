@@ -23,6 +23,7 @@ let stop { pid; requests; replies } =
     with Unix.Unix_error (Unix.EINTR, _, _) -> wait ()
   in wait ()
 
+let u16 n = String.init 2 (fun i -> Char.chr ((n lsr (8 * (1 - i))) land 0xff))
 let u32 n = String.init 4 (fun i -> Char.chr ((n lsr (8 * (3 - i))) land 0xff))
 
 let request { requests; replies; _ } (frame : string) : string =
@@ -42,8 +43,8 @@ let reply (frame : string) (k : string -> 'a) : ('a, string) result =
 let load node (forms : string) : (unit, string) result =
   reply (request node ("l" ^ forms)) ignore
 
-let query node ~(cursor : int) (module_ : string) : (unit, string) result =
-  reply (request node ("q" ^ u32 cursor ^ module_)) ignore
+let query node ~(cursor : int) ~(arity : int) (module_ : string) : (unit, string) result =
+  reply (request node ("q" ^ u32 cursor ^ u16 arity ^ module_)) ignore
 
 (* FIXME: Improve this grueling function later. For loops and refs was
    the easy way out of this torture. *)

@@ -43,14 +43,20 @@ stdin/stdout become the channel to karuta, so logs go to stderr."
   (((binary #\l (text binary)))
    (load text)
    #"o")
-  (((binary #\q (id (size 32)) (mod binary)))
-   (let ((query (mref (call (bnary_to_atom mod) '||) 'query))))
+  (((binary #\q (id (size 32)) (arity (size 16)) (mod binary)))
+   (put (tuple 'cursor id) (kanren:run-lazy #m() (query (binary_to_atom mod) arity)))
    #"o")
   (((binary #\n (id (size 32)) (limit (size 32))))
    (let* ((stream (cursor id))
-	  (tuple solutions rest) (split limit stream))
+	  ((tuple solutions rest) (split limit stream)))
      (put (tuple 'cursor id) rest)
      (list* #\s (if (=:= rest '()) 1 0) (lists:map (fun solution 1) solutions)))))
+
+(defun query (mod arity)
+  "The goal of Mod's query. The compiler emits it as ''/Arity+1, Arity
+being how many variables the query has, ignoring its arguments, so we
+call it just like a compiled executable does."
+  (erlang:apply mod '|| (lists:duplicate (+ arity 1) '||)))
 
 (defun cursor (id)
   (case (get (tuple 'cursor id))
@@ -83,7 +89,7 @@ are done."
 
 (defun solution (bindings)
   "One solution query variable => lalue, sorted by variable name."
-  (let ((pairs (list:sort (maps:to_list bindings))))
+  (let ((pairs (lists:sort (maps:to_list bindings))))
     (cons (binary ((length pairs) (size 16)))
 	  (lc ((<- (tuple name value) pairs))
 	    (let ((n (atom_to_binary name))
@@ -98,9 +104,9 @@ are done."
   ((v) (when (is_reference v)) (++ "?" (integer_to_list (erlang:phash2 v 10000))))
   (('()) "[]")
   (((cons h t)) (list "[" (render h) (render-tail t) "]"))
-  ((v) (list " | " (render t))))
+  ((v) (io_lib:format "~p" (list v))))
 
 (defun render-tail
   (('()) "")
-  (((cons h t)) (list "; " (render h) (render-tail t)))
+  (((cons h t)) (list ", " (render h) (render-tail t)))
   ((t) (list " | " (render t))))

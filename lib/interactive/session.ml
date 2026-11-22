@@ -26,7 +26,7 @@ let start ~(path : string) : t =
 
 let stop {runtime; _} = Runtime.stop runtime
 
-let compile {scratch; _} (source : string) : string list option =
+let compile {scratch; _} (source : string) : (string list * Ast.head option) option =
   Out_channel.with_open_text scratch (Fun.flip output_string source);
   let forms = ref [] in
   let persist : Shared.Compiler.Persist.both =
@@ -37,22 +37,30 @@ let compile {scratch; _} (source : string) : string list option =
     Compiler.compile_files persist
       (BatSet.String.singleton scratch)
       BatMap.String.empty
-    |> BatMap.String.for_all (fun _ { Location.content; loc } ->
+    |> BatMap.String.map (fun { Location.content; loc } ->
         Shared.Compiler.check_dependency_cycle loc.filename (fun () ->
-            Lazy.force content)
-        |> Option.is_some)
+            Lazy.force content))
   in Logger.flush ();
   let text forms =
     "[" ^ String.concat ",\n" (List.map Beam.Serializer.Attribute.to_string forms) ^ "]."
-  in if compiled then Some (List.rev_map text !forms) else None
+  in
+  let query =
+    BatMap.String.find_opt (Module_name.of_filepath scratch) compiled
+    |> Option.join
+    |> Fun.flip Option.bind (fun (m : Shared.Compiler.compiled_module) ->
+        Option.map Location.strip_loc m.query)
+  in if BatMap.String.exists (fun _ m -> Option.is_none m) compiled then None
+     else Some (List.rev_map text !forms, query)
 
-let load session (source : string) : (unit, string) result option =
+let load session (source : string) : (Ast.head option, string) result option =
   compile session source
   |> Option.map
-     @@ List.fold_left
-          (fun acc forms ->
-            Result.bind acc (fun () -> Runtime.load session.runtime forms))
-          (Ok ())
+     @@ fun (modules, query) ->
+     List.fold_left
+       (fun acc forms ->
+         Result.bind acc (fun () -> Runtime.load session.runtime forms))
+       (Ok ()) modules
+     |> Result.map (Fun.const query)
 
 let next session ~(limit : int) : outcome =
   match Runtime.next session.runtime ~cursor:session.cursor limit with
@@ -61,20 +69,17 @@ let next session ~(limit : int) : outcome =
 
 let eval session ~(limit : int) (input : string) : outcome =
   let source = session.declarations ^ input ^ "\n" in
-  (* FIXME: I guess the actual parser already handles entrypoints, but
-     I didn't bother. *)
-  let is_query = String.ends_with ~suffix:"?" (String.trim input) in
   match load session source with
   | None -> Rejected
   | Some (Error e) -> Failed e
-  | Some (Ok ()) when not is_query ->
+  | Some (Ok None) ->
       session.declarations <- source;
       Defined
-  | Some (Ok ()) ->
+  | Some (Ok (Some { arity; _ })) ->
      begin
        session.cursor <- session.cursor + 1;
        let module_ = Module_name.of_filepath session.scratch in
-       match Runtime.query session.runtime ~cursor:session.cursor module_ with
+       match Runtime.query session.runtime ~cursor:session.cursor ~arity module_ with
        | Ok () -> next session ~limit
        | Error e -> Failed e
       end
