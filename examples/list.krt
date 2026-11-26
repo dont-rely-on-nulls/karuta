@@ -1,0 +1,14 @@
+take[0, _, []].
+take[_, [], []].
+take[ToTake, [H | Tail], [H | Out]] :-
+  karuta:nat[ToTake],
+  karuta:minus[ToTake, 1, Prev],
+  take[Prev, Tail, Out].
+
+'sum-loop'[[], Out, Out].  
+'sum-loop'[[H | Tail], Acc, Out] :-
+  karuta:plus[H, Acc, NewAcc],
+  'sum-loop'[Tail, NewAcc, Out].
+
+sum[List, Sum] :- 'sum-loop'[List, 0, Sum].
+

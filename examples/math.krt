@@ -1,0 +1,25 @@
+:- signature[nat-sig] {
+  triangle[_, _].
+  factorial[_, _].
+}.
+
+:- module[nat, nat-sig] {
+  factorial[X, Out] :- karuta:nat[X], 'factorial loop'[X, 1, Out].
+
+  'factorial loop'[0, Out, Out] :- karuta:nat[Out].
+  'factorial loop'[N, Acc, Out] :-
+    karuta:nat[N],
+    karuta:minus[N, 1, Prev],
+    karuta:mult[N, Acc, NewAcc],
+    'factorial loop'[Prev, NewAcc, Out].
+
+  triangle[N, Out] :- karuta:nat[N], triangle[N, 0, Out].
+
+  triangle[0, Out, Out] :- karuta:nat[Out].
+  triangle[N, Acc, Out] :-
+    karuta:nat[N],
+    karuta:plus[N, Acc, NewAcc],
+    karuta:minus[N, 1, Prev],
+    triangle[Prev, NewAcc, Out].
+
+}.
