@@ -1,0 +1,9 @@
+:- import[math].
+:- import[list].
+
+math:nat:factorial[In, 120],
+  karuta:plus[23, In, Triangle],
+  math:nat:triangle[ToTake, Triangle],
+  list:take[ToTake, [1, 1, 2, 3, 5, 8, 13], List],
+  list:sum[List, FibTotal]?
+
